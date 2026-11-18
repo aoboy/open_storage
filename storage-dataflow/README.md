@@ -49,15 +49,26 @@ their tooling is not installed.
 | Whack-a-Mole dispatch core | Implemented: profile compile, selection, mark down/up |
 | Whack-a-Mole control plane | Reference implementation in Python |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
-| Fountain / FLUID / ARC runtime | Stubs |
+| Fountain / FLUID / ARC runtime | Stubs — import-led per [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md); execution backlog in [`08`](docs/design/08-implementation-plan.md) |
 | Rust modules | Deferred to phase 4 |
 
 ## Documentation
 
-- [`docs/design/00-overview.md`](docs/design/00-overview.md) — full design and plan
+- [`docs/design/00-overview.md`](docs/design/00-overview.md) — design baseline (three planes, prototypes, language strategy)
 - [`docs/design/01-whack-a-mole.md`](docs/design/01-whack-a-mole.md) — prototype 1
 - [`docs/design/02-fluid-repair.md`](docs/design/02-fluid-repair.md) — prototype 2
 - [`docs/design/03-arc-pacing.md`](docs/design/03-arc-pacing.md) — prototype 3
 - [`docs/design/04-rust-migration.md`](docs/design/04-rust-migration.md) — migration plan
 - [`docs/design/05-observability.md`](docs/design/05-observability.md) — metrics, config, CI
 - [`docs/design/06-nanorq-evaluation.md`](docs/design/06-nanorq-evaluation.md) — codec evaluation
+- [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md) — provenance: what is imported from wack_a_mole, and the acceptance rules
+- [`docs/design/08-implementation-plan.md`](docs/design/08-implementation-plan.md) — **the executable backlog** (waves W0–W5, prompts, sizes, status ledger)
+- [`docs/design/09-origin-driver-seam.md`](docs/design/09-origin-driver-seam.md) — the `sdf_origin_ops_t` contract (origins are the paths)
+- [`docs/adr/`](docs/adr/) — decision records 0001–0009
+
+History and landing discipline (commit prefixes, doc-sync protocol,
+evidence rules): [`../CONTRIBUTING.md`](../CONTRIBUTING.md). Ops config
+format is strict TOML per
+[ADR-0005](docs/adr/0005-config-format-toml.md) — the `.yaml`
+placeholders under `configs/` are superseded and land as `.toml` with
+plan prompt W0.3.
