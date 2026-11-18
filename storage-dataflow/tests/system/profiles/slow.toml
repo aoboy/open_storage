@@ -1,0 +1,26 @@
+# Degradation profile: SLOW — origin 1 throttled to 5 ms/unit.
+# Timeline (applied by origin_loadgen --profile slow and W2.6 e2e):
+# at 25% of units, origin[1] throttle_ns flips to 5000000 via the
+# harness control surface; mid-run, no restart. The controller-side
+# response (soft shedding) is what W2 measures on these runs.
+
+[[origin]]
+id = 0
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 1
+cls = "loopback"
+dst = "data.bin"
+throttle_ns = 5000000     # 5 ms per unit — the degraded origin
+
+[[origin]]
+id = 2
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 3
+cls = "loopback"
+dst = "data.bin"

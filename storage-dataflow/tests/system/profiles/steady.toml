@@ -1,0 +1,24 @@
+# Degradation profile: STEADY — all origins healthy, no timeline.
+# The e2e baseline: every unit must complete; per-origin completions
+# must equal the wm_select assignment counts exactly (W1.4 gate).
+# dst is a placeholder: the e2e script substitutes real paths.
+
+[[origin]]
+id = 0
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 1
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 2
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 3
+cls = "loopback"
+dst = "data.bin"

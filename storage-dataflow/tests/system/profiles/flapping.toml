@@ -1,0 +1,25 @@
+# Degradation profile: FLAPPING — origin 3 toggling availability.
+# Timeline (origin_loadgen --profile flapping / W2.6 e2e): every
+# 512 units, set_enable(3, ...) flips; picks landing on a down
+# window fail fast with -ENOLINK. Exercises controller hysteresis,
+# not a knob: the file documents the timeline for script reuse.
+
+[[origin]]
+id = 0
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 1
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 2
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 3
+cls = "loopback"
+dst = "data.bin"

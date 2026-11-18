@@ -1,0 +1,27 @@
+# Degradation profile: DIES — origin 2 removed mid-run.
+# Timeline (origin_loadgen --profile dies / W2.6 e2e): at 50% of
+# units, set_enable(2, 0) — subsequent picks fail fast with
+# -ENOLINK while in-flight units complete (the drain contract).
+# The end-state is also expressible as err_pct = 100.0 (visible
+# origin death); the drain variant exercises the control plane.
+
+[[origin]]
+id = 0
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 1
+cls = "loopback"
+dst = "data.bin"
+
+[[origin]]
+id = 2
+cls = "loopback"
+dst = "data.bin"
+err_pct = 100.0            # end-state form: every unit fails visibly
+
+[[origin]]
+id = 3
+cls = "loopback"
+dst = "data.bin"
