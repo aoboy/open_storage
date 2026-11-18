@@ -102,7 +102,10 @@ typedef struct {
     double ewma_lat_ns;  /* submit-to-completion EWMA (throttle included) */
     double ewma_err;     /* failed/done EWMA over completions */
     double goodput;      /* bytes_rx / seconds since open */
-    int hard_down;       /* driver-detected (conn refused, DNS, unmapped) */
+    int hard_down;       /* unavailable for new work: driver-detected
+                           failure (conn refused, DNS) OR administratively
+                           drained via set_enable(0) — the controller's
+                           deterministic down-signal */
 } sdf_origin_stats_t;
 
 /** Driver instance: vtable + private implementation. */

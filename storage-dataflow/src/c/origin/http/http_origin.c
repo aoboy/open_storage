@@ -491,6 +491,9 @@ static int http_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
         return -EINVAL;
     atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0,
                           memory_order_relaxed);
+    /* drained == controller-visible (same semantics as loopback) */
+    atomic_store_explicit(&d->origins[origin_id].hard_down, up ? 0 : 1,
+                          memory_order_relaxed);
     return 0;
 }
 

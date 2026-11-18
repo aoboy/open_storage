@@ -385,6 +385,12 @@ static int lb_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
         return -EINVAL;
     atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0,
                           memory_order_relaxed);
+    /* a drained origin is deterministically controller-visible: the
+     * severity model reads hard_down, not warm-up latency luck
+     * (found live: the mid-run redistribution whack was flaking on
+     * whether the frozen EWMA sat above or below the healthy median) */
+    atomic_store_explicit(&d->origins[origin_id].hard_down, up ? 0 : 1,
+                          memory_order_relaxed);
     return 0;
 }
 
