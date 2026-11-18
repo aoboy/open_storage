@@ -85,6 +85,11 @@ add_test(NAME parity COMMAND test_parity)
 add_executable(test_fe_codec unit/test_fe_codec.c)
 target_link_libraries(test_fe_codec PRIVATE sdf_fountain sdf_common)
 add_test(NAME fe_codec COMMAND test_fe_codec)
+
+# Plan W3.4 — FLUID budget + gate (O.1/O.5 identities).
+add_executable(test_fluid_gate unit/test_fluid_gate.c)
+target_link_libraries(test_fluid_gate PRIVATE sdf_fluid)
+add_test(NAME fluid_gate COMMAND test_fluid_gate)
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)
