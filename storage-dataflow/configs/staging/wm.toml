@@ -1,0 +1,30 @@
+# Whack-a-Mole dispatch (Prototype 1) — staging.
+# Strict TOML per ADR-0005: unknown tables/keys, type mismatches and
+# out-of-range values are hard path:line errors at load.
+# Precedence: CLI flag > this file > built-in default; absent keys keep
+# the caller's defaults (presence merge).
+
+[wm]
+m = 1024                    # selection units (power of two, 2..65536)
+method = "shuffle1"         # plain | shuffle1 | shuffle2 (ADR-0007)
+sa = 333
+sb = 735                   # must be odd
+rotate_on_wrap = true
+init_fracs = [0.5, 0.5]    # 1..16 values summing to 1.0
+control_hz = 4             # Python control-loop frequency
+alpha = 0.25               # multiplicative decrease on degraded paths
+beta = 0.02                # additive increase on healthy paths
+rollout_pct = 25              # design 01 gate: 5 -> 25 -> 100
+kill_switch = false
+
+[[origin]]
+id = 0
+cls = "loopback"
+dst = "staging-objects.bin"
+
+[[origin]]
+id = 1
+cls = "http"
+dst = "https://origin-a.staging.internal/objects"
+timeout_ms = 2000
+max_inflight = 16

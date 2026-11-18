@@ -1,0 +1,30 @@
+# ARC receiver-side pacing (Prototype 3) — prod.
+# Strict TOML per ADR-0005; parameter ranges are the ARC paper's
+# evaluated static bands (design 03 + ADR-0006).
+
+[arc]
+pipeline = "follower-apply-shard-07"
+mode = "arc_qg"              # base | arc_q | arc_qg (ADR-0006)
+shadow_mode = false
+kill_switch = false
+batch_max = 256
+batch_deadline_ns = 2000000  # 2 ms
+offset_min_ns = 1000000      # 1 ms
+offset_max_ns = 50000000     # 50 ms
+increase_gain = 0.5
+decrease_gain = 0.01
+rho_u = 0.5
+rho_l = 1.5
+lambda_u = 0.05
+lambda_l = 0.03
+U_ns = 100000000             # 100 ms
+delta_ns = 50000000          # 50 ms
+gamma_ns = 16666666          # ~60 fps
+J_ns = 0
+G_ns = 50000000
+T_idle_ns = 1000000000       # 1 s
+auto_params = true
+c_U = 1.0
+c_delta = 1.0
+min_smooth_bytes = 64
+budget_ms = 10               # p99 added-latency budget; 0 = off

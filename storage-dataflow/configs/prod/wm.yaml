@@ -1,9 +1,0 @@
-# Whack-a-Mole dispatch (Prototype 1) — production.
-# rollout_pct is intentionally 0 until the 25% -> 100% gate is signed off.
-wm:
-  m: 1024
-  control_hz: 4
-  alpha: 0.25
-  beta: 0.02
-  rollout_pct: 0
-  kill_switch: true

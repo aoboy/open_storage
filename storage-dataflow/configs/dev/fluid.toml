@@ -1,0 +1,18 @@
+# FLUID slack-based EC repair (Prototype 2) — dev.
+# Strict TOML per ADR-0005; classes per design 02 §Classes.
+
+[fluid]
+arq_fallback = true         # never ship an incomplete block
+overhead_abort_ratio = 1.5  # abort FLUID for a class above this
+
+[[fluid_class]]
+name = "hot-metadata"
+eps = 0.05                  # slack; 0 = plain ARQ baseline arm
+codec = "lt"
+rollout_pct = 0
+
+[[fluid_class]]
+name = "cold-checkpoint"
+eps = 0.15
+codec = "nanorq"
+rollout_pct = 10            # design 02 gate: 10 -> 50 -> 100
