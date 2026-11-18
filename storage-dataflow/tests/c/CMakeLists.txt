@@ -32,6 +32,11 @@ add_executable(test_shm unit/test_shm.c)
 target_link_libraries(test_shm PRIVATE sdf_common)
 add_test(NAME shm COMMAND test_shm)
 
+# Plan W0.5 — metric primitives (conventions imported per WAM K.1).
+add_executable(test_metrics unit/test_metrics.c)
+target_link_libraries(test_metrics PRIVATE sdf_common Threads::Threads)
+add_test(NAME metrics COMMAND test_metrics)
+
 # Plan W0.3 — strict TOML loader (ADR-0005). The source tree path is
 # baked in so the shipped examples resolve from any CWD.
 add_executable(test_config unit/test_config.c)
