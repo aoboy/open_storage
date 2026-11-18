@@ -20,6 +20,15 @@ _Static_assert(offsetof(wm_profile_t, n) == 8, "wm_profile_t.n offset");
 _Static_assert(offsetof(wm_profile_t, b) == 12, "wm_profile_t.b offset");
 _Static_assert(offsetof(wm_compiled_t, down_mask) == 16, "wm_compiled_t.down_mask offset");
 _Static_assert(offsetof(wm_compiled_t, cdf) == 24, "wm_compiled_t.cdf offset");
+/* ADR-0007 layout: method/sa/sb + path_of_key appended after the
+ * counter table; sizes computed, never guessed. */
+_Static_assert(offsetof(wm_compiled_t, perm) == 280, "wm_compiled_t.perm offset");
+_Static_assert(offsetof(wm_compiled_t, unit_to_path) == 4376, "unit_to_path offset");
+_Static_assert(offsetof(wm_compiled_t, method) == 8472, "wm_compiled_t.method offset");
+_Static_assert(offsetof(wm_compiled_t, sa) == 8476, "wm_compiled_t.sa offset");
+_Static_assert(offsetof(wm_compiled_t, sb) == 8480, "wm_compiled_t.sb offset");
+_Static_assert(offsetof(wm_compiled_t, path_of_key) == 8484, "path_of_key offset");
+_Static_assert(sizeof(wm_compiled_t) == 12584, "wm_compiled_t size (8-aligned)");
 
 _Static_assert(sizeof(sdf_seqlock_t) == 64, "seqlock occupies one cacheline");
 _Static_assert(offsetof(spsc_ring_t, slots) == 192, "SPSC ring header layout");
