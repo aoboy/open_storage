@@ -9,13 +9,23 @@ extern "C" {
 #endif
 
 /*
- * Minimal C-side configuration.
+ * Strict TOML configuration loader (ADR-0005).
  *
- * The control plane's canonical configuration is YAML
- * (configs/<env>/wm.yaml and siblings), read by Python. The C data plane only
- * needs a small, allocation-free view of resolved knobs, so this API reads a
- * flat "key = value" file with '#' comments and [section] prefixes. Section
- * keys become "section.key".
+ * The control plane and the C data plane share one ops format: the
+ * strict TOML subset imported from wack_a_mole's plan-K.2 loader —
+ * [table], [[array of tables]], bare keys, basic strings, integers,
+ * floats, booleans, homogeneous numeric arrays, '#' comments and an
+ * optional ';' key separator. The schema ([wm], [fluid], [[fluid_class]],
+ * [arc], [[origin]], [ab], [metrics]) is enforced at load time:
+ * unknown tables/keys, type mismatches, range/enum violations and
+ * missing required keys are hard "path:line:" errors reported through
+ * sdf/common/log.h — a typo never passes silently.
+ *
+ * Entries are stored flat: single tables become "table.key"; array-of-
+ * table entries become "table[i].key". An absent key is simply absent,
+ * so callers implement precedence CLI > file > built-in default by
+ * reading through the getters with their own defaults as fallback
+ * (the ADR-0005 presence-merge rule).
  */
 #define SDF_CONFIG_KEY_MAX 64
 #define SDF_CONFIG_VALUE_MAX 192
