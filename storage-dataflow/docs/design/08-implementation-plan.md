@@ -14,11 +14,17 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `0dd19de`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `cf361ab`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
-  W0.2–W0.5 foundations      : 0% — prompts below
+  W0.2 common primitives     : done — ring/seqlock/pool/timer/shm/log
+                                (src: f53c872, tests: cf361ab); 7/7 ctest,
+                                ASan+UBSan 7/7, TSan 7/7 (2^22 two-thread
+                                ring soak; seqlock contention with a
+                                writer warm-up gate — zero races, zero
+                                torn accepts); run_tests.sh always builds
+  W0.3–W0.5 foundations      : 0% — prompts below
   W1 origin driver seam      : 0%
   W2 WM dispatch (P1)        : ~20% — dispatch core v1 exists and is tested
                                 (wm_profile.c/wm_select.c/wm_shed.c + unit
