@@ -67,7 +67,7 @@ add_test(NAME config COMMAND test_config)
 
 # Plan W0.4 — golden-vector parity gate (ADR-0009).
 add_executable(test_parity test_parity.c)
-target_link_libraries(test_parity PRIVATE sdf_common sdf_wm)
+target_link_libraries(test_parity PRIVATE sdf_common sdf_wm sdf_fountain)
 target_compile_definitions(test_parity PRIVATE "SDF_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 add_test(NAME parity COMMAND test_parity)
 
@@ -75,11 +75,16 @@ add_test(NAME parity COMMAND test_parity)
 #   test_config   — plan W0.3 (strict TOML loader)
 #   test_parity   — plan W0.4 (golden-vector harness)
 #   test_metrics  — plan W0.5 (metric series pinning)
-#   test_fluid_gate / test_fe_codec / test_arc_* — plan W3/W4
+#   test_fluid_gate / test_arc_* — plan W3.4/W4
 #
 # add_executable(test_fluid_gate unit/test_fluid_gate.c)
 # target_link_libraries(test_fluid_gate PRIVATE sdf_fluid)
 # add_test(NAME fluid_gate COMMAND test_fluid_gate)
+
+# Plan W3.2 — nanorq fountain arm (ADR-0004).
+add_executable(test_fe_codec unit/test_fe_codec.c)
+target_link_libraries(test_fe_codec PRIVATE sdf_fountain sdf_common)
+add_test(NAME fe_codec COMMAND test_fe_codec)
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)

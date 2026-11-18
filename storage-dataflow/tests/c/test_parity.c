@@ -40,7 +40,7 @@ static int g_pending;   /* groups awaiting a future prompt */
  * add fountain.abi_v2, W4.x arc.abi_v2. */
 static const char *IMPLEMENTED[] = {
     "core", "wm.method.shuffle1", "wm.method.shuffle2", "fountain.abi_v2",
-    NULL};
+    "fountain.codec.nanorq", NULL};
 
 static int feature_implemented(const char *feature) {
     if (feature == NULL)
@@ -201,6 +201,186 @@ static void validate_windows(const jval_t *root, wm_compiled_t *c) {
 }
 
 
+/* ---- toy fountain codec (ABI v2 plumbing proof, plan W3.1) -------------
+ *
+ * Systematic source symbols (ESI < k) plus deterministic XOR repair
+ * symbols (ESI >= k). It implements the full fountain.h surface —
+ * toy_fe_sizeof/toy_fd_sizeof, in-place init, generate at any ESI, push with
+ * duplicate accounting, ready/rank/decode — so test_parity proves the
+ * ABI is implementable and the goldens are satisfiable BEFORE the real
+ * codecs (nanorq W3.2, LT W3.3) land. */
+
+#define TOY_MAX_K 64
+
+struct fountain_enc {
+    uint32_t k;
+    uint32_t overhead; /* repair symbols exposed */
+    size_t sym_len;
+    const uint8_t *block; /* k * sym_len, caller-owned */
+};
+
+struct fountain_dec {
+    uint32_t k;
+    size_t sym_len;
+    uint8_t have[TOY_MAX_K * 2]; /* received bitmap (sources+repair) */
+    uint8_t syms[TOY_MAX_K * 2][256];
+};
+
+size_t toy_fe_sizeof(const fe_cfg_t *cfg) {
+    if (cfg == NULL || cfg->k == 0 || cfg->k > TOY_MAX_K || cfg->block_len == 0)
+        return 0;
+    if (cfg->block_len % cfg->k != 0)
+        return 0;
+    return sizeof(struct fountain_enc);
+}
+
+size_t toy_fd_sizeof(const fd_cfg_t *cfg) {
+    if (cfg == NULL || cfg->k == 0 || cfg->k > TOY_MAX_K ||
+        cfg->sym_len == 0 || cfg->sym_len > 256)
+        return 0;
+    return sizeof(struct fountain_dec);
+}
+
+int toy_fe_init_in(fountain_enc_t *e, const fe_cfg_t *cfg, const uint8_t *block) {
+    if (e == NULL || cfg == NULL || block == NULL || toy_fe_sizeof(cfg) == 0)
+        return -EINVAL;
+    /* the toy ignores cfg->codec: it exists to pin the ABI surface,
+     * not to be an arm */
+    struct fountain_enc *t = (struct fountain_enc *)e;
+    t->k = cfg->k;
+    t->overhead = cfg->k * cfg->overhead_pct / 100u;
+    t->sym_len = cfg->block_len / cfg->k;
+    t->block = block;
+    return 0;
+}
+
+int toy_fd_init_in(fountain_dec_t *d, const fd_cfg_t *cfg) {
+    if (d == NULL || cfg == NULL || toy_fd_sizeof(cfg) == 0)
+        return -EINVAL;
+    struct fountain_dec *t = (struct fountain_dec *)d;
+    memset(t, 0, sizeof(*t));
+    t->k = cfg->k;
+    t->sym_len = cfg->sym_len;
+    return 0;
+}
+
+int toy_fe_init(fountain_enc_t *e, const uint8_t *block, size_t block_len,
+            uint32_t k, uint32_t overhead_pct) {
+    fe_cfg_t cfg = {.block_len = block_len, .k = k, .overhead_pct = overhead_pct};
+    return toy_fe_init_in(e, &cfg, block);
+}
+
+int toy_fd_init(fountain_dec_t *d, uint32_t k, size_t sym_len) {
+    fd_cfg_t cfg = {.k = k, .sym_len = sym_len};
+    return toy_fd_init_in(d, &cfg);
+}
+
+uint32_t toy_fe_symbol_count(const fountain_enc_t *e) {
+    const struct fountain_enc *t = (const struct fountain_enc *)e;
+    return t == NULL ? 0 : t->k + t->overhead;
+}
+
+int toy_fe_generate(fountain_enc_t *e, uint32_t esi, uint8_t *out, size_t out_len) {
+    struct fountain_enc *t = (struct fountain_enc *)e;
+    if (t == NULL || out == NULL || out_len != t->sym_len)
+        return -EINVAL;
+    if (esi >= toy_fe_symbol_count(e))
+        return -EINVAL;
+    if (esi < t->k) {
+        memcpy(out, t->block + (size_t)esi * t->sym_len, t->sym_len);
+    } else {
+        memset(out, 0, t->sym_len);
+        for (uint32_t j = 0; j < t->k; j++)
+            for (size_t b = 0; b < t->sym_len; b++)
+                out[b] ^= t->block[(size_t)j * t->sym_len + b];
+    }
+    return 0;
+}
+
+int toy_fd_push(fountain_dec_t *d, uint32_t esi, const uint8_t *sym, size_t len) {
+    struct fountain_dec *t = (struct fountain_dec *)d;
+    if (t == NULL || sym == NULL || len != t->sym_len)
+        return -EINVAL;
+    if (esi >= t->k + t->k) /* sources + (toy) repair window */
+        return -EINVAL;
+    if (t->have[esi])
+        return 1; /* duplicate: counted, not an error */
+    t->have[esi] = 1;
+    memcpy(t->syms[esi], sym, len);
+    return 0;
+}
+
+static uint32_t toy_sources(const struct fountain_dec *t) {
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < t->k; i++)
+        n += t->have[i] ? 1u : 0u;
+    return n;
+}
+
+bool toy_fd_ready(const fountain_dec_t *d) {
+    const struct fountain_dec *t = (const struct fountain_dec *)d;
+    if (t == NULL)
+        return false;
+    if (toy_sources(t) == t->k)
+        return true;
+    /* one missing source + at least one repair recovers it */
+    if (toy_sources(t) == t->k - 1) {
+        for (uint32_t r = t->k; r < 2 * t->k; r++)
+            if (t->have[r])
+                return true;
+    }
+    return false;
+}
+
+uint32_t toy_fd_rank(const fountain_dec_t *d) {
+    const struct fountain_dec *t = (const struct fountain_dec *)d;
+    if (t == NULL)
+        return 0;
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < 2 * t->k; i++)
+        n += t->have[i] ? 1u : 0u;
+    return n;
+}
+
+int toy_fd_decode(fountain_dec_t *d, uint8_t *out, size_t block_len) {
+    struct fountain_dec *t = (struct fountain_dec *)d;
+    if (t == NULL || out == NULL || block_len != t->k * t->sym_len)
+        return -EINVAL;
+    if (!toy_fd_ready(d))
+        return -EINVAL;
+
+    uint8_t blk[TOY_MAX_K * 256];
+    int missing = -1;
+    for (uint32_t j = 0; j < t->k; j++) {
+        if (t->have[j]) {
+            memcpy(blk + (size_t)j * t->sym_len, t->syms[j], t->sym_len);
+        } else {
+            missing = (int)j;
+        }
+    }
+    if (missing >= 0) {
+        /* repair XOR of all symbols: missing = repair ^ others */
+        const uint8_t *rep = NULL;
+        for (uint32_t r = t->k; r < 2 * t->k; r++)
+            if (t->have[r])
+                rep = t->syms[r];
+        if (rep == NULL)
+            return -EINVAL;
+        for (size_t b = 0; b < t->sym_len; b++) {
+            uint8_t acc = rep[b];
+            for (uint32_t j = 0; j < t->k; j++)
+                if (t->have[j])
+                    acc ^= t->syms[j][b];
+            blk[(size_t)missing * t->sym_len + b] = acc;
+        }
+    }
+    memcpy(out, blk, block_len);
+    return 0;
+}
+
+void toy_fe_destroy(fountain_enc_t *e) { (void)e; }
+void toy_fd_destroy(fountain_dec_t *d) { (void)d; }
+
 /* ---- fountain goldens (plan W3.1) -------------------------------------- */
 
 static int bytes_eq(const jval_t *arr, const uint8_t *buf, size_t n) {
@@ -212,11 +392,11 @@ static int bytes_eq(const jval_t *arr, const uint8_t *buf, size_t n) {
     return 1;
 }
 
-/* Run one toy-codec entry: encoder reproduces every golden symbol,
- * the decoder reconstructs the block from exactly the golden symbol
- * set (roundtrip: all; lossy: the set minus dropped + repair). */
-static void validate_fountain_entry(const jval_t *e, const char *group,
-                                     int lossy) {
+/* Run one golden entry through the LOCAL toy codec (the ABI-plumbing
+ * proof): encoder reproduces every golden symbol, decoder reconstructs
+ * the block from exactly the golden symbol set. */
+static void validate_toy_entry(const jval_t *e, const char *group,
+                                int lossy) {
     CHECK(e != NULL && e->type == J_OBJ);
     uint32_t k = (uint32_t)golden_json_int(golden_json_get(e, "k"), 0);
     size_t sym_len =
@@ -235,12 +415,12 @@ static void validate_fountain_entry(const jval_t *e, const char *group,
     fe_cfg_t ecfg = {.block_len = k * (uint32_t)sym_len,
                      .k = k,
                      .overhead_pct = overhead};
-    size_t esz = fe_sizeof(&ecfg);
+    size_t esz = toy_fe_sizeof(&ecfg);
     CHECK(esz > 0);
     void *emem = malloc(esz);
     CHECK(emem != NULL);
-    CHECK(fe_init_in(emem, &ecfg, blk) == 0);
-    CHECK(fe_symbol_count(emem) >= k);
+    CHECK(toy_fe_init_in(emem, &ecfg, blk) == 0);
+    CHECK(toy_fe_symbol_count(emem) >= k);
 
     /* every golden symbol reproduced byte-exact through the ABI */
     CHECK(symbols->type == J_ARR);
@@ -249,7 +429,7 @@ static void validate_fountain_entry(const jval_t *e, const char *group,
         uint32_t esi = (uint32_t)golden_json_int(golden_json_get(sym, "esi"),
                                                  0xFFFF);
         uint8_t got[256];
-        CHECK(fe_generate(emem, esi, got, sym_len) == 0);
+        CHECK(toy_fe_generate(emem, esi, got, sym_len) == 0);
         if (!bytes_eq(golden_json_get(sym, "bytes"), got, sym_len)) {
             fprintf(stderr, "FAIL: %s toy symbol esi=%u mismatch\n", group,
                     esi);
@@ -257,14 +437,15 @@ static void validate_fountain_entry(const jval_t *e, const char *group,
         }
         g_validated++;
     }
-    CHECK(fe_generate(emem, fe_symbol_count(emem), blk, sym_len) == -EINVAL);
+    CHECK(toy_fe_generate(emem, toy_fe_symbol_count(emem), blk, sym_len) ==
+              -EINVAL);
 
     fd_cfg_t dcfg = {.k = k, .sym_len = sym_len};
-    size_t dsz = fd_sizeof(&dcfg);
+    size_t dsz = toy_fd_sizeof(&dcfg);
     CHECK(dsz > 0);
     void *dmem = malloc(dsz);
     CHECK(dmem != NULL);
-    CHECK(fd_init_in(dmem, &dcfg) == 0);
+    CHECK(toy_fd_init_in(dmem, &dcfg) == 0);
 
     uint32_t dropped = 0;
     if (lossy) {
@@ -283,12 +464,12 @@ static void validate_fountain_entry(const jval_t *e, const char *group,
         uint8_t buf[256];
         for (size_t b = 0; b < sym_len; b++)
             buf[b] = (uint8_t)golden_json_int(bytes->items[b], -1);
-        CHECK(fd_push(dmem, esi, buf, sym_len) == 0);
+        CHECK(toy_fd_push(dmem, esi, buf, sym_len) == 0);
     }
 
-    CHECK(fd_ready(dmem)); /* decode sufficiency before shipping */
+    CHECK(toy_fd_ready(dmem)); /* decode sufficiency before shipping */
     uint8_t out[64 * 256];
-    CHECK(fd_decode(dmem, out, k * sym_len) == 0);
+    CHECK(toy_fd_decode(dmem, out, k * sym_len) == 0);
     if (!bytes_eq(block, out, k * sym_len)) {
         fprintf(stderr, "FAIL: %s toy decode mismatch\n", group);
         exit(1);
@@ -297,26 +478,121 @@ static void validate_fountain_entry(const jval_t *e, const char *group,
 
     if (lossy) {
         /* the dropped source was genuinely absent: rank reflects it */
-        CHECK(fd_rank(dmem) == symbols->n_items);
+        CHECK(toy_fd_rank(dmem) == symbols->n_items);
     }
 
     /* duplicate pushes are counted, not errors */
     uint8_t buf[256];
-    CHECK(fe_generate(emem, 0, buf, sym_len) == 0);
-    CHECK(fd_push(dmem, 0, buf, sym_len) == 1);
+    CHECK(toy_fe_generate(emem, 0, buf, sym_len) == 0);
+    CHECK(toy_fd_push(dmem, 0, buf, sym_len) == 1);
 
     free(emem);
     free(dmem);
 }
 
-static void validate_fountain(const char *rel, const char *group, int lossy) {
+
+/* Run one golden entry through the REAL codec library: the arm comes
+ * from the entry's "codec" field (nanorq now; lt with W3.3). */
+static void validate_codec_entry(const jval_t *e, const char *group) {
+    CHECK(e != NULL && e->type == J_OBJ);
+    const jval_t *cj = golden_json_get(e, "codec");
+    CHECK(cj != NULL && cj->type == J_STR);
+    uint32_t codec = strcmp(cj->str, "nanorq") == 0 ? SDF_FOUNTAIN_NANORQ
+                                                   : SDF_FOUNTAIN_LT;
+
+    uint32_t k = (uint32_t)golden_json_int(golden_json_get(e, "k"), 0);
+    size_t sym_len = (size_t)golden_json_int(golden_json_get(e, "sym_len"), 0);
+    uint32_t overhead =
+        (uint32_t)golden_json_int(golden_json_get(e, "overhead_pct"), 0);
+    const jval_t *block = golden_json_get(e, "block");
+    const jval_t *symbols = golden_json_get(e, "symbols");
+    CHECK(k > 0 && sym_len > 0 && block != NULL && symbols != NULL &&
+          block->type == J_ARR && block->n_items == k * sym_len);
+
+    uint8_t *blk = malloc(k * sym_len);
+    CHECK(blk != NULL);
+    for (size_t i = 0; i < block->n_items; i++)
+        blk[i] = (uint8_t)golden_json_int(block->items[i], -1);
+
+    fe_cfg_t ecfg = {
+        .block_len = k * sym_len, .k = k, .overhead_pct = overhead,
+        .codec = codec,
+    };
+    size_t esz = fe_sizeof(&ecfg);
+    CHECK(esz > 0);
+    void *emem = malloc(esz);
+    CHECK(emem != NULL);
+    CHECK(fe_init_in(emem, &ecfg, blk) == 0);
+
+    CHECK(symbols->type == J_ARR);
+    for (size_t si = 0; si < symbols->n_items; si++) {
+        const jval_t *sym = symbols->items[si];
+        uint32_t esi =
+            (uint32_t)golden_json_int(golden_json_get(sym, "esi"), 0xFFFF);
+        uint8_t got[8192];
+        CHECK(fe_generate(emem, esi, got, sym_len) == 0);
+        if (!bytes_eq(golden_json_get(sym, "bytes"), got, sym_len)) {
+            fprintf(stderr, "FAIL: %s codec symbol esi=%u mismatch\n", group,
+                    esi);
+            exit(1);
+        }
+        g_validated++;
+    }
+
+    fd_cfg_t dcfg = {.k = k, .sym_len = sym_len};
+    size_t dsz = fd_sizeof(&dcfg);
+    CHECK(dsz > 0);
+    void *dmem = malloc(dsz);
+    CHECK(dmem != NULL);
+    CHECK(fd_init_codec(dmem, &dcfg, codec) == 0);
+
+    for (size_t si = 0; si < symbols->n_items; si++) {
+        const jval_t *sym = symbols->items[si];
+        uint32_t esi =
+            (uint32_t)golden_json_int(golden_json_get(sym, "esi"), 0xFFFF);
+        const jval_t *bytes = golden_json_get(sym, "bytes");
+        CHECK(bytes != NULL && bytes->type == J_ARR &&
+              bytes->n_items == sym_len);
+        uint8_t *buf = malloc(sym_len);
+        CHECK(buf != NULL);
+        for (size_t b = 0; b < sym_len; b++)
+            buf[b] = (uint8_t)golden_json_int(bytes->items[b], -1);
+        int prc = fd_push(dmem, esi, buf, sym_len);
+        CHECK(prc == 0 || prc == 1); /* added, or redundant after complete */
+        free(buf);
+    }
+
+    CHECK(fd_ready(dmem));
+    uint8_t *out = malloc(k * sym_len);
+    CHECK(out != NULL);
+    CHECK(fd_decode(dmem, out, k * sym_len) == 0);
+    if (!bytes_eq(block, out, k * sym_len)) {
+        fprintf(stderr, "FAIL: %s codec decode mismatch\n", group);
+        exit(1);
+    }
+    g_validated++;
+
+    fe_destroy(emem);
+    fd_destroy(dmem);
+    free(blk);
+    free(out);
+    free(emem);
+    free(dmem);
+}
+
+static void validate_fountain(const char *rel, const char *group, int lossy,
+                                int use_real) {
     jval_t *root = load_golden(rel);
     const jval_t *g = golden_json_get(root, group);
     CHECK(g != NULL && g->type == J_OBJ);
     const jval_t *entries = golden_json_get(g, "entries");
     CHECK(entries != NULL && entries->type == J_ARR);
-    for (size_t i = 0; i < entries->n_items; i++)
-        validate_fountain_entry(entries->items[i], group, lossy);
+    for (size_t i = 0; i < entries->n_items; i++) {
+        if (use_real)
+            validate_codec_entry(entries->items[i], group);
+        else
+            validate_toy_entry(entries->items[i], group, lossy);
+    }
     if (entries->n_items == 0) {
         const jval_t *req = golden_json_get(g, "requires");
         CHECK(req != NULL && req->type == J_STR);
@@ -327,6 +603,27 @@ static void validate_fountain(const char *rel, const char *group, int lossy) {
         }
     }
     golden_json_free(root);
+}
+
+/* Validate a real-codec group (nanorq / lt): entries through the
+ * library when the arm is implemented, pending otherwise. */
+static void validate_codec_group(const char *rel, const char *group,
+                                  const char *feature) {
+    if (!feature_implemented(feature)) {
+        jval_t *root = load_golden(rel);
+        const jval_t *g = golden_json_get(root, group);
+        const jval_t *entries = g ? golden_json_get(g, "entries") : NULL;
+        int n = (entries && entries->type == J_ARR)
+                    ? (int)entries->n_items : 0;
+        if (n > 0) {
+            g_pending++;
+            printf("  pending: %-24s awaits %s (%d entries present)\n",
+                   group, feature, n);
+        }
+        golden_json_free(root);
+        return;
+    }
+    validate_fountain(rel, group, 0, 1);
 }
 
 /* Schema check for a future-wave golden file: every named group must
@@ -376,12 +673,14 @@ int main(void) {
         static const char *arc_groups[] = {"paper_12_3", "trace_replay_60fps"};
         check_schema_file("golden_vectors/arc_schedule.json", arc_groups, 2);
     }
-    validate_fountain("golden_vectors/fountain_esi.json", "roundtrip", 0);
-    validate_fountain("golden_vectors/fountain_esi.json", "lossy_repair", 1);
+    validate_fountain("golden_vectors/fountain_esi.json", "roundtrip", 0, 0);
+    validate_fountain("golden_vectors/fountain_esi.json", "lossy_repair", 1, 0);
+    validate_codec_group("golden_vectors/fountain_esi.json", "nanorq",
+                         "fountain.codec.nanorq");
     {
-        static const char *fountain_groups[] = {"nanorq", "lt"};
+        static const char *fountain_groups[] = {"lt"};
         check_schema_file("golden_vectors/fountain_esi.json", fountain_groups,
-                          2);
+                          1);
     }
 
     if (g_validated == 0) {
@@ -395,177 +694,3 @@ int main(void) {
 }
 
 
-/* ---- toy fountain codec (ABI v2 plumbing proof, plan W3.1) -------------
- *
- * Systematic source symbols (ESI < k) plus deterministic XOR repair
- * symbols (ESI >= k). It implements the full fountain.h surface —
- * fe_sizeof/fd_sizeof, in-place init, generate at any ESI, push with
- * duplicate accounting, ready/rank/decode — so test_parity proves the
- * ABI is implementable and the goldens are satisfiable BEFORE the real
- * codecs (nanorq W3.2, LT W3.3) land. */
-
-#define TOY_MAX_K 64
-
-struct fountain_enc {
-    uint32_t k;
-    uint32_t overhead; /* repair symbols exposed */
-    size_t sym_len;
-    const uint8_t *block; /* k * sym_len, caller-owned */
-};
-
-struct fountain_dec {
-    uint32_t k;
-    size_t sym_len;
-    uint8_t have[TOY_MAX_K * 2]; /* received bitmap (sources+repair) */
-    uint8_t syms[TOY_MAX_K * 2][256];
-};
-
-size_t fe_sizeof(const fe_cfg_t *cfg) {
-    if (cfg == NULL || cfg->k == 0 || cfg->k > TOY_MAX_K || cfg->block_len == 0)
-        return 0;
-    if (cfg->block_len % cfg->k != 0)
-        return 0;
-    return sizeof(struct fountain_enc);
-}
-
-size_t fd_sizeof(const fd_cfg_t *cfg) {
-    if (cfg == NULL || cfg->k == 0 || cfg->k > TOY_MAX_K ||
-        cfg->sym_len == 0 || cfg->sym_len > 256)
-        return 0;
-    return sizeof(struct fountain_dec);
-}
-
-int fe_init_in(fountain_enc_t *e, const fe_cfg_t *cfg, const uint8_t *block) {
-    if (e == NULL || cfg == NULL || block == NULL || fe_sizeof(cfg) == 0)
-        return -EINVAL;
-    struct fountain_enc *t = (struct fountain_enc *)e;
-    t->k = cfg->k;
-    t->overhead = cfg->k * cfg->overhead_pct / 100u;
-    t->sym_len = cfg->block_len / cfg->k;
-    t->block = block;
-    return 0;
-}
-
-int fd_init_in(fountain_dec_t *d, const fd_cfg_t *cfg) {
-    if (d == NULL || cfg == NULL || fd_sizeof(cfg) == 0)
-        return -EINVAL;
-    struct fountain_dec *t = (struct fountain_dec *)d;
-    memset(t, 0, sizeof(*t));
-    t->k = cfg->k;
-    t->sym_len = cfg->sym_len;
-    return 0;
-}
-
-int fe_init(fountain_enc_t *e, const uint8_t *block, size_t block_len,
-            uint32_t k, uint32_t overhead_pct) {
-    fe_cfg_t cfg = {.block_len = block_len, .k = k, .overhead_pct = overhead_pct};
-    return fe_init_in(e, &cfg, block);
-}
-
-int fd_init(fountain_dec_t *d, uint32_t k, size_t sym_len) {
-    fd_cfg_t cfg = {.k = k, .sym_len = sym_len};
-    return fd_init_in(d, &cfg);
-}
-
-uint32_t fe_symbol_count(const fountain_enc_t *e) {
-    const struct fountain_enc *t = (const struct fountain_enc *)e;
-    return t == NULL ? 0 : t->k + t->overhead;
-}
-
-int fe_generate(fountain_enc_t *e, uint32_t esi, uint8_t *out, size_t out_len) {
-    struct fountain_enc *t = (struct fountain_enc *)e;
-    if (t == NULL || out == NULL || out_len != t->sym_len)
-        return -EINVAL;
-    if (esi >= fe_symbol_count(e))
-        return -EINVAL;
-    if (esi < t->k) {
-        memcpy(out, t->block + (size_t)esi * t->sym_len, t->sym_len);
-    } else {
-        memset(out, 0, t->sym_len);
-        for (uint32_t j = 0; j < t->k; j++)
-            for (size_t b = 0; b < t->sym_len; b++)
-                out[b] ^= t->block[(size_t)j * t->sym_len + b];
-    }
-    return 0;
-}
-
-int fd_push(fountain_dec_t *d, uint32_t esi, const uint8_t *sym, size_t len) {
-    struct fountain_dec *t = (struct fountain_dec *)d;
-    if (t == NULL || sym == NULL || len != t->sym_len)
-        return -EINVAL;
-    if (esi >= t->k + t->k) /* sources + (toy) repair window */
-        return -EINVAL;
-    if (t->have[esi])
-        return 1; /* duplicate: counted, not an error */
-    t->have[esi] = 1;
-    memcpy(t->syms[esi], sym, len);
-    return 0;
-}
-
-static uint32_t toy_sources(const struct fountain_dec *t) {
-    uint32_t n = 0;
-    for (uint32_t i = 0; i < t->k; i++)
-        n += t->have[i] ? 1u : 0u;
-    return n;
-}
-
-bool fd_ready(const fountain_dec_t *d) {
-    const struct fountain_dec *t = (const struct fountain_dec *)d;
-    if (t == NULL)
-        return false;
-    if (toy_sources(t) == t->k)
-        return true;
-    /* one missing source + at least one repair recovers it */
-    if (toy_sources(t) == t->k - 1) {
-        for (uint32_t r = t->k; r < 2 * t->k; r++)
-            if (t->have[r])
-                return true;
-    }
-    return false;
-}
-
-uint32_t fd_rank(const fountain_dec_t *d) {
-    const struct fountain_dec *t = (const struct fountain_dec *)d;
-    if (t == NULL)
-        return 0;
-    uint32_t n = 0;
-    for (uint32_t i = 0; i < 2 * t->k; i++)
-        n += t->have[i] ? 1u : 0u;
-    return n;
-}
-
-int fd_decode(fountain_dec_t *d, uint8_t *out, size_t block_len) {
-    struct fountain_dec *t = (struct fountain_dec *)d;
-    if (t == NULL || out == NULL || block_len != t->k * t->sym_len)
-        return -EINVAL;
-    if (!fd_ready(d))
-        return -EINVAL;
-
-    uint8_t blk[TOY_MAX_K * 256];
-    int missing = -1;
-    for (uint32_t j = 0; j < t->k; j++) {
-        if (t->have[j]) {
-            memcpy(blk + (size_t)j * t->sym_len, t->syms[j], t->sym_len);
-        } else {
-            missing = (int)j;
-        }
-    }
-    if (missing >= 0) {
-        /* repair XOR of all symbols: missing = repair ^ others */
-        const uint8_t *rep = NULL;
-        for (uint32_t r = t->k; r < 2 * t->k; r++)
-            if (t->have[r])
-                rep = t->syms[r];
-        if (rep == NULL)
-            return -EINVAL;
-        for (size_t b = 0; b < t->sym_len; b++) {
-            uint8_t acc = rep[b];
-            for (uint32_t j = 0; j < t->k; j++)
-                if (t->have[j])
-                    acc ^= t->syms[j][b];
-            blk[(size_t)missing * t->sym_len + b] = acc;
-        }
-    }
-    memcpy(out, blk, block_len);
-    return 0;
-}
