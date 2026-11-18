@@ -49,3 +49,6 @@ void nrq_enc_destroy(void *enc);
 void nrq_dec_destroy(void *dec);
 
 #endif /* SDF_FOUNTAIN_INTERNAL_H */
+
+/* xorshift64* (fe_prng.c): deterministic per-ESI streams. */
+uint64_t lt_prng_next(uint64_t *state);
