@@ -72,6 +72,11 @@ target_include_directories(sdf_origin_http PUBLIC include)
 add_executable(bench_wm bench/bench_wm.c)
 target_link_libraries(bench_wm PRIVATE sdf_wm sdf_common)
 
+# --- Tools (plan W1.4: origin loadgen, degradation harness) --------------
+add_executable(origin_loadgen tools/loadgen/origin_loadgen.c)
+target_link_libraries(origin_loadgen PRIVATE sdf_origin_loopback sdf_wm
+                                             sdf_common)
+
 # --- Tests -------------------------------------------------------------------
 include(CTest)
 if(BUILD_TESTING)
