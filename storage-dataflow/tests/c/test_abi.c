@@ -18,6 +18,8 @@ _Static_assert(offsetof(wm_profile_t, version) == 0, "wm_profile_t.version offse
 _Static_assert(offsetof(wm_profile_t, m) == 4, "wm_profile_t.m offset");
 _Static_assert(offsetof(wm_profile_t, n) == 8, "wm_profile_t.n offset");
 _Static_assert(offsetof(wm_profile_t, b) == 12, "wm_profile_t.b offset");
+_Static_assert(offsetof(wm_profile_t, residual_r) == 268, "wm_profile_t.residual_r offset (ADR-0007)");
+_Static_assert(sizeof(wm_profile_t) == 276, "wm_profile_t size");
 _Static_assert(offsetof(wm_compiled_t, down_mask) == 16, "wm_compiled_t.down_mask offset");
 _Static_assert(offsetof(wm_compiled_t, cdf) == 24, "wm_compiled_t.cdf offset");
 /* ADR-0007 layout: method/sa/sb + path_of_key appended after the

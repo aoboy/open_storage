@@ -194,3 +194,181 @@ int sdf_wm_rebuild(wm_compiled_t *c) {
     build_unit_table(c, local_cdf);
     return 0;
 }
+
+/* ---- whack updates (plan prompt W2.2, ADR-0007) ------------------------
+ * Adapted from wack_a_mole src/core/profile.c @ a0f0422 (wam_profile_update
+ * modes 1-4, global residual r, uint64 intermediates in mode 4 including
+ * the all-positive-e fallback found by their M.1 fuzz). sdf additions:
+ * the update never zeroes every path (n > 1) — the last healthy path
+ * stays — and residual_r carries across calls. */
+
+static int all_removed(const wm_profile_t *p, const uint32_t *e) {
+    for (uint32_t i = 0; i < p->n; i++) {
+        if (p->b[i] > e[i])
+            return 0;
+    }
+    return 1;
+}
+
+static void residual_walk(wm_profile_t *p, uint32_t steps) {
+    if (p->residual_r >= p->n)
+        p->residual_r = 0;
+    for (uint32_t i = 0; i < steps; i++) {
+        p->b[p->residual_r]++;
+        p->residual_r = (p->residual_r + 1) % p->n;
+    }
+}
+
+int wm_profile_update(wm_profile_t *p, const uint32_t *e, int mode) {
+    if (p == NULL || e == NULL || p->n == 0 || p->n > WM_MAX_PATHS) {
+        return -EINVAL;
+    }
+    for (uint32_t i = 0; i < p->n; i++) {
+        if (e[i] > p->b[i]) {
+            return -EINVAL;
+        }
+    }
+    if (p->n > 1 && mode >= 1 && mode <= 3 && all_removed(p, e)) {
+        return -EINVAL; /* never remove the last healthy path */
+    }
+
+    if (mode == 1) {
+        /* single hot path: e[j] spread over all n */
+        uint32_t j = 0;
+        uint32_t ej = 0;
+        for (uint32_t i = 0; i < p->n; i++) {
+            if (e[i] > 0) {
+                if (ej != 0)
+                    return -EINVAL; /* exactly one positive entry */
+                j = i;
+                ej = e[i];
+            }
+        }
+        if (ej == 0)
+            return 0; /* nothing to do */
+        uint32_t x = ej / p->n;
+        uint32_t y = ej % p->n;
+        for (uint32_t i = 0; i < p->n; i++) {
+            if (i != j)
+                p->b[i] += x;
+        }
+        p->b[j] = p->b[j] - ej + x;
+        residual_walk(p, y);
+        return 0;
+    }
+
+    if (mode == 2) {
+        /* multi path: total removed spread over all n */
+        uint32_t etot = 0;
+        for (uint32_t i = 0; i < p->n; i++)
+            etot += e[i];
+        if (etot == 0)
+            return 0;
+        uint32_t x = etot / p->n;
+        uint32_t y = etot % p->n;
+        for (uint32_t i = 0; i < p->n; i++)
+            p->b[i] = p->b[i] - e[i] + x;
+        residual_walk(p, y);
+        return 0;
+    }
+
+    if (mode == 3) {
+        /* K / K-bar: removed balls go only to the e==0 side */
+        uint32_t etot = 0;
+        uint32_t kbar[WM_MAX_PATHS];
+        uint32_t kbar_n = 0;
+        for (uint32_t i = 0; i < p->n; i++) {
+            if (e[i] > 0) {
+                etot += e[i];
+            } else {
+                kbar[kbar_n++] = i;
+            }
+        }
+        if (etot == 0 || kbar_n == 0)
+            return -EINVAL; /* both sides must exist */
+        uint32_t x = etot / kbar_n;
+        uint32_t y = etot % kbar_n;
+        for (uint32_t i = 0; i < p->n; i++)
+            p->b[i] -= e[i];
+        for (uint32_t i = 0; i < kbar_n; i++)
+            p->b[kbar[i]] += x;
+        if (p->residual_r >= p->n)
+            p->residual_r = 0;
+        uint32_t need = y;
+        while (need > 0) {
+            uint32_t r = p->residual_r;
+            int in_kbar = 0;
+            for (uint32_t i = 0; i < kbar_n; i++)
+                if (kbar[i] == r)
+                    in_kbar = 1;
+            if (in_kbar) {
+                p->b[r]++;
+                need--;
+            }
+            p->residual_r = (p->residual_r + 1) % p->n;
+        }
+        return 0;
+    }
+
+    if (mode == 4) {
+        /* proportional renormalize with uint64 intermediates; the
+         * fractional remainder falls back to all-n distribution when
+         * every e[i] > 0 (the wam M.1 fuzz fix, kept verbatim) */
+        uint64_t etot = 0;
+        uint32_t kbar[WM_MAX_PATHS];
+        uint32_t kbar_n = 0;
+        for (uint32_t i = 0; i < p->n; i++) {
+            if (e[i] > p->b[i])
+                return -EINVAL;
+            if (e[i] == 0)
+                kbar[kbar_n++] = i;
+            etot += e[i];
+        }
+        if (etot == 0)
+            return 0;
+        if (etot >= p->m)
+            return -EINVAL; /* would leave nothing */
+        uint64_t m = p->m;
+        uint64_t m_e = m - etot;
+        uint32_t nb[WM_MAX_PATHS];
+        uint64_t rem_acc = 0;
+        for (uint32_t i = 0; i < p->n; i++) {
+            uint64_t left = (uint64_t)(p->b[i] - e[i]);
+            nb[i] = (uint32_t)((left * m) / m_e);
+            rem_acc += (left * m) % m_e;
+        }
+        uint64_t ellrem = rem_acc / m_e;
+        uint32_t n = p->n;
+        uint32_t k = kbar_n ? kbar_n : n;
+        uint32_t x = (uint32_t)(ellrem / k);
+        uint32_t y = (uint32_t)(ellrem % k);
+        for (uint32_t i = 0; i < p->n; i++)
+            p->b[i] = nb[i];
+        for (uint32_t i = 0; i < k; i++)
+            p->b[kbar_n ? kbar[i] : i] += x;
+        if (p->residual_r >= p->n)
+            p->residual_r = 0;
+        uint32_t need = y;
+        while (need > 0) {
+            if (kbar_n) {
+                uint32_t r = p->residual_r;
+                int in_kbar = 0;
+                for (uint32_t i = 0; i < kbar_n; i++)
+                    if (kbar[i] == r)
+                        in_kbar = 1;
+                if (in_kbar) {
+                    p->b[r]++;
+                    need--;
+                }
+                p->residual_r = (p->residual_r + 1) % n;
+            } else {
+                p->b[p->residual_r]++;
+                p->residual_r = (p->residual_r + 1) % n;
+                need--;
+            }
+        }
+        return 0;
+    }
+
+    return -EINVAL; /* unknown mode: refuse (strict, unlike wam's no-op) */
+}
