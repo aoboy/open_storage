@@ -14,36 +14,35 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `d106332`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `99fdc31`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
   W0.2 common primitives     : done — ring/seqlock/pool/timer/shm/log
-                                (src: f53c872, tests: cf361ab); 7/7 ctest,
-                                ASan+UBSan 7/7, TSan 7/7 (2^22 two-thread
-                                ring soak; seqlock contention with a
-                                writer warm-up gate — zero races, zero
-                                torn accepts); run_tests.sh always builds
-  W0.3 strict TOML loader     : done — wack_a_mole K.2 parser core
-                                imported; sdf key schema (types/ranges/
-                                enums/required) enforced at load; flat
-                                "table[i].key" contract (include:
-                                9404fff, src: 2a17946, configs: c0dd25f,
-                                tests: d40f066); 9 shipped examples load,
-                                32 rejection cases; 8/8 ctest, ASan+UBSan
-                                8/8, TSan 8/8; YAML placeholders deleted
-  W0.4 golden-parity harness  : done — vectors extracted from the
-                                wack_a_mole inline core by
-                                tools/gen_goldens.c (never re-derived);
-                                wm_select.json filled (θ goldens incl.
-                                θ(249,10)=636, 64 plain picks, 16
-                                discrepancy windows; seed groups tagged
-                                requires= W2.1 and counted pending);
-                                arc/fountain schemas staged for W4.2/W3;
-                                test_parity validates 152 comparisons
-                                (tools: d20f5a8, tests: d106332); 9/9
-                                ctest, ASan+UBSan 9/9, TSan 9/9
-  W0.5 metrics + gates        : 0% — prompt below
+                                (src: f53c872, tests: cf361ab); ring soak +
+                                seqlock contention legs TSan-clean
+  W0.3 strict TOML loader     : done — K.2 parser core imported; sdf key
+                                schema enforced at load; 9 shipped
+                                examples, 32 rejection cases (2a17946,
+                                c0dd25f, d40f066)
+  W0.4 golden-parity harness  : done — vectors extracted from the WAM
+                                inline core; test_parity validates 152
+                                comparisons, 2 seed groups pending W2.1;
+                                arc/fountain schemas staged (d20f5a8,
+                                d106332)
+  W0.5 metrics + gates        : done — metric primitives with the
+                                bucket map pinned by test_metrics (4-
+                                thread exact totals); bench_wm records
+                                2.4-2.8 cyc/decision (gate activates
+                                W2.6; bench_arc lands W4.2); Makefile
+                                ci/asan/tsan gates, `make ci` green from
+                                a clean checkout — 10/10 x {default,
+                                ASan+UBSan, TSan} (394c597, d9b3c6e,
+                                ad0cf6e, 99fdc31)
+
+  WAVE 0 COMPLETE — milestone M0 reached: ci green from clean checkout,
+  parity harness validating 152 goldens, strict TOML examples loading.
+  Wave 1 (origin driver seam) is unblocked.
   W1 origin driver seam      : 0%
   W2 WM dispatch (P1)        : ~20% — dispatch core v1 exists and is tested
                                 (wm_profile.c/wm_select.c/wm_shed.c + unit

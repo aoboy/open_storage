@@ -19,6 +19,7 @@ design and plan.
 ./scripts/run_bench.sh    # benchmark harness entry point
 ./scripts/lint.sh         # clang-format, clang-tidy, ruff, mypy (if installed)
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
+make ci                   # local gate: lint (+clean skips), test, ASan+UBSan, TSan
 ```
 
 Requirements: CMake >= 3.24, a C17 compiler, and Python >= 3.10. The FFI,
@@ -45,9 +46,11 @@ their tooling is not installed.
 | Component | State |
 |---|---|
 | Public C ABI headers | Defined |
-| CMake build | Working (libraries compile) |
+| CMake build | Working (libraries, 10-test suite, benches) |
 | Whack-a-Mole dispatch core | Implemented: profile compile, selection, mark down/up |
 | Whack-a-Mole control plane | Reference implementation in Python |
+| Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
+| Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
 | Fountain / FLUID / ARC runtime | Stubs — import-led per [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md); execution backlog in [`08`](docs/design/08-implementation-plan.md) |
 | Rust modules | Deferred to phase 4 |
