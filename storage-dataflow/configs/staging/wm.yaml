@@ -1,0 +1,8 @@
+# Whack-a-Mole dispatch (Prototype 1) — staging.
+wm:
+  m: 1024
+  control_hz: 4
+  alpha: 0.25
+  beta: 0.02
+  rollout_pct: 25
+  kill_switch: false

@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cffi mypy prometheus-client pytest pyyaml ruff xxhash
+
+      - name: Build
+        run: ./scripts/build.sh
+
+      - name: C tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Python tests
+        run: PYTHONPATH=python python3 -m pytest tests/python -q
+
+      - name: CFFI smoke test
+        run: PYTHONPATH=python:bindings/cffi python3 -c "import sdf_cffi; print(sdf_cffi.ffi.sizeof('wm_profile_t'))"
+
+      - name: Python static checks
+        run: |
+          (cd python && ruff check sdf)
+          (cd python && mypy --config-file mypy.ini sdf)

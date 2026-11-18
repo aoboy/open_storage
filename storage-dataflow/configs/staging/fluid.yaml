@@ -1,0 +1,16 @@
+# FLUID slack-based EC repair (Prototype 2) — staging.
+fluid:
+  eps_by_class:
+    hot-metadata: 0.05
+    cold-checkpoint: 0.15
+  rollout_pct_by_class:
+    cold-checkpoint: 50
+  codec_by_class:
+    hot-metadata: lt
+    cold-checkpoint: nanorq
+  arq_fallback: true
+  overhead_abort_ratio: 1.5
+  arms:
+    - control
+    - fluid_lt
+    - fluid_nanorq

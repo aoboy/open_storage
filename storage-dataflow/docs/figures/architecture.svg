@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="620" viewBox="0 0 960 620" role="img" aria-labelledby="title desc">
+  <title id="title">Storage dataflow architecture</title>
+  <desc id="desc">Three planes: sender dispatch through Whack-a-Mole, WAN repair through FLUID and Nanorq, receiver apply through ARC pacing into the storage engine.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    </marker>
+    <style>
+      .plane { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1.5; rx: 12; }
+      .box { fill: #e0f2fe; stroke: #0284c7; stroke-width: 1.5; rx: 8; }
+      .box-alt { fill: #fef3c7; stroke: #d97706; stroke-width: 1.5; rx: 8; }
+      .box-end { fill: #dcfce7; stroke: #16a34a; stroke-width: 1.5; rx: 8; }
+      .label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; fill: #0f172a; }
+      .small { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; fill: #334155; }
+      .plane-label { font-family: system-ui, sans-serif; font-size: 13px; font-weight: 700; fill: #475569; letter-spacing: 0.08em; }
+      .flow { stroke: #334155; stroke-width: 1.8; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="960" height="620" fill="#ffffff"/>
+
+  <rect x="20" y="20" width="920" height="160" class="plane"/>
+  <text x="36" y="44" class="plane-label">SENDER / SOURCE PLANE</text>
+
+  <rect x="50" y="66" width="180" height="52" class="box"/>
+  <text x="62" y="88" class="label">Origin A</text>
+  <text x="62" y="106" class="small">S3 / blob</text>
+
+  <rect x="250" y="66" width="180" height="52" class="box"/>
+  <text x="262" y="88" class="label">Origin B</text>
+  <text x="262" y="106" class="small">CDN edge</text>
+
+  <rect x="450" y="66" width="180" height="52" class="box"/>
+  <text x="462" y="88" class="label">P2P peer</text>
+  <text x="462" y="106" class="small">colocated</text>
+
+  <rect x="690" y="62" width="220" height="72" class="box-alt"/>
+  <text x="704" y="86" class="label">Whack-a-Mole dispatch</text>
+  <text x="704" y="104" class="small">profile + bit-reversal</text>
+  <text x="704" y="120" class="small">+ soft shedding</text>
+
+  <path d="M230 92 H248" class="flow"/>
+  <path d="M430 92 H448" class="flow"/>
+  <path d="M630 92 H688" class="flow"/>
+  <path d="M800 134 V182" class="flow"/>
+
+  <rect x="20" y="200" width="920" height="170" class="plane"/>
+  <text x="36" y="224" class="plane-label">WAN / INTERCONNECT PLANE</text>
+
+  <rect x="50" y="246" width="160" height="52" class="box"/>
+  <text x="62" y="268" class="label">Path 1</text>
+  <text x="62" y="286" class="small">healthy</text>
+
+  <rect x="240" y="246" width="160" height="52" class="box-alt"/>
+  <text x="252" y="268" class="label">Path 2</text>
+  <text x="252" y="286" class="small">degraded</text>
+
+  <rect x="430" y="246" width="160" height="52" class="box"/>
+  <text x="442" y="268" class="label">Path k</text>
+  <text x="442" y="286" class="small">healthy</text>
+
+  <rect x="650" y="238" width="260" height="84" class="box-alt"/>
+  <text x="664" y="262" class="label">FLUID slack repair</text>
+  <text x="664" y="280" class="small">decode gate: Loss-Product &lt; epsilon</text>
+  <text x="664" y="296" class="small">Nanorq RaptorQ | LT codec</text>
+  <text x="664" y="312" class="small">ARQ fallback</text>
+
+  <path d="M210 272 H238" class="flow"/>
+  <path d="M400 272 H428" class="flow"/>
+  <path d="M590 272 H648" class="flow"/>
+  <path d="M780 322 V370" class="flow"/>
+
+  <rect x="20" y="390" width="920" height="210" class="plane"/>
+  <text x="36" y="414" class="plane-label">RECEIVER / APPLY PLANE</text>
+
+  <rect x="560" y="434" width="230" height="84" class="box-alt"/>
+  <text x="574" y="458" class="label">ARC receiver pacer</text>
+  <text x="574" y="476" class="small">adaptive release offset</text>
+  <text x="574" y="492" class="small">receiver clock only</text>
+  <text x="574" y="508" class="small">no feedback</text>
+
+  <rect x="560" y="544" width="230" height="42" class="box-end"/>
+  <text x="574" y="570" class="label">Storage engine / apply</text>
+
+  <path d="M675 518 V542" class="flow"/>
+  <text x="36" y="486" class="small">recovered / decoded entries</text>
+  <text x="36" y="504" class="small">arrive from the WAN plane</text>
+  <text x="36" y="522" class="small">pacer smooths the apply stream</text>
+  <text x="36" y="540" class="small">engine sees sender-like timing</text>
+</svg>

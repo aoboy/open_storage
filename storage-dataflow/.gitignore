@@ -1,0 +1,17 @@
+build/
+out/
+*.o
+*.so
+*.a
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+compile_commands.json
+*.egg-info/
+dist/
+*.zip

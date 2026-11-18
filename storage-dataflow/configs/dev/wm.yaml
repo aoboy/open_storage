@@ -1,0 +1,8 @@
+# Whack-a-Mole dispatch (Prototype 1) — development.
+wm:
+  m: 1024              # selection units; must be a power of two
+  control_hz: 4        # control-loop frequency
+  alpha: 0.25          # multiplicative decrease on a degraded path
+  beta: 0.02           # additive increase on a healthy path
+  rollout_pct: 5
+  kill_switch: false

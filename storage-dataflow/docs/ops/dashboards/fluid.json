@@ -1,0 +1,83 @@
+{
+  "title": "FLUID repair",
+  "uid": "sdf-fluid",
+  "tags": ["sdf", "fluid"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Repair p99 by arm and class",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(fluid_repair_duration_seconds_bucket[5m])) by (le, arm, class))",
+          "legendFormat": "{{arm}} / {{class}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Bandwidth overhead ratio",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(fluid_repair_bytes{kind=\"sent\"}[5m])) / sum(rate(fluid_repair_bytes{kind=\"useful\"}[5m]))",
+          "legendFormat": "sent / useful"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "ARQ fallback rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(fluid_arq_fallback_total[5m]))",
+          "legendFormat": "fallback/s"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Repair rounds",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(fluid_rounds_bucket[5m])) by (le, arm))",
+          "legendFormat": "{{arm}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Decode rank at completion",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(fluid_decode_rank_bucket[5m])) by (le, codec))",
+          "legendFormat": "{{codec}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Active epsilon by class",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "fluid_eps",
+          "legendFormat": "{{class}}"
+        }
+      ]
+    }
+  ]
+}

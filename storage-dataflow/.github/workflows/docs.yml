@@ -1,0 +1,32 @@
+name: docs
+
+on:
+  push:
+    paths:
+      - "docs/**"
+      - "scripts/build_doc.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pandoc and XeLaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-xetex texlive-fonts-recommended
+
+      - name: Render design PDF
+        run: ./scripts/build_doc.sh
+
+      - name: Upload PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-dataflow-design
+          path: out/*.pdf
+          if-no-files-found: error
