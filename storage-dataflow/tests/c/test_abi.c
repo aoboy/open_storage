@@ -60,6 +60,13 @@ _Static_assert(offsetof(sdf_origin_stats_t, hard_down) == 80, "stats.hard_down o
 _Static_assert(offsetof(sdf_origin_t, impl) == 8, "driver impl offset");
 _Static_assert(sizeof(sdf_origin_ops_t) == 5 * sizeof(void *), "vtable is 5 ops");
 
+/* Fountain ABI v2 (plan W3.1; ADR-0001's opaque-size item closes). */
+_Static_assert(offsetof(fe_cfg_t, k) == 8, "fe_cfg_t.k offset");
+_Static_assert(offsetof(fe_cfg_t, overhead_pct) == 12, "fe_cfg_t.overhead_pct offset");
+_Static_assert(sizeof(fe_cfg_t) == 16, "fe_cfg_t size");
+_Static_assert(offsetof(fd_cfg_t, sym_len) == 8, "fd_cfg_t.sym_len offset");
+_Static_assert(sizeof(fd_cfg_t) == 16, "fd_cfg_t size");
+
 int main(void) {
     return 0;
 }

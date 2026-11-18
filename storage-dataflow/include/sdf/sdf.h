@@ -2,7 +2,7 @@
 #define SDF_H
 
 #define SDF_VERSION_MAJOR 0
-#define SDF_VERSION_MINOR 1
+#define SDF_VERSION_MINOR 2
 #define SDF_VERSION_PATCH 0
 
 #include "sdf/arc.h"
