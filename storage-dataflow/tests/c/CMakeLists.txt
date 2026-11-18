@@ -47,6 +47,11 @@ add_executable(test_origin_http unit/test_origin_http.c)
 target_link_libraries(test_origin_http PRIVATE sdf_origin_http sdf_common)
 add_test(NAME origin_http COMMAND test_origin_http)
 
+# Plan W2.3 — WM SHM publication (ADR-0002 protocol).
+add_executable(test_wm_shm unit/test_wm_shm.c)
+target_link_libraries(test_wm_shm PRIVATE sdf_wm sdf_common Threads::Threads)
+add_test(NAME wm_shm COMMAND test_wm_shm)
+
 # Plan W0.3 — strict TOML loader (ADR-0005). The source tree path is
 # baked in so the shipped examples resolve from any CWD.
 add_executable(test_config unit/test_config.c)
