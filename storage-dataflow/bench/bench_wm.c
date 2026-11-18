@@ -33,36 +33,49 @@ int main(void) {
     p.b[3] = 173;
     p.b[4] = 124;
 
-    wm_compiled_t c;
-    if (wm_profile_compile(&p, &c) != 0) {
-        fprintf(stderr, "bench_wm: profile compile failed\n");
-        return 1;
-    }
+    static const struct {
+        const char *name;
+        wm_compile_cfg_t cfg;
+    } variants[] = {
+        {"plain", {.method = WM_METHOD_PLAIN, .sa = 0, .sb = 1}},
+        {"shuffle1", {.method = WM_METHOD_SHUFFLE1, .sa = 333, .sb = 735}},
+        {"shuffle2", {.method = WM_METHOD_SHUFFLE2, .sa = 333, .sb = 735}},
+    };
 
-    uint64_t counter = 0;
-    for (uint32_t i = 0; i < WARMUP; i++)
-        sdf_bench_sink += wm_select(&c, counter++);
+    for (size_t v = 0; v < sizeof(variants) / sizeof(variants[0]); v++) {
+        wm_compiled_t c;
+        if (wm_profile_compile_cfg(&p, &c, &variants[v].cfg) != 0) {
+            fprintf(stderr, "bench_wm: compile failed for %s\n",
+                    variants[v].name);
+            return 1;
+        }
 
-    double best_ns = -1.0, best_cyc = -1.0;
-    for (int r = 0; r < ROUNDS; r++) {
-        uint64_t t0 = sdf_bench_now_ns();
-        uint64_t c0 = sdf_bench_cycles();
-        for (uint32_t i = 0; i < ITERS; i++)
+        uint64_t counter = 0;
+        for (uint32_t i = 0; i < WARMUP; i++)
             sdf_bench_sink += wm_select(&c, counter++);
-        uint64_t c1 = sdf_bench_cycles();
-        uint64_t t1 = sdf_bench_now_ns();
-        double ns = (double)(t1 - t0) / (double)ITERS;
-        double cyc = c1 > c0 ? (double)(c1 - c0) / (double)ITERS : 0.0;
-        if (best_ns < 0.0 || ns < best_ns)
-            best_ns = ns;
-        if (best_cyc < 0.0 || cyc < best_cyc)
-            best_cyc = cyc;
-    }
 
-    printf("BENCH wm_select n=5 m=1024 ns_per_dec=%.2f cyc_per_dec=%.1f "
-           "Mdec_s=%.1f sink=%" PRIu64 "\n",
-           best_ns, best_cyc, 1000.0 / best_ns,
-           (uint64_t)sdf_bench_sink);
-    printf("# gate activates with W2.6 (<= 15 cyc/decision); recorded only\n");
+        double best_ns = -1.0, best_cyc = -1.0;
+        for (int r = 0; r < ROUNDS; r++) {
+            uint64_t t0 = sdf_bench_now_ns();
+            uint64_t c0 = sdf_bench_cycles();
+            for (uint32_t i = 0; i < ITERS; i++)
+                sdf_bench_sink += wm_select(&c, counter++);
+            uint64_t c1 = sdf_bench_cycles();
+            uint64_t t1 = sdf_bench_now_ns();
+            double ns = (double)(t1 - t0) / (double)ITERS;
+            double cyc = c1 > c0 ? (double)(c1 - c0) / (double)ITERS : 0.0;
+            if (best_ns < 0.0 || ns < best_ns)
+                best_ns = ns;
+            if (best_cyc < 0.0 || cyc < best_cyc)
+                best_cyc = cyc;
+        }
+
+        printf("BENCH wm_select method=%s n=5 m=1024 ns_per_dec=%.2f "
+               "cyc_per_dec=%.1f Mdec_s=%.1f sink=%" PRIu64 "\n",
+               variants[v].name, best_ns, best_cyc, 1000.0 / best_ns,
+               (uint64_t)sdf_bench_sink);
+    }
+    printf("# gate activates with W2.6 (<= 15 cyc/decision on the seeded "
+           "methods); recorded only\n");
     return 0;
 }
