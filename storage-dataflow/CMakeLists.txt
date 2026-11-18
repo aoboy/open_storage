@@ -64,6 +64,10 @@ add_library(sdf_origin_loopback STATIC src/c/origin/loopback/loopback_origin.c)
 target_link_libraries(sdf_origin_loopback PUBLIC sdf_common)
 target_include_directories(sdf_origin_loopback PUBLIC include)
 
+add_library(sdf_origin_http STATIC src/c/origin/http/http_origin.c)
+target_link_libraries(sdf_origin_http PUBLIC sdf_common)
+target_include_directories(sdf_origin_http PUBLIC include)
+
 # --- Benches (plan W0.5: recorded, never ctest-gated) --------------------
 add_executable(bench_wm bench/bench_wm.c)
 target_link_libraries(bench_wm PRIVATE sdf_wm sdf_common)
