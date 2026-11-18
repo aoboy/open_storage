@@ -59,6 +59,10 @@ add_library(sdf_arc STATIC
 target_link_libraries(sdf_arc PUBLIC sdf_common)
 target_include_directories(sdf_arc PUBLIC include)
 
+# --- Benches (plan W0.5: recorded, never ctest-gated) --------------------
+add_executable(bench_wm bench/bench_wm.c)
+target_link_libraries(bench_wm PRIVATE sdf_wm sdf_common)
+
 # --- Tests -------------------------------------------------------------------
 include(CTest)
 if(BUILD_TESTING)
