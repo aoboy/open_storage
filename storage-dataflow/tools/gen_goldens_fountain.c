@@ -18,23 +18,30 @@
 #include <stdlib.h>
 #include <string.h>
 
-int main(void) {
+int main(int argc, char **argv) {
     enum { K = 16, T = 16, OVERHEAD = 100, NSYM = 20 }; /* K + 4 repairs */
+    uint32_t codec = SDF_FOUNTAIN_NANORQ;
+    const char *cname = "nanorq";
+    if (argc == 3 && strcmp(argv[1], "--codec") == 0 &&
+        strcmp(argv[2], "lt") == 0) {
+        codec = SDF_FOUNTAIN_LT;
+        cname = "lt";
+    }
     static uint8_t block[K * T];
     for (size_t i = 0; i < sizeof(block); i++)
         block[i] = (uint8_t)((i * 2654435761ull) >> 24);
 
     fe_cfg_t cfg = {
         .block_len = sizeof(block), .k = K, .overhead_pct = OVERHEAD,
-        .codec = SDF_FOUNTAIN_NANORQ,
+        .codec = codec,
     };
     void *enc = malloc(fe_sizeof(&cfg));
     if (enc == NULL || fe_init_in(enc, &cfg, block) != 0)
         return 1;
 
-    printf("    {\"codec\": \"nanorq\", \"k\": %d, \"sym_len\": %d, "
+    printf("    {\"codec\": \"%s\", \"k\": %d, \"sym_len\": %d, "
            "\"overhead_pct\": %d, \"block\": [",
-           (int)K, (int)T, (int)OVERHEAD);
+           cname, (int)K, (int)T, (int)OVERHEAD);
     for (size_t i = 0; i < sizeof(block); i++)
         printf("%s%u", i ? ", " : "", block[i]);
     printf("], \"symbols\": [");

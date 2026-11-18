@@ -40,7 +40,7 @@ static int g_pending;   /* groups awaiting a future prompt */
  * add fountain.abi_v2, W4.x arc.abi_v2. */
 static const char *IMPLEMENTED[] = {
     "core", "wm.method.shuffle1", "wm.method.shuffle2", "fountain.abi_v2",
-    "fountain.codec.nanorq", NULL};
+    "fountain.codec.nanorq", "fountain.codec.lt", NULL};
 
 static int feature_implemented(const char *feature) {
     if (feature == NULL)
@@ -677,11 +677,8 @@ int main(void) {
     validate_fountain("golden_vectors/fountain_esi.json", "lossy_repair", 1, 0);
     validate_codec_group("golden_vectors/fountain_esi.json", "nanorq",
                          "fountain.codec.nanorq");
-    {
-        static const char *fountain_groups[] = {"lt"};
-        check_schema_file("golden_vectors/fountain_esi.json", fountain_groups,
-                          1);
-    }
+    validate_codec_group("golden_vectors/fountain_esi.json", "lt",
+                         "fountain.codec.lt");
 
     if (g_validated == 0) {
         fprintf(stderr, "FAIL: parity gate validated nothing\n");

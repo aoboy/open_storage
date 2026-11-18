@@ -181,12 +181,77 @@ static void test_insufficient_is_the_arq_condition(void) {
     free(dmem);
 }
 
+
+/* ---- LT arm (plan prompt W3.3) ---------------------------------------- */
+
+static void lt_run(int drop_source5, uint32_t overhead) {
+    size_t esz = fe_sizeof(&(fe_cfg_t){.block_len = K * T,
+                                      .k = K,
+                                      .overhead_pct = overhead,
+                                      .codec = SDF_FOUNTAIN_LT});
+    size_t dsz = fd_sizeof(&(fd_cfg_t){.k = K, .sym_len = T});
+    void *emem = malloc(esz);
+    void *dmem = malloc(dsz);
+    CHECK(emem != NULL && dmem != NULL);
+
+    for (size_t i = 0; i < sizeof(g_block); i++)
+        g_block[i] = byte_at(i);
+    fe_cfg_t ecfg = {.block_len = sizeof(g_block), .k = K,
+                     .overhead_pct = overhead, .codec = SDF_FOUNTAIN_LT};
+    CHECK(fe_init_in(emem, &ecfg, g_block) == 0);
+    CHECK(fe_symbol_count(emem) >= K);
+
+    fd_cfg_t dcfg = {.k = K, .sym_len = T};
+    CHECK(fd_init_codec(dmem, &dcfg, SDF_FOUNTAIN_LT) == 0);
+
+    uint32_t count = fe_symbol_count(emem);
+    for (uint32_t esi = 0; esi < count; esi++) {
+        if (drop_source5 && esi == 5)
+            continue; /* the single dropped source */
+        uint8_t sym[T];
+        CHECK(fe_generate(emem, esi, sym, T) == 0);
+        CHECK(fd_push(dmem, esi, sym, T) == 0);
+    }
+
+    if (drop_source5) {
+        /* the deterministic neighbor sets make this peel resolvable
+         * with the full repair set: pinned by goldens, stable */
+        CHECK(fd_ready(dmem));
+    } else {
+        CHECK(fd_ready(dmem));
+    }
+    uint8_t out[K * T];
+    CHECK(fd_decode(dmem, out, sizeof(out)) == 0);
+    CHECK(memcmp(out, g_block, sizeof(g_block)) == 0);
+
+    /* duplicates counted */
+    uint8_t sym[T];
+    CHECK(fe_generate(emem, 0, sym, T) == 0);
+    CHECK(fd_push(dmem, 0, sym, T) == 1);
+
+    fe_destroy(emem);
+    fd_destroy(dmem);
+    free(emem);
+    free(dmem);
+}
+
+static void test_lt(void) {
+    lt_run(0, 0);   /* all sources: roundtrip */
+    lt_run(0, 100); /* sources + repairs */
+    lt_run(1, 100); /* one dropped source, recovered via the repairs */
+}
+
 int main(void) {
     test_validation();
     test_roundtrip();
     test_lossy_recovery();
     test_insufficient_is_the_arq_condition();
-    printf("test_fe_codec: ok (nanorq arm: roundtrip, 20%% loss recovery, "
-           "ARQ condition, lifecycle)\n");
+    test_lt();
+
+    test_roundtrip();
+    test_lossy_recovery();
+    test_insufficient_is_the_arq_condition();
+    printf("test_fe_codec: ok (nanorq: roundtrip, 20%% loss, ARQ condition; "
+           "LT: roundtrip, repairs, peel recovery)\n");
     return 0;
 }
