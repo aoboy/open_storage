@@ -48,10 +48,13 @@ target_link_libraries(sdf_fountain PUBLIC sdf_common
 target_include_directories(sdf_fountain PUBLIC include
     PRIVATE src/c/fountain ${CMAKE_SOURCE_DIR}/third_party/nanorq/include)
 
-# --- FLUID repair gate (plan W3.4) ------------------------------------------
+# --- FLUID repair gate + coordinator (plan W3.4/W3.5) ----------------------
 add_library(sdf_fluid STATIC
     src/c/fluid/fluid_gate.c
+    src/c/fluid/fluid_repair_main.c
 )
+target_link_libraries(sdf_fluid PUBLIC sdf_common sdf_fountain sdf_wm
+                                        sdf_origin_loopback)
 target_link_libraries(sdf_fluid PUBLIC sdf_fountain sdf_common)
 target_include_directories(sdf_fluid PUBLIC include)
 
@@ -67,6 +70,10 @@ target_include_directories(sdf_arc PUBLIC include)
 # --- Apps (plan W2.5: the P1 proxy shell) ---------------------------------
 add_executable(wm-proxy src/c/whack_a_mole/wm_proxy_main.c)
 target_link_libraries(wm-proxy PRIVATE sdf_wm sdf_origin_loopback sdf_common)
+
+# --- Apps (plan W3.6: the repair e2e driver) -------------------------------
+add_executable(fluid-repair src/c/fluid/fluid_repair_shell.c)
+target_link_libraries(fluid-repair PRIVATE sdf_fluid)
 
 # --- Origin drivers (plan W1, ADR-0008) -----------------------------------
 add_library(sdf_origin STATIC src/c/origin/origin_common.c)
