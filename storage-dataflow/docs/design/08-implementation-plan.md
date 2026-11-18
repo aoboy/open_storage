@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `99fdc31`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `ffc46fd`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -42,7 +42,34 @@ ADRs [0001–0009](../adr/).
 
   WAVE 0 COMPLETE — milestone M0 reached: ci green from clean checkout,
   parity harness validating 152 goldens, strict TOML examples loading.
-  Wave 1 (origin driver seam) is unblocked.
+
+  W1.1 origin.h ABI          : done — vtable + stats contract with
+                                layout pins in test_abi (include:
+                                ce5e63e)
+  W1.2 loopback driver       : done — deadline-scheduler worker (no
+                                cross-origin head-of-line blocking),
+                                zero-copy mmap completions, live knob
+                                reload, drain/restore, EAGAIN, close
+                                flush; stats exact under every knob
+                                (src: 7ecb66c, tests: 220f58b)
+  W1.3 HTTP driver           : done — per-origin blocking workers,
+                                persistent conn + one reconnect per
+                                unit, 404/timeout/refused mapping,
+                                hard_down latching; in-process server
+                                test found the keep-alive starvation
+                                live (src: b6de4aa, tests: 1428f37)
+  W1.4 loadgen + profiles    : done — built-in accounting gates:
+                                steady ok==assigned exact (the
+                                acceptance), dies/flapping enolink
+                                halves, slow throttle visible in the
+                                EWMA (5411ff2, ffc46fd); profiles are
+                                strict-schema TOML, loader-validated
+
+  WAVE 1 COMPLETE — milestone M1 reached: both drivers serve ranged
+  fetches with exact stats; loadgen reproduces every degradation
+  profile with trustworthy exit codes. Wave 2 (WM dispatch, P1)
+  unblocked — W2.1 spray seeds/embodiments will bring the two
+  pending parity groups out of pending.
   W1 origin driver seam      : 0%
   W2 WM dispatch (P1)        : ~20% — dispatch core v1 exists and is tested
                                 (wm_profile.c/wm_select.c/wm_shed.c + unit

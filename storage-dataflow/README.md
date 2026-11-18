@@ -51,6 +51,7 @@ their tooling is not installed.
 | Whack-a-Mole control plane | Reference implementation in Python |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
+| Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
 | Fountain / FLUID / ARC runtime | Stubs — import-led per [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md); execution backlog in [`08`](docs/design/08-implementation-plan.md) |
 | Rust modules | Deferred to phase 4 |

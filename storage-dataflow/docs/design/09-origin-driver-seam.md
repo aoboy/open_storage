@@ -1,6 +1,9 @@
 # 09 — Origin Driver Seam (`sdf_origin_ops_t`)
 
-**Status:** Design ready; header lands as prompt W1.1.
+**Status:** **As-built (Wave 1)** — header + ABI pins (W1.1), loopback
+harness driver with live degradation knobs (W1.2), HTTP reference driver
+(W1.3), and the origin_loadgen harness with the four canonical
+degradation profiles (W1.4); 12/12 ctest with ASan+UBSan and TSan green.
 **Related:** [ADR-0008](../adr/0008-origin-driver-seam.md) (the decision),
 [00-overview §5.3](00-overview.md#53-origin-driver-seam-new),
 [01-whack-a-mole](01-whack-a-mole.md) (the consumer),
