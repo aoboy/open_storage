@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `d40f066`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `d106332`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -32,7 +32,18 @@ ADRs [0001–0009](../adr/).
                                 tests: d40f066); 9 shipped examples load,
                                 32 rejection cases; 8/8 ctest, ASan+UBSan
                                 8/8, TSan 8/8; YAML placeholders deleted
-  W0.4–W0.5 foundations      : 0% — prompts below
+  W0.4 golden-parity harness  : done — vectors extracted from the
+                                wack_a_mole inline core by
+                                tools/gen_goldens.c (never re-derived);
+                                wm_select.json filled (θ goldens incl.
+                                θ(249,10)=636, 64 plain picks, 16
+                                discrepancy windows; seed groups tagged
+                                requires= W2.1 and counted pending);
+                                arc/fountain schemas staged for W4.2/W3;
+                                test_parity validates 152 comparisons
+                                (tools: d20f5a8, tests: d106332); 9/9
+                                ctest, ASan+UBSan 9/9, TSan 9/9
+  W0.5 metrics + gates        : 0% — prompt below
   W1 origin driver seam      : 0%
   W2 WM dispatch (P1)        : ~20% — dispatch core v1 exists and is tested
                                 (wm_profile.c/wm_select.c/wm_shed.c + unit
