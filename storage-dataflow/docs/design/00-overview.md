@@ -4,8 +4,11 @@
 
 **Document type:** Internal planning & design document
 **Author:** Senior R&D Technical Staff
-**Status:** Draft for review
-**Version:** 1.0
+**Status:** Design baseline — import-led execution phase. The executable
+backlog is [`08-implementation-plan.md`](08-implementation-plan.md);
+provenance from the wack_a_mole implementation lives in
+[`07-wam-import-map.md`](07-wam-import-map.md).
+**Version:** 1.1
 
 ---
 
@@ -269,6 +272,30 @@ RECEIVER / APPLY PLANE
 | `fluid_coord` | Control | ε scheduling, A/B assignment, Pareto tracking | Python |
 | `arc_pacer` | Receiver | Offset estimator + heap + release loop | C |
 | `arc_deploy` | Control | Pipeline selection, kill switch, shadow mode | Python |
+
+### 5.3 Origin driver seam (new)
+
+The interconnect "paths" of §5.1 are **origins** — S3 blobs, CDN edges,
+peers, colocated clusters. One vtable (`sdf_origin_ops_t`) is the only
+origin I/O seam in the data plane: a unit is one byte-range fetch,
+completion is a callback (a stalled origin never blocks dispatch), and
+every driver exports the same normalized `sdf_origin_stats_t` that the
+severity controller and the Python loop score. This is the storage
+analogue of wack_a_mole's transport vtable, imported as a pattern — the
+UDP/RoCE drivers themselves are deliberately not imported (import map
+§4). Full contract: [`09-origin-driver-seam.md`](09-origin-driver-seam.md),
+decision record: [ADR-0008](../adr/0008-origin-driver-seam.md).
+
+### 5.4 Provenance and execution
+
+The data-plane cores (spray, FLUID budget, ARC schedule, RaptorQ codec)
+are **imported from the wack_a_mole repository** behind the
+`include/sdf/*.h` ABI and accepted by golden-vector parity
+([ADR-0009](../adr/0009-golden-vector-parity.md)). The asset map, ABI
+delta register, and the not-imported list live in
+[`07-wam-import-map.md`](07-wam-import-map.md); waves, prompts, sizes,
+and milestone gates live in
+[`08-implementation-plan.md`](08-implementation-plan.md).
 
 ---
 
@@ -779,6 +806,12 @@ and function pointers. No C++ or exceptions cross the boundary.
 | 12–15 | Prototype 3 shadow → live one shard | 1 systems engineer + 1 engine owner |
 | 16 | Joint evaluation doc + Rust migration ADR | all |
 
+> Scheduling note: this table is the original staffing view; the
+> operative sequence, sizes (P50–P90), and milestone gates are
+> maintained in [`08-implementation-plan.md`](08-implementation-plan.md)
+> §12. Weeks map to waves: 1–2 → W0, 3–6 → W1+W2, 7–11 → W3,
+> 12–15 → W4, 16 → W5.
+
 ---
 
 ## 14. Risks & Mitigations
@@ -856,5 +889,15 @@ demonstration of exactly that profile.
   vectors gate every step.
 - **ADR-0004:** Nanorq is integrated as one of two fountain codec arms behind
   `fountain.h`; LT remains the reference.
+- **ADR-0005:** Ops config format is strict TOML (wack_a_mole K.2 loader
+  adapted); supersedes the YAML references in docs 01–03.
+- **ADR-0006:** `include/sdf/arc.h` v2 — full ARC/ARC-Q/ARC-QG semantics,
+  IMMEDIATE test oracle, size helper, extended stats.
+- **ADR-0007:** `wm.h` gains profile-update embodiments 1–4 and spray
+  shuffle methods/seeds; discrepancy bounds become property tests.
+- **ADR-0008:** Origin driver seam `sdf_origin_ops_t` — origins are the
+  paths; normalized stats are the controller's only input.
+- **ADR-0009:** Golden-vector parity is the acceptance gate for every
+  imported module; fills the empty `golden_vectors/` placeholders.
 
 *End of document.*

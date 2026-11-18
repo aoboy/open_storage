@@ -1,7 +1,11 @@
 # Prototype 3 — ARC Pacing Sidecar
 
 **Status:** Design ready; C implementation is a stub. Highest interaction
-risk.
+risk. Lands in plan wave
+[W4](08-implementation-plan.md#7-phase-w4--arc-pacing-sidecar-prototype-3)
+with the validated wack_a_mole ARC core imported behind an ABI v2
+([ADR-0006](../adr/0006-arc-abi-v2.md); provenance
+[07 §3.3](07-wam-import-map.md#33-arc-prototype-3)).
 **Related:** [Overview §6.3, §7.5](00-overview.md#6-prototype-sequence-roirisk-order).
 
 ## Objective
@@ -69,9 +73,12 @@ The kill switch is always available and must be tested before live rollout.
 
 ## Configuration
 
-See `configs/<env>/arc.yaml`: `pipeline`, `batch_max`,
+See `configs/<env>/arc.toml` (strict TOML per
+[ADR-0005](../adr/0005-config-format-toml.md)): `pipeline`, `batch_max`,
 `batch_deadline_ns`, `offset_min_ns`, `offset_max_ns`, `increase_gain`,
-`decrease_gain`, `shadow_mode`, `kill_switch`.
+`decrease_gain`, `shadow_mode`, `kill_switch`, plus the ADR-0006
+parameter set (`mode`, ρ/λ/U/δ/γ/J/G, `T_idle_ns`, `auto_params`,
+`min_smooth_bytes`, `budget_ms`).
 
 ## Failure modes
 
@@ -88,3 +95,26 @@ See `configs/<env>/arc.yaml`: `pipeline`, `batch_max`,
   a size/allocation function before the ABI freezes.
 - Define the exact EWMA half-life and `safety` multiplier per pipeline class.
 - Decide whether ordering violations are dropped or force a bypass.
+
+## Import delta (wack_a_mole)
+
+What W4 imports versus keeps, per
+[07 §3.3](07-wam-import-map.md#33-arc-prototype-3):
+
+| Mechanism | This design (v1) | Imported target (ADR-0006) | Source |
+|---|---|---|---|
+| Offset update | single EWMA estimator | asymmetric D update (ρ_u/ρ_l, λ_u/λ_l, U clip) + ARC-Q quantized E | WAM `src/arc/arc.c` |
+| Release schedule | `release_time` from offset | T_n = max(A_n, S_n + E + J) with in-order guard G (ARC-QG) | same |
+| Ordering | heap key `(release_time, producer_ts, seq)` | identical keying; QG guard makes violations structurally impossible | same |
+| Measurement baseline | none | `ARC_MODE_IMMEDIATE` oracle (= the killed mode) for A/B added-latency | same |
+| Validation | design-only | paper §12.3 goldens + 60 fps trace replay (QG: 0 violations) into `golden_vectors/arc_schedule.json` | WAM `test_arc` / `test_arc_experiments` |
+| Bounds | `offset_max_ns`, `batch_deadline_ns` | retained, plus δ-clamp and `budget_ms` p99 alert | WAM J.5 |
+
+Mode mapping to this document's table: `shadow` = ARC computes the
+schedule and metrics, apply flows through the old path; `live` =
+`ARC_MODE_QG`; `killed` = `ARC_MODE_IMMEDIATE`. The open questions close
+as follows: `arc_sizeof` lands in W4.1; the EWMA/`safety` knobs are
+superseded by the paper parameter set (auto-params from RTT and Δ_n
+quantiles, W4.2); ordering violations are a correctness bug by
+construction under QG — any observed violation rolls back to shadow
+(W4.5 kill-switch leg proves the rollback).

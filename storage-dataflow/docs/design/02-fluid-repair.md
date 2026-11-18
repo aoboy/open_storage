@@ -1,6 +1,10 @@
 # Prototype 2 — FLUID Repair
 
-**Status:** Design ready; C implementation is a stub.
+**Status:** Design ready; C implementation is a stub. Lands in plan wave
+[W3](08-implementation-plan.md#6-phase-w3--fluid-repair-prototype-2) with
+the wack_a_mole FLUID phase-O core imported for the sender budget
+([07 §3.2](07-wam-import-map.md#32-fluid-prototype-2)); the LT reference
+arm is the one fresh-code exception (no WAM LT exists).
 **Related:** [Overview §6.2, §7.4](00-overview.md#6-prototype-sequence-roirisk-order),
 [ADR-0004](../adr/0004-nanorq-behind-fountain-abi.md),
 [Nanorq evaluation](06-nanorq-evaluation.md).
@@ -92,8 +96,10 @@ repair have different latency and cost targets:
 
 ## Configuration
 
-See `configs/<env>/fluid.yaml`: `eps_by_class`, `rollout_pct_by_class`,
-`codec_by_class`, `arq_fallback`, `overhead_abort_ratio`, `arms`.
+See `configs/<env>/fluid.toml` (strict TOML per
+[ADR-0005](../adr/0005-config-format-toml.md)): `eps_by_class`,
+`rollout_pct_by_class`, `codec_by_class`, `arq_fallback`,
+`overhead_abort_ratio`, `arms`.
 
 ## Failure modes
 
@@ -110,3 +116,22 @@ See `configs/<env>/fluid.yaml`: `eps_by_class`, `rollout_pct_by_class`,
   a size/allocation function must be added before the ABI is frozen.
 - Define whether `overhead_pct` is a target or a hard cap.
 - Specify how missing round telemetry affects `loss_prod`.
+
+## Import delta (wack_a_mole)
+
+What W3 imports versus implements, per
+[07 §3.2](07-wam-import-map.md#32-fluid-prototype-2):
+
+| Mechanism | Status | Source / note |
+|---|---|---|
+| Sender budget N = ceil(K/(1−ε)) | **import** | WAM phase O (`include/wam/fluid.h`): budget with near-integer snap, admit/report state, count feedback; O.1 bound sweep comes with it |
+| Coordinator loss-product gate | **import math, keep `fg_*` ABI** | same paper identity π = L_ℓ/N (§4.3); the sdf gate stays the design above |
+| RaptorQ arm (`fe_codec_nanorq`) | **import** | WAM `src/codec/codec.c` block handling over pinned nanorq (07 §7 pinning note) |
+| LT reference arm (`fe_codec_lt`) | **fresh code** | no WAM LT exists — the documented import-first exception (plan W3.3) |
+| Loss-ladder + soak e2e | **pattern** | WAM `test_fluid_ladder_e2e` / `test_fluid_soak_e2e` shapes over loopback origin knobs |
+
+The open questions above close as follows: `fe_sizeof`/`fd_sizeof` land
+in W3.1 (before any codec arm ships); `overhead_pct` is a **cap** feeding
+`overhead_abort_ratio` (decision in W3.5); missing round telemetry
+leaves `loss_prod` unchanged for that round (conservative, decided with
+the O.2 count-feedback import in W3.4).

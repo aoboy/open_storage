@@ -1,10 +1,14 @@
 # Prototype 1 — Whack-a-Mole Dispatch
 
-**Status:** C dispatch core implemented (compile, select, mark down/up);
-SHM publication and proxy integration are stubs. Python controller is
-implemented.
+**Status:** C dispatch core v1 implemented (compile, select, mark down/up)
+and unit-tested; SHM publication and proxy integration are stubs. The
+v1 core is **upgraded per ADR-0007** (shuffle methods + seeds, update
+embodiments) and completed around the origin seam in plan waves
+[W1–W2](08-implementation-plan.md#5-phase-w2--whack-a-mole-dispatch-prototype-1).
+Import provenance: [07 §3.1](07-wam-import-map.md#31-dispatch-core-whack-a-mole).
 **Related:** [Overview §6.1, §7.3](00-overview.md#6-prototype-sequence-roirisk-order),
-[ADR-0001](../adr/0001-c-abi-as-contract.md).
+[ADR-0001](../adr/0001-c-abi-as-contract.md),
+[ADR-0007](../adr/0007-wm-profile-updates-and-spray-seeds.md).
 
 ## Objective
 
@@ -117,8 +121,12 @@ Any error-rate regression, byte increase, or p99 regression stops the rollout.
 
 ## Configuration
 
-See `configs/<env>/wm.yaml`: `m`, `control_hz`, `alpha`, `beta`,
-`rollout_pct`, `kill_switch`.
+See `configs/<env>/wm.toml` (strict TOML per
+[ADR-0005](../adr/0005-config-format-toml.md)): `m`, `control_hz`,
+`alpha`, `beta`, `rollout_pct`, `kill_switch`, `method`, `sa`, `sb`
+([ADR-0007](../adr/0007-wm-profile-updates-and-spray-seeds.md)), and
+`[[origin]]` blocks per
+[ADR-0008](../adr/0008-origin-driver-seam.md).
 
 ## Open questions
 
@@ -129,3 +137,21 @@ See `configs/<env>/wm.yaml`: `m`, `control_hz`, `alpha`, `beta`,
   original profile if a mask somehow covers all paths.
 - Decide how the Python controller observes `down_mask` so it does not
   immediately undo a C-side hard-failure decision.
+
+## Import delta (wack_a_mole)
+
+What W2 lands on top of the v1 core, per
+[07 §3.1](07-wam-import-map.md#31-dispatch-core-whack-a-mole):
+
+| Mechanism | v1 (today) | W2 target | Source |
+|---|---|---|---|
+| Selection | plain bit-reversal table | + shuffle1/shuffle2 methods, seed pairs, wrap rotation | WAM `src/core/spray.c` |
+| Degradation | boolean `down_mask` | + graded embodiments 1–4 with residual r (`wm_profile_update`) | WAM `src/core/profile.c` |
+| Fast-path control | none | severity windows + θ_hi/θ_lo + t_min rate limit in C | WAM `src/ctrl/controller.c` |
+| Profile publication | stub | SHM double-buffer + seqlock flip (ADR-0002 layout) | WAM `profpub.h` |
+| Discrepancy | asserted informally | property gates ≤ ℓ / ≤ 2ℓ over contiguous windows, in CI | WAM `test_spray` harness |
+
+The open questions above close as follows: per-fill version pinning in
+W2.3 (publish), the last-path fallback stays as designed (v1 behavior
+kept), and the `down_mask` deference rule is decided in W2.4
+(one control interval of deference to C-side decisions).
