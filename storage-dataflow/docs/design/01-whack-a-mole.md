@@ -1,10 +1,10 @@
 # Prototype 1 — Whack-a-Mole Dispatch
 
-**Status:** C dispatch core v1 implemented (compile, select, mark down/up)
-and unit-tested; SHM publication and proxy integration are stubs. The
-v1 core is **upgraded per ADR-0007** (shuffle methods + seeds, update
-embodiments) and completed around the origin seam in plan waves
-[W1–W2](08-implementation-plan.md#5-phase-w2--whack-a-mole-dispatch-prototype-1).
+**Status:** **As-built (Wave 2)** — seeded dispatch (ADR-0007) with
+280/280 golden-parity comparisons; update embodiments 1-4 + the severity
+controller; SHM publication (ADR-0002) with the Python control loop
+over the live segment; the runnable proxy with A/B bucketing and the
+kill switch; e2e gates green under all four degradation profiles.
 Import provenance: [07 §3.1](07-wam-import-map.md#31-dispatch-core-whack-a-mole).
 **Related:** [Overview §6.1, §7.3](00-overview.md#6-prototype-sequence-roirisk-order),
 [ADR-0001](../adr/0001-c-abi-as-contract.md),

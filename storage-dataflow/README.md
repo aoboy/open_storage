@@ -47,8 +47,8 @@ their tooling is not installed.
 |---|---|
 | Public C ABI headers | Defined |
 | CMake build | Working (libraries, 10-test suite, benches) |
-| Whack-a-Mole dispatch core | Implemented: profile compile, selection, mark down/up |
-| Whack-a-Mole control plane | Reference implementation in Python |
+| Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
+| Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
