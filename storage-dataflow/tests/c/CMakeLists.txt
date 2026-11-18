@@ -37,6 +37,11 @@ add_executable(test_metrics unit/test_metrics.c)
 target_link_libraries(test_metrics PRIVATE sdf_common Threads::Threads)
 add_test(NAME metrics COMMAND test_metrics)
 
+# Plan W1.2 — loopback origin driver (ADR-0008 seam, harness knobs).
+add_executable(test_origin_loopback unit/test_origin_loopback.c)
+target_link_libraries(test_origin_loopback PRIVATE sdf_origin_loopback sdf_common)
+add_test(NAME origin_loopback COMMAND test_origin_loopback)
+
 # Plan W0.3 — strict TOML loader (ADR-0005). The source tree path is
 # baked in so the shipped examples resolve from any CWD.
 add_executable(test_config unit/test_config.c)
