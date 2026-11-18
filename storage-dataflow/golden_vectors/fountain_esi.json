@@ -1,1 +1,6 @@
-[]
+{
+  "comment": "Fountain codec goldens. 'roundtrip' (encode to decode, byte-exact) and 'lossy_repair' (decode under injected symbol loss) values land with W3.1/W3.2 per ADR-0004 (nanorq adapter, LT reference arm); schema present now (plan W0.4). test_parity validates entries as soon as they are non-empty.",
+  "provenance": {"source": "wack_a_mole", "commit": "a0f0422"},
+  "roundtrip": {"requires": "fountain.abi_v2", "entries": []},
+  "lossy_repair": {"requires": "fountain.abi_v2", "entries": []}
+}

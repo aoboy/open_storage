@@ -1,1 +1,6 @@
-[]
+{
+  "comment": "ARC release-schedule goldens. Values land with W4.2 (ADR-0006 core import): 'paper_12_3' will carry the ARC paper section 12.3 vectors as pinned by wack_a_mole tests/test_arc.c; 'trace_replay_60fps' the 60 fps peak/valley replay expectations (L.6: ARC-QG zero order violations, median interval error 0). Schema present now (plan W0.4); test_parity validates entries as soon as they are non-empty.",
+  "provenance": {"source": "wack_a_mole", "commit": "a0f0422"},
+  "paper_12_3": {"requires": "arc.abi_v2", "entries": []},
+  "trace_replay_60fps": {"requires": "arc.abi_v2", "entries": []}
+}

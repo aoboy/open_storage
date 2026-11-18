@@ -1,1 +1,38 @@
-[]
+{
+  "comment": "Golden vectors pinning the sdf WM dispatch to the wack_a_mole spray core.",
+  "extraction": "tools/gen_goldens.c runs the wam_theta / wam_spray_key / wam_spray_next / wam_lookup_path static-inline core at baseline a0f0422 (ADR-0009: filled from the source, never re-derived); the profile is the test_spray.c canonical. Validated groups against the v1 ABI: theta_ell10, plain_sequence, plain_windows. Seed groups require ADR-0007 methods (W2.1) and count as pending until then.",
+  "provenance": {"source": "wack_a_mole", "commit": "a0f0422",
+                 "profile": {"m": 1024, "n": 5,
+                              "b": [127, 400, 200, 173, 124]}},
+  "theta_ell10": [
+    [0, 0],
+    [1, 512],
+    [2, 256],
+    [3, 768],
+    [249, 636],
+    [512, 1],
+    [768, 3],
+    [1023, 1023]
+  ],
+  "plain_sequence": {"from": 0, "count": 64, "paths": [0, 1, 1, 3, 1, 2, 1, 3, 0, 2, 1, 3, 1, 2, 1, 4, 0, 2, 1, 3, 1, 2, 1, 4, 0, 2, 1, 3, 1, 3, 1, 4, 0, 2, 1, 3, 1, 2, 1, 4, 0, 2, 1, 3, 1, 2, 1, 4, 0, 2, 1, 3, 1, 2, 1, 4, 0, 2, 1, 3, 1, 3, 1, 4]},
+  "plain_windows": [
+    {"from": 0, "len": 64, "counts": [8, 25, 13, 11, 7]},
+    {"from": 0, "len": 1000, "counts": [125, 390, 196, 168, 121]},
+    {"from": 0, "len": 1024, "counts": [127, 400, 200, 173, 124]},
+    {"from": 0, "len": 10240, "counts": [1270, 4000, 2000, 1730, 1240]},
+    {"from": 1, "len": 64, "counts": [8, 25, 13, 11, 7]},
+    {"from": 1, "len": 1000, "counts": [125, 390, 196, 168, 121]},
+    {"from": 1, "len": 1024, "counts": [127, 400, 200, 173, 124]},
+    {"from": 1, "len": 10240, "counts": [1270, 4000, 2000, 1730, 1240]},
+    {"from": 500, "len": 64, "counts": [8, 25, 13, 11, 7]},
+    {"from": 500, "len": 1000, "counts": [124, 391, 196, 168, 121]},
+    {"from": 500, "len": 1024, "counts": [127, 400, 200, 173, 124]},
+    {"from": 500, "len": 10240, "counts": [1270, 4000, 2000, 1730, 1240]},
+    {"from": 1023, "len": 64, "counts": [8, 25, 13, 11, 7]},
+    {"from": 1023, "len": 1000, "counts": [125, 390, 196, 168, 121]},
+    {"from": 1023, "len": 1024, "counts": [127, 400, 200, 173, 124]},
+    {"from": 1023, "len": 10240, "counts": [1270, 4000, 2000, 1730, 1240]}
+  ],
+  "seed_shuffle1": {"requires": "wm.method.shuffle1", "from": 0, "count": 64, "paths": [2, 1, 3, 1, 2, 0, 4, 1, 2, 1, 3, 1, 2, 0, 4, 1, 3, 1, 3, 1, 2, 0, 4, 1, 2, 1, 3, 1, 2, 0, 4, 1, 2, 1, 3, 1, 2, 0, 4, 1, 2, 1, 3, 1, 2, 0, 4, 1, 3, 1, 3, 1, 2, 0, 4, 1, 2, 1, 3, 1, 2, 0, 4, 1]},
+  "seed_shuffle2": {"requires": "wm.method.shuffle2", "from": 0, "count": 64, "paths": [1, 3, 0, 2, 1, 2, 4, 1, 1, 3, 0, 1, 1, 2, 4, 1, 1, 3, 0, 2, 1, 2, 4, 1, 1, 3, 4, 1, 0, 2, 3, 1, 3, 1, 2, 0, 2, 1, 1, 4, 3, 1, 1, 4, 2, 0, 1, 3, 3, 1, 2, 0, 2, 1, 1, 4, 3, 1, 1, 4, 2, 0, 1, 3]}
+}

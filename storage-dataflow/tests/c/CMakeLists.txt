@@ -39,6 +39,12 @@ target_link_libraries(test_config PRIVATE sdf_common)
 target_compile_definitions(test_config PRIVATE "SDF_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 add_test(NAME config COMMAND test_config)
 
+# Plan W0.4 — golden-vector parity gate (ADR-0009).
+add_executable(test_parity test_parity.c)
+target_link_libraries(test_parity PRIVATE sdf_common sdf_wm)
+target_compile_definitions(test_parity PRIVATE "SDF_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+add_test(NAME parity COMMAND test_parity)
+
 # Future targets (enable once the corresponding C sources are implemented):
 #   test_config   — plan W0.3 (strict TOML loader)
 #   test_parity   — plan W0.4 (golden-vector harness)
