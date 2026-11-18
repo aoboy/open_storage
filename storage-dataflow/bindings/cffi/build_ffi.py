@@ -14,19 +14,31 @@ from cffi import FFI
 
 ROOT = Path(__file__).resolve().parents[2]
 INCLUDE_DIR = ROOT / "include"
-HEADER = INCLUDE_DIR / "sdf" / "wm.h"
+# cdef order follows the include graph: wm.h types reference
+# sdf_origin_stats_t (the ADR-0008 link rule), so origin.h comes first.
+HEADERS = [
+    INCLUDE_DIR / "sdf" / "origin.h",
+    INCLUDE_DIR / "sdf" / "wm.h",
+]
 OUT_DIR = ROOT / "build" / "cffi"
 
 
 def cdef_from_header(path: Path) -> str:
-    """Return a CFFI-compatible declaration block from a C header."""
+    """Return a CFFI-compatible declaration block from a C header.
+
+    CFFI's cdef understands plain-numeric object-like defines but not
+    guards, includes or expression macros; anything else in a
+    preprocessor line is dropped. Declaration comments are kept
+    (pycparser handles them).
+    """
     lines: list[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if stripped.startswith("#"):
-            # CFFI understands numeric object-like defines, not guards/includes.
-            if re.fullmatch(r"#define\s+\w+\s+\d+", stripped):
-                lines.append(line)
+            no_comment = re.sub(r"/\*.*?\*/", "", stripped).strip()
+            m = re.fullmatch(r"#define\s+(\w+)\s+(\d+)", no_comment)
+            if m:
+                lines.append(f"#define {m.group(1)} {m.group(2)}")
             continue
         if stripped == 'extern "C" {':
             continue
@@ -38,11 +50,13 @@ def cdef_from_header(path: Path) -> str:
 
 def main() -> int:
     ffi = FFI()
-    ffi.cdef(cdef_from_header(HEADER))
+    for header in HEADERS:
+        ffi.cdef(cdef_from_header(header))
     ffi.set_source(
         "_sdf_cffi",
-        '#include "sdf/wm.h"',
+        '#include "sdf/wm.h"\n#include "sdf/origin.h"',
         sources=[
+            str(ROOT / "src/c/origin/origin_common.c"),
             str(ROOT / "src/c/common/ring.c"),
             str(ROOT / "src/c/common/pool.c"),
             str(ROOT / "src/c/common/seqlock.c"),
