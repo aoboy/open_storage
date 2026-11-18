@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `cf361ab`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `d40f066`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -24,7 +24,15 @@ ADRs [0001–0009](../adr/).
                                 ring soak; seqlock contention with a
                                 writer warm-up gate — zero races, zero
                                 torn accepts); run_tests.sh always builds
-  W0.3–W0.5 foundations      : 0% — prompts below
+  W0.3 strict TOML loader     : done — wack_a_mole K.2 parser core
+                                imported; sdf key schema (types/ranges/
+                                enums/required) enforced at load; flat
+                                "table[i].key" contract (include:
+                                9404fff, src: 2a17946, configs: c0dd25f,
+                                tests: d40f066); 9 shipped examples load,
+                                32 rejection cases; 8/8 ctest, ASan+UBSan
+                                8/8, TSan 8/8; YAML placeholders deleted
+  W0.4–W0.5 foundations      : 0% — prompts below
   W1 origin driver seam      : 0%
   W2 WM dispatch (P1)        : ~20% — dispatch core v1 exists and is tested
                                 (wm_profile.c/wm_select.c/wm_shed.c + unit
