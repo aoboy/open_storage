@@ -52,6 +52,12 @@ add_executable(test_wm_shm unit/test_wm_shm.c)
 target_link_libraries(test_wm_shm PRIVATE sdf_wm sdf_common Threads::Threads)
 add_test(NAME wm_shm COMMAND test_wm_shm)
 
+# Plan W2.5 — cache-fill proxy over the origin seam.
+add_executable(test_wm_proxy integration/test_wm_proxy.c)
+target_link_libraries(test_wm_proxy PRIVATE sdf_wm sdf_origin_loopback
+                                           sdf_origin sdf_common)
+add_test(NAME wm_proxy COMMAND test_wm_proxy)
+
 # Plan W0.3 — strict TOML loader (ADR-0005). The source tree path is
 # baked in so the shipped examples resolve from any CWD.
 add_executable(test_config unit/test_config.c)
