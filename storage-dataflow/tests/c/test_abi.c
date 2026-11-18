@@ -5,6 +5,7 @@
 #include "sdf/common/ring.h"
 #include "sdf/common/seqlock.h"
 #include "sdf/common/shm.h"
+#include "sdf/origin.h"
 #include "sdf/sdf.h"
 
 /*
@@ -28,6 +29,25 @@ _Static_assert(SDF_SHM_OFF_PROFILE_A == 0x0040u, "SHM profile A offset");
 _Static_assert(SDF_SHM_OFF_PROFILE_B == 0x0800u, "SHM profile B offset");
 _Static_assert(SDF_SHM_OFF_TELEMETRY_HDR == 0x0FC0u, "SHM telemetry header offset");
 _Static_assert(SDF_SHM_OFF_TELEMETRY_RING == 0x1000u, "SHM telemetry ring offset");
+
+/* Origin driver seam (ADR-0008, plan W1.1). */
+_Static_assert(SDF_ORIGIN_MAX == WM_MAX_PATHS, "origin set matches WM paths");
+_Static_assert(SDF_ORIGIN_LOOPBACK == 0 && SDF_ORIGIN_HTTP == 1 &&
+                   SDF_ORIGIN_S3 == 2 && SDF_ORIGIN_PEER == 3,
+               "origin class enum is the TOML cls vocabulary");
+_Static_assert(sizeof(sdf_fetch_req_t) == 32, "fetch request layout");
+_Static_assert(offsetof(sdf_fetch_req_t, origin_id) == 0, "req.origin_id offset");
+_Static_assert(offsetof(sdf_fetch_req_t, flags) == 4, "req.flags offset");
+_Static_assert(offsetof(sdf_fetch_req_t, job_id) == 8, "req.job_id offset");
+_Static_assert(offsetof(sdf_fetch_req_t, obj_offset) == 16, "req.obj_offset offset");
+_Static_assert(offsetof(sdf_fetch_req_t, len) == 24, "req.len offset");
+_Static_assert(sizeof(sdf_origin_cfg_t) == 304, "origin cfg layout");
+_Static_assert(offsetof(sdf_origin_cfg_t, dst) == 8, "cfg.dst offset");
+_Static_assert(offsetof(sdf_origin_cfg_t, max_inflight) == 296, "cfg.max_inflight offset");
+_Static_assert(offsetof(sdf_origin_stats_t, in_flight) == 48, "stats.in_flight offset");
+_Static_assert(offsetof(sdf_origin_stats_t, hard_down) == 80, "stats.hard_down offset");
+_Static_assert(offsetof(sdf_origin_t, impl) == 8, "driver impl offset");
+_Static_assert(sizeof(sdf_origin_ops_t) == 5 * sizeof(void *), "vtable is 5 ops");
 
 int main(void) {
     return 0;
