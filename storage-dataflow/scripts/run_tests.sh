@@ -5,9 +5,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if [[ ! -d build ]]; then
-    ./scripts/build.sh
-fi
+# Always build (incremental no-op when fresh) so the gate can never run
+# stale binaries against edited sources.
+./scripts/build.sh
 
 ctest --test-dir build --output-on-failure
 

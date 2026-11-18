@@ -1,5 +1,8 @@
 # C tests
 
+find_package(Threads REQUIRED)
+add_compile_definitions(_POSIX_C_SOURCE=200809L)
+
 add_executable(test_abi test_abi.c)
 target_link_libraries(test_abi PRIVATE sdf_common)
 add_test(NAME abi_smoke COMMAND test_abi)
@@ -12,7 +15,28 @@ add_executable(test_wm_profile unit/test_wm_profile.c)
 target_link_libraries(test_wm_profile PRIVATE sdf_wm)
 add_test(NAME wm_profile COMMAND test_wm_profile)
 
+# Plan W0.2 — common primitives (import map 3.4).
+add_executable(test_ring unit/test_ring.c)
+target_link_libraries(test_ring PRIVATE sdf_common Threads::Threads)
+add_test(NAME ring COMMAND test_ring)
+
+add_executable(test_seqlock unit/test_seqlock.c)
+target_link_libraries(test_seqlock PRIVATE sdf_common Threads::Threads)
+add_test(NAME seqlock COMMAND test_seqlock)
+
+add_executable(test_pool unit/test_pool.c)
+target_link_libraries(test_pool PRIVATE sdf_common)
+add_test(NAME pool COMMAND test_pool)
+
+add_executable(test_shm unit/test_shm.c)
+target_link_libraries(test_shm PRIVATE sdf_common)
+add_test(NAME shm COMMAND test_shm)
+
 # Future targets (enable once the corresponding C sources are implemented):
+#   test_config   — plan W0.3 (strict TOML loader)
+#   test_parity   — plan W0.4 (golden-vector harness)
+#   test_metrics  — plan W0.5 (metric series pinning)
+#   test_fluid_gate / test_fe_codec / test_arc_* — plan W3/W4
 #
 # add_executable(test_fluid_gate unit/test_fluid_gate.c)
 # target_link_libraries(test_fluid_gate PRIVATE sdf_fluid)
