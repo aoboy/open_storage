@@ -29,11 +29,23 @@
 extern "C" {
 #endif
 
+/*
+ * Codec arms behind one ABI (ADR-0004): nanorq is the RaptorQ
+ * (RFC 6330) arm vendored per import map 7; LT is the reference
+ * arm written in-repo (plan W3.3). Both satisfy the same ESI
+ * contract; the FLUID A/B selects the arm per job class.
+ */
+typedef enum {
+    SDF_FOUNTAIN_LT = 0,     /* in-repo systematic LT + peeling */
+    SDF_FOUNTAIN_NANORQ = 1, /* vendored RaptorQ (RFC 6330) */
+} sdf_fountain_codec_t;
+
 /* Encoder configuration (one block). */
 typedef struct {
     size_t block_len;   /* == k * sym_len exactly (caller pads) */
     uint32_t k;         /* source symbols per block (>= 1) */
     uint32_t overhead_pct; /* repair symbols exposed, percent of K */
+    uint32_t codec;     /* sdf_fountain_codec_t (ADR-0004 arm) */
 } fe_cfg_t;
 
 /* Decoder configuration (one block). */
@@ -78,12 +90,28 @@ int fd_push(fountain_dec_t *d, uint32_t esi, const uint8_t *sym, size_t len);
 /* Decode sufficiency: can fd_decode reconstruct the block now? */
 bool fd_ready(const fountain_dec_t *d);
 
+/*
+ * Decode-side arm selection: fd_init_in defaults to the LT arm;
+ * the coordinator — which knows the job class's codec — pins the
+ * arm explicitly (must match what the sender used). Return 0 or
+ * -EINVAL.
+ */
+int fd_init_codec(fountain_dec_t *d, const fd_cfg_t *cfg, uint32_t codec);
+
 /* Number of distinct symbols held (telemetry: fluid_decode_rank). */
 uint32_t fd_rank(const fountain_dec_t *d);
 
 /* Reconstruct the block into out (block_len bytes). -EINVAL when
  * not fd_ready — the coordinator falls back to ARQ (design 02). */
 int fd_decode(fountain_dec_t *d, uint8_t *out, size_t block_len);
+
+/*
+ * Lifecycle (v2): release codec-owned resources; the storage itself
+ * stays caller-owned. Heap-backed codecs (nanorq) require this —
+ * fe_init_in/fd_init_in may allocate internally. NULL-safe.
+ */
+void fe_destroy(fountain_enc_t *e);
+void fd_destroy(fountain_dec_t *d);
 
 #ifdef __cplusplus
 }

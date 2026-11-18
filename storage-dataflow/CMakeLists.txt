@@ -32,16 +32,21 @@ add_library(sdf_wm STATIC
 target_link_libraries(sdf_wm PUBLIC sdf_common)
 target_include_directories(sdf_wm PUBLIC include)
 
-# --- Fountain codec ----------------------------------------------------------
+# --- Fountain codec (plan W3; ADR-0004 arms) --------------------------------
+add_custom_target(nanorq_build
+    COMMAND make -C ${CMAKE_SOURCE_DIR}/third_party/nanorq libnanorq.a)
 add_library(sdf_fountain STATIC
-    src/c/fountain/fe_prng.c
-    src/c/fountain/fe_codec_lt.c
-    src/c/fountain/fe_codec_nanorq.c
     src/c/fountain/fe_enc.c
     src/c/fountain/fe_dec.c
+    src/c/fountain/fe_codec_nanorq.c
+    src/c/fountain/fe_codec_lt.c
+    src/c/fountain/fe_prng.c
 )
-target_link_libraries(sdf_fountain PUBLIC sdf_common)
-target_include_directories(sdf_fountain PUBLIC include)
+add_dependencies(sdf_fountain nanorq_build)
+target_link_libraries(sdf_fountain PUBLIC sdf_common
+    ${CMAKE_SOURCE_DIR}/third_party/nanorq/libnanorq.a m)
+target_include_directories(sdf_fountain PUBLIC include
+    PRIVATE src/c/fountain ${CMAKE_SOURCE_DIR}/third_party/nanorq/include)
 
 # --- FLUID repair gate -------------------------------------------------------
 add_library(sdf_fluid STATIC
