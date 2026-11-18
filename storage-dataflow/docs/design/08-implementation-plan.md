@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `b613f69`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `33806b3`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -105,8 +105,59 @@ ADRs [0001–0009](../adr/).
   WAVE 2 COMPLETE — milestone M2 reached: the P1 prototype is whole —
   seeded dispatch with golden-proven parity, graded shedding, the
   C/Python control split over SHM, the runnable proxy, and e2e gates
-  green under every degradation profile. Wave 3 (FLUID repair, P2)
-  unblocked.
+  green under every degradation profile.
+
+  W3.1 fountain ABI v2        : done — size helpers + in-place init +
+                                explicit ESI semantics + fd_rank;
+                                the toy codec proves the surface and
+                                its goldens (314 comparisons at the
+                                time); SDF_VERSION 0.2 (ec3c8ad)
+  W3.2 nanorq vendored + arm  : done — vendored from the wack_a_mole-
+                                validated tree (pin corrected per the
+                                import map); block-level adapter over
+                                the public ABI; lifecycle + arm
+                                selector added to the ABI when the
+                                adaptation exposed them; live finds:
+                                complete-block IGN semantics and the
+                                max_esi cap; 335 comparisons zero
+                                pending (26b133f, 39e8280)
+  W3.3 LT reference arm        : done — systematic LT, robust-soliton
+                                degrees with the tiny-K fallback,
+                                deterministic per-ESI neighbor sets,
+                                peeling decoder; 356 comparisons
+                                zero pending; the probe lesson:
+                                unsequenced printf args faked a decode
+                                mismatch (b262e8c, bc12e69)
+  W3.4 FLUID both halves       : done — budget N with the snap +
+                                efficiency/cost bounds + count feedback
+                                (monotone-max); the gate as the
+                                telescoped quotient of the section-4.3
+                                chain (the multiplicative fold wedges at
+                                zero — the identity test caught it);
+                                slack certification + stale-reject
+                                (cad9aa7, 49653a1)
+  W3.5 repair coordinator      : done — the design-02 loop over the
+                                origin seam with per-ESI completion
+                                events through an SPSC ring, stream =
+                                exactly the budget N, a round = the
+                                whole budget in flight, mandatory ARQ
+                                fallback through the origins (6e9d83c,
+                                0aaa36e)
+  W3.6 three-arm A/B + ladder : done — fluid-repair shell + e2e over
+                                3 arms x loss ladder {0..50%} + the
+                                eps sweep, byte-exact via exit-code
+                                gates, Pareto recorded; overhead grows
+                                past the slack, control retry cost
+                                visible at 50% loss (33806b3)
+
+  WAVE 3 COMPLETE — milestone M3 reached: the P2 repair prototype is
+  whole — both codec arms golden-pinned behind one ABI, the FLUID
+  budget + gate on the paper's identity, the coordinator with the
+  never-ship-incomplete guarantee, and the three-arm ladder recorded.
+  Wave 4 (ARC pacing sidecar, P3) unblocked: W4.1 arc.h v2 per
+  ADR-0006, W4.2 the ARC-QG core import with the paper section 12.3
+  goldens, W4.3 the sidecar over SPSC handoff, W4.4 the Python
+  deploy loop, W4.5 the trace replay + kill-switch verification.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger

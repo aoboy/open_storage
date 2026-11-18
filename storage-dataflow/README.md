@@ -53,7 +53,9 @@ their tooling is not installed.
 | Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
-| Fountain / FLUID / ARC runtime | Stubs — import-led per [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md); execution backlog in [`08`](docs/design/08-implementation-plan.md) |
+| Fountain codecs (P2) | **As-built (Wave 3)**: nanorq (RaptorQ) + LT arms behind one ABI, 356 golden comparisons |
+| FLUID repair (P2) | **As-built (Wave 3)**: budget + gate on the section-4.3 identity, coordinator with mandatory ARQ fallback, three-arm loss ladder green |
+| ARC pacing sidecar (P3) | Stubs — import-led per ADR-0006; backlog in [`08`](docs/design/08-implementation-plan.md) |
 | Rust modules | Deferred to phase 4 |
 
 ## Documentation
