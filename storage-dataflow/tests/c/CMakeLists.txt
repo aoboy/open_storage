@@ -32,6 +32,13 @@ add_executable(test_shm unit/test_shm.c)
 target_link_libraries(test_shm PRIVATE sdf_common)
 add_test(NAME shm COMMAND test_shm)
 
+# Plan W0.3 — strict TOML loader (ADR-0005). The source tree path is
+# baked in so the shipped examples resolve from any CWD.
+add_executable(test_config unit/test_config.c)
+target_link_libraries(test_config PRIVATE sdf_common)
+target_compile_definitions(test_config PRIVATE "SDF_SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
+add_test(NAME config COMMAND test_config)
+
 # Future targets (enable once the corresponding C sources are implemented):
 #   test_config   — plan W0.3 (strict TOML loader)
 #   test_parity   — plan W0.4 (golden-vector harness)
