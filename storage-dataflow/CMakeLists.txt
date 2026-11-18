@@ -48,10 +48,9 @@ target_link_libraries(sdf_fountain PUBLIC sdf_common
 target_include_directories(sdf_fountain PUBLIC include
     PRIVATE src/c/fountain ${CMAKE_SOURCE_DIR}/third_party/nanorq/include)
 
-# --- FLUID repair gate -------------------------------------------------------
+# --- FLUID repair gate (plan W3.4) ------------------------------------------
 add_library(sdf_fluid STATIC
     src/c/fluid/fluid_gate.c
-    src/c/fluid/fluid_round.c
 )
 target_link_libraries(sdf_fluid PUBLIC sdf_fountain sdf_common)
 target_include_directories(sdf_fluid PUBLIC include)
