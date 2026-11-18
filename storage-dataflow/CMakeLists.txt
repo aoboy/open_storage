@@ -59,6 +59,11 @@ add_library(sdf_arc STATIC
 target_link_libraries(sdf_arc PUBLIC sdf_common)
 target_include_directories(sdf_arc PUBLIC include)
 
+# --- Origin drivers (plan W1, ADR-0008) -----------------------------------
+add_library(sdf_origin_loopback STATIC src/c/origin/loopback/loopback_origin.c)
+target_link_libraries(sdf_origin_loopback PUBLIC sdf_common)
+target_include_directories(sdf_origin_loopback PUBLIC include)
+
 # --- Benches (plan W0.5: recorded, never ctest-gated) --------------------
 add_executable(bench_wm bench/bench_wm.c)
 target_link_libraries(bench_wm PRIVATE sdf_wm sdf_common)
