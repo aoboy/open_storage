@@ -33,11 +33,11 @@
 static int g_validated; /* individual golden comparisons that passed */
 static int g_pending;   /* groups awaiting a future prompt */
 
-/* Features implemented by the current tree. W2.1 adds
- * wm.method.shuffle1/shuffle2; W3.x adds fountain.abi_v2; W4.x adds
- * arc.abi_v2. A group's "requires" value must appear here (or be
- * absent) to be validated today. */
-static const char *IMPLEMENTED[] = {"core", NULL};
+/* Features implemented by the current tree. W2.1 added the ADR-0007
+ * seeded spray methods, so the seed golden groups validate; W3.x will
+ * add fountain.abi_v2, W4.x arc.abi_v2. */
+static const char *IMPLEMENTED[] = {
+    "core", "wm.method.shuffle1", "wm.method.shuffle2", NULL};
 
 static int feature_implemented(const char *feature) {
     if (feature == NULL)
@@ -110,7 +110,9 @@ static void validate_theta(const jval_t *root, wm_compiled_t *c) {
 }
 
 /* A pick-sequence group: run wm_select over [from, from+count) and
- * compare paths one by one against the golden. */
+ * compare paths one by one against the golden. Groups tagged with a
+ * wm.method.* feature carry sa/sb and select through the seeded
+ * methods (ADR-0007); untagged groups use the PLAIN default. */
 static void validate_sequence(const char *name, const jval_t *root,
                               wm_compiled_t *c) {
     const jval_t *seq = golden_json_get(root, name);
@@ -123,6 +125,32 @@ static void validate_sequence(const char *name, const jval_t *root,
             return;
         }
     }
+
+    /* recompile with the group's method/seeds when tagged */
+    if (req != NULL && req->type == J_STR && req->str != NULL &&
+        strncmp(req->str, "wm.method.shuffle", 17) == 0) {
+        wm_profile_t p;
+        memset(&p, 0, sizeof(p));
+        p.version = 1;
+        p.m = 1024;
+        p.n = 5;
+        p.b[0] = 127;
+        p.b[1] = 400;
+        p.b[2] = 200;
+        p.b[3] = 173;
+        p.b[4] = 124;
+        wm_compile_cfg_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+        cfg.method = req->str[17] == '1' ? WM_METHOD_SHUFFLE1
+                                         : WM_METHOD_SHUFFLE2;
+        cfg.sa = (uint32_t)golden_json_int(golden_json_get(seq, "sa"), 0);
+        cfg.sb = (uint32_t)golden_json_int(golden_json_get(seq, "sb"), 1);
+        if (wm_profile_compile_cfg(&p, c, &cfg) != 0) {
+            fprintf(stderr, "FAIL: %s: seeded compile rejected\n", name);
+            exit(1);
+        }
+    }
+
     uint32_t from = (uint32_t)golden_json_int(golden_json_get(seq, "from"), 0);
     uint32_t count = (uint32_t)golden_json_int(golden_json_get(seq, "count"), 0);
     const jval_t *paths = golden_json_get(seq, "paths");

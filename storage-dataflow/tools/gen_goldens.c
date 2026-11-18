@@ -59,14 +59,16 @@ static void mk_spray(wam_spray_t *s, uint32_t j, uint8_t method) {
     s->method = method;
 }
 
-static void emit_picks(const char *key, const char *requires, uint32_t from,
-                       uint32_t count, uint8_t method, const wam_profile_t *p,
-                       int comma) {
+static void emit_picks(const char *key, const char *requires, uint32_t sa,
+                       uint32_t sb, uint32_t from, uint32_t count,
+                       uint8_t method, const wam_profile_t *p, int comma) {
     wam_spray_t s;
     mk_spray(&s, from, method);
     printf("  \"%s\": {", key);
     if (requires != NULL)
         printf("\"requires\": \"%s\", ", requires);
+    if (sa != 0 || sb != 0)
+        printf("\"sa\": %u, \"sb\": %u, ", sa, sb);
     printf("\"from\": %u, \"count\": %u, \"paths\": [", from, count);
     for (uint32_t i = 0; i < count; i++)
         printf("%s%u", i ? ", " : "", wam_spray_next(&s, p));
@@ -115,7 +117,7 @@ int main(void) {
     }
     printf("  ],\n");
 
-    emit_picks("plain_sequence", NULL, 0, 64, WAM_SPRAY_PLAIN, &p, 1);
+    emit_picks("plain_sequence", NULL, 0, 0, 0, 64, WAM_SPRAY_PLAIN, &p, 1);
 
     printf("  \"plain_windows\": [\n");
     {
@@ -129,10 +131,10 @@ int main(void) {
     printf("  ],\n");
 
     /* seed groups carry a requires tag: ADR-0007 methods land with W2.1 */
-    emit_picks("seed_shuffle1", "wm.method.shuffle1", 0, 64, WAM_SPRAY_SHUFFLE1,
-               &p, 1);
-    emit_picks("seed_shuffle2", "wm.method.shuffle2", 0, 64, WAM_SPRAY_SHUFFLE2,
-               &p, 0);
+    emit_picks("seed_shuffle1", "wm.method.shuffle1", 333, 735, 0, 64,
+               WAM_SPRAY_SHUFFLE1, &p, 1);
+    emit_picks("seed_shuffle2", "wm.method.shuffle2", 333, 735, 0, 64,
+               WAM_SPRAY_SHUFFLE2, &p, 0);
 
     printf("}\n");
     return 0;
