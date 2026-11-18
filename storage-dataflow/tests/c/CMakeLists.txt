@@ -90,6 +90,11 @@ add_test(NAME fe_codec COMMAND test_fe_codec)
 add_executable(test_fluid_gate unit/test_fluid_gate.c)
 target_link_libraries(test_fluid_gate PRIVATE sdf_fluid)
 add_test(NAME fluid_gate COMMAND test_fluid_gate)
+
+# Plan W3.5 — repair coordinator (design 02 loop + ARQ fallback).
+add_executable(test_fluid_repair integration/test_fluid_repair.c)
+target_link_libraries(test_fluid_repair PRIVATE sdf_fluid)
+add_test(NAME fluid_repair COMMAND test_fluid_repair)
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)
