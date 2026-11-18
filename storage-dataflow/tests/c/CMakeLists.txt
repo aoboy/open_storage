@@ -42,6 +42,11 @@ add_executable(test_origin_loopback unit/test_origin_loopback.c)
 target_link_libraries(test_origin_loopback PRIVATE sdf_origin_loopback sdf_common)
 add_test(NAME origin_loopback COMMAND test_origin_loopback)
 
+# Plan W1.3 — HTTP origin driver (in-process server, no env deps).
+add_executable(test_origin_http unit/test_origin_http.c)
+target_link_libraries(test_origin_http PRIVATE sdf_origin_http sdf_common)
+add_test(NAME origin_http COMMAND test_origin_http)
+
 # Plan W0.3 — strict TOML loader (ADR-0005). The source tree path is
 # baked in so the shipped examples resolve from any CWD.
 add_executable(test_config unit/test_config.c)
