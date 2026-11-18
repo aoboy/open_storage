@@ -1,0 +1,40 @@
+# Build outputs (build/, build-*/ — cmake dirs incl. sanitizer builds)
+build/
+build-*/
+cmake-build-*/
+
+# Doc render output (scripts/build_doc.sh writes out/)
+out/
+
+# Objects / static libs (rebuild nanorq with make -C third_party/nanorq)
+*.o
+*.a
+*.lo
+*.la
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# Editor / OS
+*.swp
+*~
+.DS_Store
+.idea/
+.vscode/
+compile_commands.json
+.clangd/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+
+# Logs / temp
+*.log
+*.tmp
+.cache/
