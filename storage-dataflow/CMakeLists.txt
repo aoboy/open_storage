@@ -27,6 +27,7 @@ add_library(sdf_wm STATIC
     src/c/whack_a_mole/wm_select.c
     src/c/whack_a_mole/wm_shed.c
     src/c/whack_a_mole/wm_shm.c
+    src/c/whack_a_mole/wm_proxy.c
 )
 target_link_libraries(sdf_wm PUBLIC sdf_common)
 target_include_directories(sdf_wm PUBLIC include)
@@ -58,6 +59,10 @@ add_library(sdf_arc STATIC
 )
 target_link_libraries(sdf_arc PUBLIC sdf_common)
 target_include_directories(sdf_arc PUBLIC include)
+
+# --- Apps (plan W2.5: the P1 proxy shell) ---------------------------------
+add_executable(wm-proxy src/c/whack_a_mole/wm_proxy_main.c)
+target_link_libraries(wm-proxy PRIVATE sdf_wm sdf_origin_loopback sdf_common)
 
 # --- Origin drivers (plan W1, ADR-0008) -----------------------------------
 add_library(sdf_origin STATIC src/c/origin/origin_common.c)
