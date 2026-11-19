@@ -130,3 +130,19 @@ void arc_set_rtt(arc_pacer_t *p, uint64_t rtt_sm_ns);
 #endif
 
 #endif /* SDF_ARC_H */
+
+/*
+ * Sidecar (plan prompt W4.3, design 03): entries in over an SPSC ring,
+ * released through the apply callback on the receiver clock. Modes:
+ * shadow (0) computes the schedule + metrics, applies immediately;
+ * live (1) ARC owns the timing; killed (2) the IMMEDIATE oracle —
+ * the design-03 kill switch. One pacer per process (the sidecar is a
+ * singleton, like the wam apps' ARC stage).
+ */
+int arc_sidecar_start(const arc_cfg_t *cfg, int mode);
+int arc_sidecar_submit(const void *entry, size_t len, uint64_t producer_ts);
+int arc_sidecar_pump_once(void);
+void arc_sidecar_stop(void);
+arc_stats_t arc_sidecar_stats(void);
+uint64_t arc_sidecar_applied(void);
+int arc_sidecar_mode(void);
