@@ -55,6 +55,29 @@ typedef struct {
     /* optional degradation timeline (the e2e profiles) */
     sdf_wm_proxy_step_t steps[SDF_WM_PROXY_MAX_STEPS];
     uint32_t n_steps;
+
+    /*
+     * W6.1: the live control-plane chain. When shm_name is set, the
+     * proxy ATTACHES the ADR-0002 segment if it exists, else CREATES
+     * it (a supervisor may pre-publish a profile first), pushes
+     * per-origin stats into the telemetry ring on every control tick,
+     * and acquires the published profile each tick — a version advance
+     * recompiles the working profile (the external loop is the
+     * authority; the in-process controller is disabled on this path —
+     * exactly the design-01 production topology). NULL (default) keeps
+     * the self-contained in-process controller of W2.5.
+     */
+    const char *shm_name;
+
+    /*
+     * W6.1 harness knob: dispatch-side pacing. When nonzero the
+     * dispatch loop sleeps this long between units, so a run's wall
+     * time is units x pace regardless of transport batching (the
+     * loopback deadline scheduler fires due units in parallel — origin
+     * throttling does NOT stretch a run; found live wiring the chain
+     * harness). Zero (default) = full speed.
+     */
+    uint64_t dispatch_pace_ns;
 } sdf_wm_proxy_cfg_t;
 
 typedef struct {
@@ -70,6 +93,11 @@ typedef struct {
     /* series per design 01 §Metrics (W0.5 primitives) */
     sdf_counter_t shed_events[WM_MAX_PATHS];
     sdf_counter_t enolink[WM_MAX_PATHS];
+    /* W6.1: the live chain's evidence */
+    uint32_t shm_version_acquired; /* the last profile version seen */
+    uint64_t shm_acquires;          /* acquire attempts (one per tick) */
+    uint64_t shm_telemetry_pushed;  /* telemetry slots landed in the ring */
+    uint64_t control_ticks;         /* the heartbeat (one per interval) */
 } sdf_wm_proxy_stats_t;
 
 /*

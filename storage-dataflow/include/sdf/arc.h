@@ -146,3 +146,8 @@ void arc_sidecar_stop(void);
 arc_stats_t arc_sidecar_stats(void);
 uint64_t arc_sidecar_applied(void);
 int arc_sidecar_mode(void);
+
+/* W6.1: live scrape over the sidecar's own dump (start() first; the
+ * endpoint stops with the sidecar or serve_stop()). */
+int arc_sidecar_serve(const char *addr);
+void arc_sidecar_serve_stop(void);
