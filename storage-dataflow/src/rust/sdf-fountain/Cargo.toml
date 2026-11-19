@@ -1,0 +1,11 @@
+[package]
+name = "sdf-fountain"
+version = "0.2.0"
+edition = "2021"
+build = "build.rs"
+description = "Rust seam skeleton for the sdf fountain ABI (no functional module yet)"
+publish = false
+
+[build-dependencies]
+# pinned per the plan's vendoring discipline
+cbindgen = "=0.27.0"

@@ -37,8 +37,12 @@ tsan:
 # Local CI gate (plan W0.5, mirroring the wack_a_mole `make ci` shape):
 # format/tidy where installed (lint.sh skips cleanly), build + full
 # suite, then both sanitizer legs.
-ci: lint test asan tsan install
-	@echo "ci gate green: lint(+skips) test asan tsan install"
+ci: lint test asan tsan install rust-seam
+	@echo "ci gate green: lint(+skips) test asan tsan install rust-seam(+skips)"
+
+# Plan W5.3 — the Rust seam leg (advisory without cargo; see the script).
+rust-seam:
+	./scripts/test_rust_seam.sh
 
 # Plan W5.2 — the install leg (DESTDIR-staged pkg-config + find_package).
 install:
