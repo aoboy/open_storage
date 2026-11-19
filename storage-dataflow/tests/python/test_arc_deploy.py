@@ -1,1 +1,125 @@
-"""Placeholder Python test."""
+"""W4.4 — the ARC deploy controller against a stubbed sidecar.
+
+Arming, the shadow promotion gate (24 h + SLO clean), the live-mode SLO
+watch with the kill recommendation and the auto-kill switch, the
+operator kill switch, and the un-armed guard.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from sdf.control.arc_deploy import (
+    ArcDeployConfig,
+    ArcDeployLoop,
+    ArcMode,
+)
+
+
+class StubSidecar:
+    """Records mode flips and serves scripted stats."""
+
+    def __init__(self) -> None:
+        self.mode: ArcMode | None = None
+        self.flips: list[str] = []
+        self._stats: dict = {}
+
+    def set_mode(self, mode: ArcMode) -> None:
+        self.mode = mode
+        self.flips.append(mode.value)
+
+    def stats(self) -> dict:
+        return dict(self._stats)
+
+    def serve(self, **kw) -> None:
+        self._stats.update(kw)
+
+
+def test_start_arms_in_shadow():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc)
+    loop.start()
+    assert sc.mode == ArcMode.SHADOW
+    rec = loop.step()
+    assert rec["mode"] == "shadow"
+    assert rec["action"] == "hold-shadow"
+
+
+def test_shadow_promotion_gate():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc, ArcDeployConfig(shadow_min_seconds=10))
+    loop.start()
+    sc.serve(budget_alerts=0)
+
+    # under the 24 h (here 10 s) window: hold
+    rec = loop.step()
+    assert rec["action"] == "hold-shadow"
+
+    # force the elapsed window (the state is the controller's own clock;
+    # tests drive it directly for determinism)
+    loop.state.shadow_started_ns -= 11 * 1_000_000_000
+    rec = loop.step()
+    assert rec["action"] == "promote"
+    assert sc.mode == ArcMode.LIVE
+    assert "promoted to live" in loop.state.recommendations[-1]
+
+
+def test_shadow_slo_breach_blocks_promotion():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc, ArcDeployConfig(shadow_min_seconds=10))
+    loop.start()
+    sc.serve(budget_alerts=99)
+    loop.state.shadow_started_ns -= 11 * 1_000_000_000
+    rec = loop.step()
+    assert rec["action"] == "hold-shadow"  # SLO dirty: no promotion
+
+
+def test_live_slo_watch_recommends_kill():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc, ArcDeployConfig(auto_kill=False))
+    loop.start()
+    # forced promotion (the promotion gate's clock is covered by its own
+    # test): both the controller state and the transport move to LIVE
+    loop.state.mode = ArcMode.LIVE
+    sc.set_mode(ArcMode.LIVE)
+    sc.serve(budget_alerts=0)
+
+    rec = loop.step()
+    assert rec["action"] == "hold-live"
+
+    sc.serve(budget_alerts=2)
+    rec = loop.step()
+    assert rec["action"] == "breach-recommend-kill"
+    assert "budget breach" in loop.state.recommendations[-1]
+    assert sc.mode == ArcMode.LIVE  # recommended, not applied
+
+
+def test_live_auto_kill():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc, ArcDeployConfig(auto_kill=True))
+    loop.start()
+    loop.state.mode = ArcMode.LIVE
+    sc.set_mode(ArcMode.LIVE)
+    sc.serve(budget_alerts=1)
+    rec = loop.step()
+    assert rec["action"] == "auto-killed"
+    assert sc.mode == ArcMode.KILLED
+
+
+def test_operator_kill_switch():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc)
+    loop.start()
+    loop.state.mode = ArcMode.LIVE
+    sc.set_mode(ArcMode.LIVE)
+    assert loop.kill() == ArcMode.KILLED
+    assert sc.flips[-1] == "killed"
+    rec = loop.step()
+    assert rec["action"] == "killed-idle"
+
+
+def test_unarmed_step_refuses():
+    sc = StubSidecar()
+    loop = ArcDeployLoop(sc)
+    with pytest.raises(RuntimeError):
+        loop.step()
