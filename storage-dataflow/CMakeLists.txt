@@ -1,5 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
-project(storage_dataflow VERSION 0.1.0 LANGUAGES C)
+
+# Version single source of truth: include/sdf/version.h (W5.2).
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/sdf/version.h" _ver_hdr)
+string(REGEX MATCH "#define SDF_VERSION_MAJOR ([0-9]+)" _ ${_ver_hdr})
+set(SDF_VER_MAJOR ${CMAKE_MATCH_1})
+string(REGEX MATCH "#define SDF_VERSION_MINOR ([0-9]+)" _ ${_ver_hdr})
+set(SDF_VER_MINOR ${CMAKE_MATCH_1})
+string(REGEX MATCH "#define SDF_VERSION_PATCH ([0-9]+)" _ ${_ver_hdr})
+set(SDF_VER_PATCH ${CMAKE_MATCH_1})
+project(storage_dataflow
+    VERSION "${SDF_VER_MAJOR}.${SDF_VER_MINOR}.${SDF_VER_PATCH}"
+    LANGUAGES C)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -104,9 +115,33 @@ if(BUILD_TESTING)
     add_subdirectory(tests/c)
 endif()
 
-# --- Install -----------------------------------------------------------------
+# --- Install (plan W5.2: the wam R2/M.2 pattern) ---------------------------
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(TARGETS sdf_common sdf_wm sdf_fountain sdf_fluid sdf_arc
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
+install(TARGETS sdf_common sdf_origin sdf_origin_loopback sdf_origin_http
+        sdf_wm sdf_fountain sdf_fluid sdf_arc
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# pkg-config: one .pc per link granularity (core = the whole stack today;
+# consumers pick what they call — the deps chain is flat, no --static
+# surprises because everything vendored builds from source in-tree)
+foreach(pc sdf_common sdf_wm sdf_fountain sdf_fluid sdf_arc
+         sdf_origin_loopback sdf_origin_http)
+    string(REPLACE sdf_ "" _short "${pc}")
+    configure_file(packaging/${pc}.pc.in ${pc}.pc @ONLY)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${pc}.pc
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+endforeach()
+
+# find_package(sdf) config
+write_basic_package_version_file(
+    sdf-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES packaging/sdf-config.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdf
+    RENAME sdf-config.cmake)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/sdf-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdf)

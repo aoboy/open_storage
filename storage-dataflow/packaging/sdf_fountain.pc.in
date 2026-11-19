@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: sdf_fountain
+Description: Storage Dataflow Stack — Fountain codecs behind one ABI (LT + vendored RaptorQ)
+Version: @PROJECT_VERSION@
+Requires: sdf_common
+Libs: -L${libdir} -lsdf_fountain -lm
+Cflags: -I${includedir}

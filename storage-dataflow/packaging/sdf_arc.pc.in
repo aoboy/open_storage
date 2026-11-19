@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: sdf_arc
+Description: Storage Dataflow Stack — Adaptive Release Control (ARC-QG) pacing core + sidecar
+Version: @PROJECT_VERSION@
+Requires: sdf_common
+Libs: -L${libdir} -lsdf_arc -lm
+Cflags: -I${includedir}

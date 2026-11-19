@@ -1,9 +1,7 @@
 #ifndef SDF_H
 #define SDF_H
 
-#define SDF_VERSION_MAJOR 0
-#define SDF_VERSION_MINOR 2
-#define SDF_VERSION_PATCH 0
+#include "sdf/version.h"
 
 #include "sdf/arc.h"
 #include "sdf/fluid.h"

@@ -37,8 +37,12 @@ tsan:
 # Local CI gate (plan W0.5, mirroring the wack_a_mole `make ci` shape):
 # format/tidy where installed (lint.sh skips cleanly), build + full
 # suite, then both sanitizer legs.
-ci: lint test asan tsan
-	@echo "ci gate green: lint(+skips) test asan tsan"
+ci: lint test asan tsan install
+	@echo "ci gate green: lint(+skips) test asan tsan install"
+
+# Plan W5.2 — the install leg (DESTDIR-staged pkg-config + find_package).
+install:
+	./scripts/test_install.sh
 
 clean:
 	rm -rf build build-asan build-tsan out

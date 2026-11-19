@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: sdf_fluid
+Description: Storage Dataflow Stack — FLUID slack budget + loss-product gate + the repair coordinator
+Version: @PROJECT_VERSION@
+Requires: sdf_common sdf_wm sdf_fountain sdf_origin_loopback
+Libs: -L${libdir} -lsdf_fluid -lm
+Cflags: -I${includedir}
