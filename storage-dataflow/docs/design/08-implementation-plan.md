@@ -244,6 +244,26 @@ ADRs [0001–0009](../adr/).
   gated end to end — 57 prompt landings from the baseline import
   to the last seam.
 
+  KNOWN GAPS (owned — recorded at the M5 truth-pass; Wave 6 closes
+  the first three; the last two are environment-blocked by design):
+  1. live scrape endpoint  — W2.5's prompt named it (adapt WAM K.1b);
+                             NOT implemented — metrics surface as exit
+                             dumps + series only. -> W6.1
+  2. arc_schedule.json     — schema-only: the 12.3 goldens are pinned
+                             in C (test_arc_core) instead of the
+                             vector file. -> W6.2
+  3. telemetry chain      — sdf_wm_shm_telemetry_push implemented +
+                             tested, but the proxy samples stats into
+                             its in-process controller; no live
+                             C-proxy -> SHM -> Python-loop chain ran
+                             as one process pair. -> W6.1
+  4. hosted CI             — ci.yml is a placeholder; no runner ever
+                             executed it; lint/cargo legs advisory
+                             (the wam L.8 posture). -> W6.5
+  5. Rust seam             — skeleton-only BY DESIGN; the declaration
+                             diff is advisory until cargo exists in
+                             CI. -> W6.5, then W6.8
+
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
 is the single source of completion truth — a landed import without its
@@ -267,6 +287,7 @@ golden-parity gate (ADR-0009) counts as 0%.
 - [11. Risk register](#11-risk-register)
 - [12. Sizes & milestones](#12-sizes--milestones)
 - [13. Work-log protocol](#13-work-log-protocol)
+- [14. Phase W6 — Production hardening & the migration begins](#14-phase-w6--production-hardening--the-migration-begins)
 
 ---
 
@@ -921,5 +942,213 @@ Full rules in `CONTRIBUTING.md` (repo root). Summary:
    commit hashes — never adjectives.
 5. Exceptions to import-first (07 §1) must cite the import map in the
    commit message (see W3.3 for the precedent).
+
+## 14. Phase W6 — Production hardening & the migration begins
+
+The post-M5 backlog, written at the truth-pass that closed Wave 5.
+Its first three prompts close the KNOWN GAPS recorded in the ledger
+above (owned, not discovered later); the rest discharge the
+environment-blocked legs and begin ADR-0003's migration for real.
+Sizes are engineer-days, P50–P90, the §1 velocity model.
+
+Sequencing (leverage first):
+
+```text
+W6.1 (scrape + telemetry chain)   <- closes gaps 1+3, highest value
+W6.2 (ARC goldens)                <- cheap, finishes the parity story
+W6.5 (hosted CI matrix)           <- unblocks W6.8, makes legs real
+   |- W6.3 (multi-block)          <- parallel-safe after W6.1
+   |- W6.4 (CFFI surface)         <- parallel-safe
+W6.6 (v1.0 release)              <- after the above land
+W6.7 (S3/peer)  W6.8 (Rust)       <- schedule-gated on W6.5
+```
+
+### PROMPT W6.1 — Live metrics scrape + the telemetry chain, closed end to end
+
+**Objective:** close the two production-facing gaps in one prompt: a
+live scrape endpoint (gap 1) and the full C-proxy -> SHM telemetry ->
+Python-loop -> published-profile chain running as one live pair
+(gap 3).
+
+**Import:** wack_a_mole `include/wam/metrics_endpoint.h` +
+`src/runtime/metrics_endpoint.c` @ a0f0422 (K.1b: env-gated
+`WAM_METRICS_ENDPOINT`, minimal HTTP GET serving the text dump,
+exact Content-Length, pinned by `test_metrics_endpoint`).
+
+**Deliverables:** `include/sdf/common/metrics_endpoint.h` +
+`src/c/common/metrics_endpoint.c` behind `SDF_METRICS_ENDPOINT`
+(host required; empty = 127.0.0.1); wired into wm-proxy and the ARC
+sidecar, each serving its own dump; wm-proxy pushes
+`sdf_origin_stats` snapshots via `sdf_wm_shm_telemetry_push` on its
+control ticks; the Python loop (`wm_control.py`) gains a live leg
+driving a real proxy through the segment.
+
+**Acceptance:** endpoint unit test in the WAM shape (bad addrs
+refused, 200 + exact Content-Length, accept loop keeps serving);
+one integration harness: live proxy + Python loop as one process
+pair, profile version advancing through SHM per control interval,
+heartbeat visible on the scrape; `e2e_cache_fill.sh` gains a
+`--scrape` smoke leg.
+
+**Size:** 3–5 days.
+
+### PROMPT W6.2 — ARC goldens extracted; the parity flip
+
+**Objective:** make `golden_vectors/arc_schedule.json` the pin, as
+the W0.4 schema intended — the 12.3 cycle currently lives in C
+(`test_arc_core`), the vector file is empty.
+
+**Import:** the extraction pattern from `tools/gen_goldens_fountain.c`
+(W3.3); the cycle already proven on the real clock (W4.2):
+S_n = now − d, expected D pair {94.7934, 93.8016} ms.
+
+**Deliverables:** `tools/gen_goldens_arc.c` (extracts through the
+public ABI: the linear-cycle drive + expected D pair; the exponent
+band entry); `arc_schedule.json` `paper_12_3` group filled;
+`test_parity` IMPLEMENTED gains `arc.abi_v2` and validates;
+`trace_replay_60fps` stays in C (the replay is timing-based, not a
+vector — note that in the file's comment).
+
+**Acceptance:** 375+ comparisons, zero pending groups; extractor
+provenance documented in the file.
+
+**Size:** 1–2 days.
+
+### PROMPT W6.3 — Multi-block repair jobs
+
+**Objective:** the fountain contract pinned one block per codec
+object with multi-block looping at the coordinator; W3.5 ran single
+blocks. Real repair jobs are multi-block objects.
+
+**Import:** none new — the W3.5 coordinator's per-block loop
+generalizes; per-class eps comes from the design-02 class table
+(hot-metadata 0.05, cold-checkpoint 0.15).
+
+**Deliverables:** job admission for N-block objects (per-block codec
+objects, one budget/gate per block), ranked-symbol scheduling across
+blocks, per-block ARQ fallback, per-block round accounting in the
+Pareto line.
+
+**Acceptance:** a multi-block e2e leg (a 4-block checkpoint object
+under the loss ladder) byte-exact per block; the REPAIR line carries
+per-block rounds; single-block behavior unchanged (existing legs
+green untouched).
+
+**Size:** 3–4 days. Parallel-safe after W6.1.
+
+### PROMPT W6.4 — CFFI bindings for the full control surface
+
+**Objective:** `build_ffi` cdefs `origin.h` + `wm.h` today; the
+Python deploy loop runs against a stubbed transport. Extend the
+chain so the control plane is real end to end.
+
+**Import:** the header-graph lesson from W2.4's CFFI fix (cdef order
+follows the include graph).
+
+**Deliverables:** cdef chain extended to `arc.h`, `fluid.h`,
+`fountain.h` (order per the include graph); verified against
+INSTALLED artifacts (the W5.2 install leg's surface, not the build
+tree); `arc_deploy.py`'s transport gains a CFFI-backed
+implementation; `sdf_cffi` re-exports the new surface.
+
+**Acceptance:** the deploy-controller integration test drives a live
+C ARC sidecar through CFFI — mode flips land within one pump
+interval (the design-03 contract), verified against installed
+artifacts.
+
+**Size:** 2–3 days. Parallel-safe after W6.1.
+
+### PROMPT W6.5 — Hosted CI matrix (the advisory legs go real)
+
+**Objective:** discharge the wack_a_mole L.8 posture for this repo: a
+runner that executes what this environment could only skip.
+
+**Deliverables:** `ci.yml` made real: clang-format + clang-tidy legs
+(first real format/tidy pass — expect churn, land it as its own
+`style:` commit first); clang in the matrix; the full ctest suite
+with sanitizers; the bench-gate leg (seeded spray > 30 cyc fails);
+the W5.2 install leg; and — once cargo exists — the rust-seam
+declaration diff flips from advisory to AUTHORITATIVE. `bench.yml`
+nightly: fail on > 5% regression vs the 7-day rolling median
+(00 §11.3, never ctest-gated).
+
+**Acceptance:** one green hosted run of the full matrix; the
+rust-seam leg green on the runner; a follow-up `style:` commit if
+format/tidy found churn (expected).
+
+**Size:** external-runner dependent; 1–2 days of wiring. Unblocks
+W6.8.
+
+### PROMPT W6.6 — v1.0 beachhead release
+
+**Objective:** the wam release pattern: the honest changelog is
+already written — it is the ledger.
+
+**Deliverables:** version bump to 1.0.0 in `include/sdf/version.h`
+(single source of truth — the .pc and find_package versions follow);
+release notes compiled FROM the ledger (per-wave evidence, the
+instructive finds, the goldens counts); tag `v1.0.0`; the
+placeholder `packaging/debian` made real — one working `.deb` built
+and installed by a leg (rpm/helm stay placeholders with a note).
+
+**Acceptance:** the install leg + the package-build leg green;
+release notes cite hashes/test counts, no adjectives.
+
+**Size:** 2–3 days. After W6.1–W6.5 land.
+
+### PROMPT W6.7 — Deferred-origin drivers: S3 + NVMe peer (design-note-gated)
+
+**Objective:** ADR-0008 deferred these behind design notes; schedule
+them when a real endpoint exists to test against.
+
+**Deliverables:** the two design notes first (09 §9's open
+questions: S3 authorization model — instance roles vs signed URLs;
+drain timeout semantics for `set_enable`); then the drivers behind
+the same ops, tested against local stand-ins (a minio-style S3 for
+the former; a peer loopback for the latter).
+
+**Acceptance:** both drivers pass the loopback-leg test shapes
+(stats exactness, drain, EAGAIN); the design notes close 09 §9.
+
+**Size:** 4–6 days. Schedule-gated on a real endpoint (or the
+stand-in decision).
+
+### PROMPT W6.8 — Functional Rust: `sdf-fountain` behind the goldens
+
+**Objective:** begin ADR-0003's migration for real — the fountain in
+Rust, exporting the same `extern "C"` symbols, gated by the golden
+vectors and the cbindgen header diff (authoritative once W6.5's
+runner exists).
+
+**Deliverables:** the `sdf-fountain` crate grows a real
+implementation of the LT arm first (the reference codec — simpler,
+fully specified in-repo); CMake links the Rust cdylib in place of
+the C objects behind a flag; the 356 fountain comparisons run
+through the Rust build in CI.
+
+**Acceptance:** golden vectors pass through the Rust implementation;
+cbindgen declaration diff empty; no caller changes (ADR-0003's
+contract). nanorq stays C (the vendored library IS the validated
+upstream — migrating the adapter adds no proof).
+
+**Size:** 5–8 days. Gated on W6.5 (cargo in CI).
+
+### Parking lot (candidates, unsized)
+
+| Item | Note |
+|---|---|
+| `bench_arc` + gate activation | the plan §10 table lists it record-only; the WAM J.3 target is ≤ 200 ns/block |
+| TSNC recoding behind the fountain ABI | WAM's N.4 posture: a labeled option, never default |
+| HTTP driver perf | currently the reference smoke leg (risk S8) |
+| staging/prod config differentiation | real knob sets come from the first deployment |
+| SDF_HAVE_CURL path for the HTTP driver | the optional libcurl leg stays OFF |
+
+### Milestone M6
+
+Reached when W6.1 + W6.2 + W6.5 land: **the production chain closed
+end to end** — scrape live, telemetry driving a live proxy, the
+goldens complete, the hosted matrix green with every advisory leg
+real. W6.6 (the release) is the natural follow-on.
+
 
 *End of document.*

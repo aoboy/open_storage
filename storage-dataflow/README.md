@@ -53,6 +53,7 @@ their tooling is not installed.
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
 | Packaging | **As-built (Wave 5)**: install + pkg-config + find_package legs in ci; version.h single source of truth |
 | Rust seam | Skeleton crate + cbindgen declaration-diff gate (advisory without cargo; no functional Rust) |
+| Known gaps (owned) | Live scrape endpoint not yet wired; arc_schedule.json schema-only (12.3 goldens pinned in C); no live C-proxy→SHM→Python chain yet — all three close in **Wave 6** ([plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins)) |
 | Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
