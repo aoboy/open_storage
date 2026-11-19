@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `301e306`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `ef737b9`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -416,6 +416,36 @@ ADRs [0001–0009](../adr/).
                                 true shadow added-latency metrics —
                                 and therefore non-vacuous promotion
                                 SLO evidence — remain open.
+  W6.6 v1.0 beachhead release : done — include/sdf/version.h is 1.0.0;
+                                the .pc/find_package versions follow
+                                by configure, and the Rust seam crate
+                                and Python control plane are aligned
+                                at 1.0.0. The version bump exposed
+                                the SameMajorVersion coupling in the
+                                install consumer (0.2 -> 1.0).
+                                packaging/debian/control is real;
+                                scripts/build_deb.sh stages a /usr
+                                install and dpkg-deb builds a -dev
+                                payload; scripts/test_deb.sh performs
+                                dpkg --root installation into an
+                                isolated rootfs and compiles the
+                                external hello-world through
+                                PKG_CONFIG_SYSROOT_DIR. `make deb`
+                                joined `make ci` and the hosted
+                                install job; rpm/Helm explicitly
+                                remain placeholders. Release notes
+                                compiled from this ledger in
+                                docs/releases/v1.0.0.md. Evidence:
+                                make ci green (lint; 23/23 C tests x
+                                default/ASan+UBSan/TSan; Python
+                                19/19; install incl. installed CFFI;
+                                deb; rust seam 15/5/2/1 identical),
+                                all four e2e harnesses green, WM
+                                bench 4.1/4.9/5.8 cyc/dec,
+                                libsdf-dev_1.0.0_amd64.deb built and
+                                installed (ef737b9). No hosted run
+                                is fabricated; it remains pending a
+                                remote/runner.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
@@ -1112,8 +1142,9 @@ W6.2 (ARC goldens)                <- cheap, finishes the parity story
 W6.5 (hosted CI matrix)           <- DONE (cbc5bd9): legs real + wired
    |- W6.3 (multi-block)          <- DONE (ac9332c, 3104fd2)
    |- W6.4 (CFFI surface)         <- DONE (9d56e78, c099e03, 301e306)
-W6.6 (v1.0 release)              <- after the above land
-W6.7 (S3/peer)  W6.8 (Rust)       <- schedule-gated on W6.5
+W6.6 (v1.0 release)              <- DONE (ef737b9); next: W6.8
+W6.7 (S3/peer)                   <- waits on endpoint/stand-in decision
+W6.8 (Rust)                      <- cargo prerequisite discharged by W6.5
 ```
 
 ### PROMPT W6.1 — Live metrics scrape + the telemetry chain, closed end to end
@@ -1239,6 +1270,11 @@ W6.8.
 
 ### PROMPT W6.6 — v1.0 beachhead release
 
+**Status:** done — see the ledger and
+[docs/releases/v1.0.0.md](../releases/v1.0.0.md) (ef737b9). The tag is
+`v1.0.0`; the first hosted run remains an external evidence item, not a
+claimed acceptance.
+
 **Objective:** the wam release pattern: the honest changelog is
 already written — it is the ledger.
 
@@ -1310,7 +1346,9 @@ locally mirrored green (including the rust seam). The milestone's one
 remaining evidence line is the first hosted run itself: no remote is
 configured in this environment, so a runner cannot be dispatched from
 here. Reported as implementation-complete, not as a fabricated hosted
-run. W6.6 (the release) is the natural follow-on.
+run. W6.6 (the release) has since landed as v1.0.0 (ef737b9 plus its
+documentation/tag commits); W6.8 is next, while W6.7 remains gated on
+an endpoint/stand-in decision.
 
 
 *End of document.*
