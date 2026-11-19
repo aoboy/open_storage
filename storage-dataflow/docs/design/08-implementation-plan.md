@@ -246,23 +246,46 @@ ADRs [0001–0009](../adr/).
 
   KNOWN GAPS (owned — recorded at the M5 truth-pass; Wave 6 closes
   the first three; the last two are environment-blocked by design):
-  1. live scrape endpoint  — W2.5's prompt named it (adapt WAM K.1b);
-                             NOT implemented — metrics surface as exit
-                             dumps + series only. -> W6.1
+  1. live scrape endpoint  — CLOSED by W6.1 (8942d34..b029aec): the
+                             K.1b endpoint behind
+                             SDF_METRICS_ENDPOINT serves the proxy
+                             and the ARC sidecar live.
   2. arc_schedule.json     — schema-only: the 12.3 goldens are pinned
                              in C (test_arc_core) instead of the
                              vector file. -> W6.2
-  3. telemetry chain      — sdf_wm_shm_telemetry_push implemented +
-                             tested, but the proxy samples stats into
-                             its in-process controller; no live
-                             C-proxy -> SHM -> Python-loop chain ran
-                             as one process pair. -> W6.1
+  3. telemetry chain      — CLOSED by W6.1 (67ccd86..b029aec): the
+                             proxy pushes per-origin stats into the
+                             ADR-0002 ring, acquires the published
+                             profile per tick, and the PROCESS-PAIR
+                             harness (e2e_shm_chain.sh + the Python
+                             driver) closed it live — 16 published
+                             versions, v16 acquired, 28 slots,
+                             7 heartbeat ticks, scrape green.
   4. hosted CI             — ci.yml is a placeholder; no runner ever
                              executed it; lint/cargo legs advisory
                              (the wam L.8 posture). -> W6.5
   5. Rust seam             — skeleton-only BY DESIGN; the declaration
                              diff is advisory until cargo exists in
                              CI. -> W6.5, then W6.8
+
+  W6.1 live scrape + chain  : done — the K.1b endpoint (unit test
+                                pins the wam contract: exact
+                                Content-Length, 405, 500, stop-closes),
+                                both scrape surfaces wired (proxy
+                                series incl. the heartbeat + acquired
+                                version; the ARC sidecar's own dump),
+                                the in-process SHM leg (pre-publish ->
+                                acquire -> recompile, exact telemetry
+                                accounting), and the process-pair
+                                harness with the Python loop driving a
+                                LIVE proxy through the segment.
+                                Live finds: dispatch-side pacing is
+                                the honest harness knob (the loopback
+                                deadline scheduler batches due units —
+                                origin throttling does not stretch a
+                                run); attach-or-create with the API's
+                                own rc (the post-close -errno draft
+                                could return a clobbered value).
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
