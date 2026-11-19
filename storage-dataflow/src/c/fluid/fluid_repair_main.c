@@ -220,18 +220,21 @@ static int feed_symbol(void *dec, FILE *stream, uint32_t block, uint32_t esi,
 /* ---- per-block coordinator state ---------------------------------------- */
 
 typedef struct {
-    uint32_t next_esi; /* next stream symbol to admit from this block */
+    /* 8-byte fields first: the budget/gate tails are 8-aligned, so the
+     * small fields packed at the end leave the struct padding-free
+     * (clang-tidy performance check at the W6.4 gate). */
     uint64_t sent;
     uint64_t received;
     uint64_t bytes_tx;
     uint64_t bytes_rx;
     uint64_t rounds; /* rounds that admitted >= 1 symbol for this block */
-    int arq_fallback;
-    int ok;
-    uint32_t decode_rank;
     void *dec;
     sdf_fluid_budget_t budget;
     fluid_gate_t gate;
+    uint32_t next_esi; /* next stream symbol to admit from this block */
+    int arq_fallback;
+    int ok;
+    uint32_t decode_rank;
 } repair_block_t;
 
 static int block_active(const repair_block_t *b, uint32_t count) {
