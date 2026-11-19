@@ -163,9 +163,11 @@ int lt_generate(void *enc, uint32_t esi, uint8_t *out, size_t out_len) {
     uint32_t deg = 0;
     repair_neighbors(e->k, esi, nb, &deg);
     memset(out, 0, e->sym_len);
-    for (uint32_t i = 0; i < deg; i++)
-        for (size_t b = 0; b < e->sym_len; b++)
+    for (uint32_t i = 0; i < deg; i++) {
+        for (size_t b = 0; b < e->sym_len; b++) {
             out[b] ^= e->block[(size_t)nb[i] * e->sym_len + b];
+        }
+    }
     return 0;
 }
 
@@ -220,9 +222,11 @@ static void peel(lt_dec_t *d) {
                 uint8_t acc[LT_MAX_SYM];
                 memcpy(acc, d->rep[r], d->sym_len);
                 for (uint32_t i = 0; i < d->rep_deg[r]; i++) {
-                    if (d->rep_nb[r][i] != last)
-                        for (size_t b = 0; b < d->sym_len; b++)
+                    if (d->rep_nb[r][i] != last) {
+                        for (size_t b = 0; b < d->sym_len; b++) {
                             acc[b] ^= d->src[d->rep_nb[r][i]][b];
+                        }
+                    }
                 }
                 memcpy(d->src[last], acc, d->sym_len);
                 d->have_src[last] = 1;
@@ -238,9 +242,10 @@ bool lt_ready(const void *dec) {
         return false;
     lt_dec_t *mut = (lt_dec_t *)d; /* peel mutates the recovery state */
     peel(mut);
-    for (uint32_t i = 0; i < d->k; i++)
+    for (uint32_t i = 0; i < d->k; i++) {
         if (!d->have_src[i])
             return false;
+    }
     return true;
 }
 
@@ -249,10 +254,12 @@ uint32_t lt_rank(const void *dec) {
     if (d == NULL)
         return 0;
     uint32_t n = 0;
-    for (uint32_t i = 0; i < d->k; i++)
+    for (uint32_t i = 0; i < d->k; i++) {
         n += d->have_src[i] ? 1u : 0u;
-    for (uint32_t r = 0; r < d->k && r < LT_REPAIR_MAX; r++)
+    }
+    for (uint32_t r = 0; r < d->k && r < LT_REPAIR_MAX; r++) {
         n += d->have_rep[r] ? 1u : 0u;
+    }
     return n;
 }
 
@@ -262,7 +269,8 @@ int lt_decode(void *dec, uint8_t *out, size_t block_len) {
         return -EINVAL;
     if (!lt_ready(dec))
         return -EINVAL; /* the ARQ-fallback condition (design 02) */
-    for (uint32_t j = 0; j < d->k; j++)
+    for (uint32_t j = 0; j < d->k; j++) {
         memcpy(out + (size_t)j * d->sym_len, d->src[j], d->sym_len);
+    }
     return 0;
 }
