@@ -95,6 +95,14 @@ add_test(NAME fluid_gate COMMAND test_fluid_gate)
 add_executable(test_fluid_repair integration/test_fluid_repair.c)
 target_link_libraries(test_fluid_repair PRIVATE sdf_fluid)
 add_test(NAME fluid_repair COMMAND test_fluid_repair)
+
+# Plan W4.2 — ARC core: paper 12.3 goldens + the QG guard (the
+# missing-predecessor timeout is pinned at the internal layer — the
+# public submit API cannot manufacture a block gap).
+add_executable(test_arc_core unit/test_arc_core.c)
+target_link_libraries(test_arc_core PRIVATE sdf_arc sdf_common)
+target_include_directories(test_arc_core PRIVATE ${CMAKE_SOURCE_DIR}/src/c/arc)
+add_test(NAME arc_core COMMAND test_arc_core)
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)
