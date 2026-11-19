@@ -15,7 +15,7 @@
 #include <stdlib.h>
 
 int main(void) {
-    if (!SDF_VERSION_AT_LEAST(0, 2, 0)) {
+    if (!SDF_VERSION_AT_LEAST(1, 0, 0)) {
         fprintf(stderr, "install-hello: version macro older than expected\n");
         return 1;
     }

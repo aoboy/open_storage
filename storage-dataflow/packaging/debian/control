@@ -1,0 +1,14 @@
+Package: libsdf-dev
+Version: @SDF_VERSION@
+Section: libdevel
+Priority: optional
+Architecture: @DEB_ARCH@
+Maintainer: storage-dataflow maintainers
+Depends:
+Description: Storage Dataflow Stack — headers and static libraries
+ C core for the seeded Whack-a-Mole dispatch, FLUID/fountain repair and
+ ARC release pacing (plan prompt W6.6): public headers under
+ /usr/include/sdf, static archives (libsdf_*.a plus the vendored
+ libnanorq.a), pkg-config files and the CMake find_package(sdf) config.
+ Version is substituted from include/sdf/version.h by
+ scripts/build_deb.sh — do not edit it here.

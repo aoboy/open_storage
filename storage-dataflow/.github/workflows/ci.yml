@@ -230,6 +230,9 @@ jobs:
       - name: Install leg (pkg-config + find_package + installed CFFI)
         run: ./scripts/test_install.sh
 
+      - name: Package leg (Debian .deb build + dpkg install, W6.6)
+        run: ./scripts/test_deb.sh
+
   rust-seam:
     runs-on: ubuntu-latest
     timeout-minutes: 20

@@ -31,7 +31,7 @@ cp tools/install_hello.c "$CONS/main.c"
 cat > "$CONS/CMakeLists.txt" <<'CM'
 cmake_minimum_required(VERSION 3.24)
 project(sdf_consumer LANGUAGES C)
-find_package(sdf 0.2 REQUIRED CONFIG)
+find_package(sdf 1.0 REQUIRED CONFIG)
 add_executable(consumer main.c)
 target_link_libraries(consumer PRIVATE sdf::sdf_wm sdf::sdf_arc)
 CM

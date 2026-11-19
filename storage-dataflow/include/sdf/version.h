@@ -9,11 +9,11 @@
  * this file.
  */
 
-#define SDF_VERSION_MAJOR 0
-#define SDF_VERSION_MINOR 2
+#define SDF_VERSION_MAJOR 1
+#define SDF_VERSION_MINOR 0
 #define SDF_VERSION_PATCH 0
 
-#define SDF_VERSION_STRING "0.2.0"
+#define SDF_VERSION_STRING "1.0.0"
 
 #define SDF_VERSION_AT_LEAST(maj, min, pat)                                                        \
     ((maj) < SDF_VERSION_MAJOR || ((maj) == SDF_VERSION_MAJOR && (min) < SDF_VERSION_MINOR) ||     \
