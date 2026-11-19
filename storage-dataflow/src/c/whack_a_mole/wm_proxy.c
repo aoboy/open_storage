@@ -155,15 +155,18 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         return -EINVAL;
     if (cfg->n_origins == 0 || cfg->n_origins > WM_MAX_PATHS)
         return -EINVAL;
+    /* validated once, then frozen: every later use (including the
+     * control modulo) sees the same non-zero count */
+    const uint32_t n_origins = cfg->n_origins;
     if (cfg->units == 0 || cfg->unit_bytes == 0 || cfg->unit_bytes > SDF_ORIGIN_UNIT_MAX)
         return -EINVAL;
-    if (cfg->profile.n != cfg->n_origins)
+    if (cfg->profile.n != n_origins)
         return -EINVAL;
 
     memset(out, 0, sizeof(*out));
 
     sdf_origin_t o = {.ops = sdf_loopback_ops(), .impl = NULL};
-    if (o.ops->open(&o, cfg->origins, cfg->n_origins) != 0)
+    if (o.ops->open(&o, cfg->origins, n_origins) != 0)
         return -EINVAL;
 
     proxy_cb_state_t cbst;
@@ -189,9 +192,9 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     sdf_shm_t shm;
     int shm_on = 0;
     if (cfg->shm_name != NULL && cfg->shm_name[0] != '\0') {
-        int rc = sdf_wm_shm_create(cfg->shm_name, cfg->n_origins, &shm);
+        int rc = sdf_wm_shm_create(cfg->shm_name, n_origins, &shm);
         if (rc != 0)
-            rc = sdf_wm_shm_attach(cfg->shm_name, cfg->n_origins, &shm);
+            rc = sdf_wm_shm_attach(cfg->shm_name, n_origins, &shm);
         if (rc != 0) {
             o.ops->close(&o);
             return rc;
@@ -205,7 +208,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     kcfg.alpha_lo = cfg->alpha > 0.0 ? cfg->alpha : kcfg.alpha_lo;
     kcfg.t_min_ns = cfg->control_hz > 0 ? 1000000000ull / cfg->control_hz : kcfg.t_min_ns;
     wm_ctrl_t ctl;
-    if (wm_ctrl_init(&ctl, &work, &kcfg, cfg->n_origins) != 0) {
+    if (wm_ctrl_init(&ctl, &work, &kcfg, n_origins) != 0) {
         o.ops->close(&o);
         return -EINVAL;
     }
@@ -236,7 +239,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         if (dispatched - last_ctrl_at >= units_per_interval) {
             last_ctrl_at = dispatched;
             out->control_ticks++;
-            for (uint32_t i = 0; i < cfg->n_origins; i++) {
+            for (uint32_t i = 0; i < n_origins; i++) {
                 sdf_origin_stats_t st;
                 if (o.ops->stats(&o, i, &st) != 0)
                     continue;
@@ -255,7 +258,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                 uint32_t ver = 0;
                 if (sdf_wm_shm_acquire(&shm, &next, &ver) == 0) {
                     out->shm_acquires++;
-                    if (ver > out->shm_version_acquired && next.n == cfg->n_origins &&
+                    if (ver > out->shm_version_acquired && next.n == n_origins &&
                         next.m == work.m) {
                         out->shm_version_acquired = ver;
                         if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0)
@@ -269,7 +272,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                     if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0) {
                         work = next;
                         out->updates_applied++;
-                        for (uint32_t i = 0; i < cfg->n_origins; i++)
+                        for (uint32_t i = 0; i < n_origins; i++)
                             sdf_counter_inc(&out->shed_events[i]);
                     }
                 }
@@ -301,7 +304,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
             origin = wm_select(&job_compiled, job_unit);
             out->dispatch_treatment++;
         } else {
-            origin = (uint32_t)(control_rr++ % cfg->n_origins);
+            origin = (uint32_t)(control_rr++ % n_origins);
             out->dispatch_control++;
         }
 
@@ -334,7 +337,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     /* drain: all accepted units complete (close flushes stragglers) */
     for (int iter = 0; iter < 60000; iter++) {
         uint64_t inflight = 0;
-        for (uint32_t i = 0; i < cfg->n_origins; i++) {
+        for (uint32_t i = 0; i < n_origins; i++) {
             sdf_origin_stats_t st;
             if (o.ops->stats(&o, i, &st) == 0)
                 inflight += st.in_flight;
@@ -344,12 +347,12 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         sdf_sleep_ns(200000);
     }
     out->wall_ns = sdf_now_ns() - t0;
-    for (uint32_t i = 0; i < cfg->n_origins; i++) {
+    for (uint32_t i = 0; i < n_origins; i++) {
         out->ok[i] = atomic_load_explicit(&cbst.ok[i], memory_order_relaxed);
         out->failed[i] = atomic_load_explicit(&cbst.failed[i], memory_order_relaxed);
     }
     out->bytes_rx = atomic_load_explicit(&cbst.bytes_rx, memory_order_relaxed);
-    for (uint32_t i = 0; i < cfg->n_origins; i++)
+    for (uint32_t i = 0; i < n_origins; i++)
         out->end_profile_b[i] = work.b[i];
 
     if (shm_on)

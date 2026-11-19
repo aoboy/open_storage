@@ -80,7 +80,8 @@ uint64_t sdf_fluid_repair_stream_bytes(const sdf_fluid_repair_cfg_t *cfg) {
 
 int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg, uint8_t *buf,
                                    size_t buf_len) {
-    if (cfg == NULL || buf == NULL || buf_len < sdf_fluid_repair_stream_bytes(cfg))
+    if (cfg == NULL || buf == NULL || cfg->k == 0 || cfg->sym_len == 0 ||
+        buf_len < sdf_fluid_repair_stream_bytes(cfg))
         return -EINVAL;
 
     size_t block_len = (size_t)cfg->k * cfg->sym_len;

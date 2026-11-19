@@ -48,7 +48,7 @@ static double parse_d(const sdf_config_t *cfg, const char *key, double fallback)
 static int proxy_render(void *ud, FILE *out) {
     const sdf_wm_proxy_stats_t *st = ud;
     fprintf(out, "sdf_proxy_units_total %llu\n",
-            (unsigned long long)(st->dispatch_treatment + st->dispatch_control));
+            (unsigned long long)st->dispatch_treatment + (unsigned long long)st->dispatch_control);
     fprintf(out, "sdf_proxy_control_heartbeat_ticks %llu\n", (unsigned long long)st->control_ticks);
     fprintf(out, "sdf_proxy_shm_profile_version %u\n", st->shm_version_acquired);
     fprintf(out, "sdf_proxy_shm_telemetry_pushed %llu\n",

@@ -97,7 +97,9 @@ int main(int argc, char **argv) {
            arm, cfg.eps, cfg.loss_pct, cfg.k, (unsigned long long)st.sent,
            (unsigned long long)st.received, (unsigned long long)st.bytes_tx,
            (unsigned long long)st.rounds, st.arq_fallback, st.decode_rank, st.ok,
-           cfg.k > 0 ? (double)st.bytes_tx / (double)(cfg.k * cfg.sym_len) : 0.0,
+           cfg.k > 0 && cfg.sym_len > 0
+               ? (double)st.bytes_tx / ((double)cfg.k * (double)cfg.sym_len)
+               : 0.0,
            (unsigned long long)(st.wall_ns / 1000000ull));
     return st.ok == 1 ? 0 : 1;
 }

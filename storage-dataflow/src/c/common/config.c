@@ -802,7 +802,10 @@ static int read_file(const char *path, char **buf, size_t *len, char *err, size_
         fclose(f);
         return failf(err, errsz, path, 0, "open", "empty or oversized (max 256 KiB)");
     }
-    char *b = malloc((size_t)flen + 1);
+    /* calloc: the terminator is part of the allocation, so no write
+     * indexed by the read result (clang-analyzer-security.ArrayBound
+     * cannot prove fread's return stays in bounds). */
+    char *b = calloc((size_t)flen + 1, 1);
     if (!b) {
         fclose(f);
         return failf(err, errsz, path, 0, "open", "oom");
@@ -813,7 +816,6 @@ static int read_file(const char *path, char **buf, size_t *len, char *err, size_
         free(b);
         return failf(err, errsz, path, 0, "open", "read failed");
     }
-    b[got] = '\0';
     *buf = b;
     *len = got;
     return 0;
