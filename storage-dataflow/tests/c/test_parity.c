@@ -11,10 +11,13 @@
  */
 
 #include "golden_json.h"
+#include "sdf/arc.h"
+#include "sdf/common/timer.h"
 #include "sdf/fountain.h"
 #include "sdf/wm.h"
 
 #include <errno.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +43,7 @@ static int g_pending;   /* groups awaiting a future prompt */
  * add fountain.abi_v2, W4.x arc.abi_v2. */
 static const char *IMPLEMENTED[] = {
     "core", "wm.method.shuffle1", "wm.method.shuffle2", "fountain.abi_v2",
-    "fountain.codec.nanorq", "fountain.codec.lt", NULL};
+    "fountain.codec.nanorq", "fountain.codec.lt", "arc.abi_v2", NULL};
 
 static int feature_implemented(const char *feature) {
     if (feature == NULL)
@@ -626,35 +629,120 @@ static void validate_codec_group(const char *rel, const char *group,
     validate_fountain(rel, group, 0, 1);
 }
 
-/* Schema check for a future-wave golden file: every named group must
- * exist with an entries array; non-empty entries with an unimplemented
- * requires tag are pending, empty entries are schema-only (OK). */
-static void check_schema_file(const char *rel, const char *const *groups,
-                              size_t n_groups) {
-    jval_t *root = load_golden(rel);
-    for (size_t i = 0; i < n_groups; i++) {
-        const jval_t *g = golden_json_get(root, groups[i]);
-        if (g == NULL || g->type != J_OBJ) {
-            fprintf(stderr, "FAIL: %s: missing group schema '%s'\n", rel,
-                    groups[i]);
-            exit(1);
-        }
-        const jval_t *entries = golden_json_get(g, "entries");
-        if (entries == NULL || entries->type != J_ARR) {
-            fprintf(stderr, "FAIL: %s: group '%s' lacks an entries array\n",
-                    rel, groups[i]);
-            exit(1);
-        }
-        const jval_t *req = golden_json_get(g, "requires");
-        CHECK(req != NULL && req->type == J_STR);
-        if (entries->n_items > 0 && !feature_implemented(req->str)) {
-            g_pending++;
-            printf("  pending: %-24s awaits %s (%zu entries present)\n",
-                   groups[i], req->str, entries->n_items);
+
+/* ---- ARC goldens (plan W6.2) ------------------------------------------- */
+
+/*
+ * Replay one paper_12_3 entry through the public ABI on the REAL
+ * receiver clock — the extractor's exact drive (S_n = now - d, the
+ * alternating dH/dL pattern): every recorded D sample must reproduce
+ * within tolerance_ns. A sample is one comparison.
+ */
+static void validate_arc_entry(const jval_t *e, const char *group) {
+    CHECK(e != NULL && e->type == J_OBJ);
+    int drive_blocks = (int)golden_json_int(golden_json_get(e, "drive_blocks"), 0);
+    int sample_blocks =
+        (int)golden_json_int(golden_json_get(e, "sample_blocks"), 0);
+    uint64_t d_high =
+        (uint64_t)golden_json_int(golden_json_get(e, "d_high_ns"), 0);
+    uint64_t d_low = (uint64_t)golden_json_int(golden_json_get(e, "d_low_ns"), 0);
+    const jval_t *v;
+    double rho_u = (v = golden_json_get(e, "rho_u")) != NULL && v->type == J_NUM
+                       ? v->num : 0.0;
+    double rho_l = (v = golden_json_get(e, "rho_l")) != NULL && v->type == J_NUM
+                       ? v->num : 0.0;
+    double lambda_u =
+        (v = golden_json_get(e, "lambda_u")) != NULL && v->type == J_NUM
+            ? v->num : 0.0;
+    double lambda_l =
+        (v = golden_json_get(e, "lambda_l")) != NULL && v->type == J_NUM
+            ? v->num : 0.0;
+    uint64_t U_ns = (uint64_t)golden_json_int(golden_json_get(e, "U_ns"), 0);
+    uint64_t delta_ns =
+        (uint64_t)golden_json_int(golden_json_get(e, "delta_ns"), 0);
+    uint64_t J_ns = (uint64_t)golden_json_int(golden_json_get(e, "J_ns"), 0);
+    double tol = (double)golden_json_int(golden_json_get(e, "tolerance_ns"),
+                                         500000);
+    const jval_t *samples = golden_json_get(e, "samples");
+    CHECK(drive_blocks > 0 && sample_blocks > 0 && d_high > d_low);
+    CHECK(samples != NULL && samples->type == J_ARR &&
+          samples->n_items == (size_t)sample_blocks);
+
+    arc_cfg_t cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.capacity = 64;
+    cfg.entry_max = 64;
+    cfg.mode = ARC_MODE_BASE;
+    cfg.auto_params = 0; /* the goldens pin the Algorithm-1 fixed point */
+    cfg.min_smooth_bytes = 0;
+    cfg.rho_u = rho_u;
+    cfg.rho_l = rho_l;
+    cfg.lambda_u = lambda_u;
+    cfg.lambda_l = lambda_l;
+    cfg.U = U_ns;
+    cfg.delta = delta_ns;
+    cfg.J = J_ns;
+    cfg.G = 50000000ull;
+    cfg.T_idle_ns = 1000000000000ull; /* no mid-drive re-anchors */
+
+    size_t sz = arc_sizeof(&cfg);
+    CHECK(sz > 0);
+    void *p = malloc(sz);
+    CHECK(p != NULL);
+    CHECK(arc_init(p, &cfg, NULL, NULL) == 0);
+
+    /* index the samples by n for the replay */
+    size_t sample_i = 0;
+    int sample_at = drive_blocks - sample_blocks;
+    for (int n = 0; n < drive_blocks; n++) {
+        uint64_t d = (n % 2 == 0) ? d_high : d_low;
+        uint64_t Sn = sdf_now_ns() - d;
+        uint8_t entry[64];
+        memset(entry, (uint8_t)n, sizeof(entry));
+        CHECK(arc_submit(p, entry, sizeof(entry), Sn) == 0);
+        (void)arc_poll(p, UINT64_MAX / 4);
+        if (n >= sample_at && sample_i < samples->n_items) {
+            const jval_t *smp = samples->items[sample_i++];
+            int expect_n =
+                (int)golden_json_int(golden_json_get(smp, "n"), -1);
+            const jval_t *dv = golden_json_get(smp, "D_ns");
+            CHECK(dv != NULL && dv->type == J_NUM);
+            double expect_D = dv->num;
+            CHECK(expect_n == n); /* the extractor's exact trajectory */
+            arc_stats_t st = arc_stats(p);
+            if (fabs(st.D - expect_D) > tol) {
+                fprintf(stderr,
+                        "FAIL: %s sample n=%d: D=%.1f expected %.1f "
+                        "(tol %.0f)\n",
+                        group, n, st.D, expect_D, tol);
+                exit(1);
+            }
+            g_validated++;
         }
     }
+    CHECK(sample_i == samples->n_items); /* every recorded sample seen */
+
+    free(p);
+}
+
+static void validate_arc_group(const char *rel, const char *group) {
+    jval_t *root = load_golden(rel);
+    const jval_t *g = golden_json_get(root, group);
+    CHECK(g != NULL && g->type == J_OBJ);
+    const jval_t *entries = golden_json_get(g, "entries");
+    CHECK(entries != NULL && entries->type == J_ARR);
+    if (entries->n_items == 0) {
+        printf("  note: %-24s has no JSON entries by design (timing-based "
+               "leg stays in C)\n",
+               group);
+        golden_json_free(root);
+        return;
+    }
+    for (size_t i = 0; i < entries->n_items; i++)
+        validate_arc_entry(entries->items[i], group);
     golden_json_free(root);
 }
+
 
 int main(void) {
     jval_t *root = load_golden("golden_vectors/wm_select.json");
@@ -669,10 +757,9 @@ int main(void) {
     validate_sequence("seed_shuffle2", root, &c);
     golden_json_free(root);
 
-    {
-        static const char *arc_groups[] = {"paper_12_3", "trace_replay_60fps"};
-        check_schema_file("golden_vectors/arc_schedule.json", arc_groups, 2);
-    }
+    validate_arc_group("golden_vectors/arc_schedule.json", "paper_12_3");
+    validate_arc_group("golden_vectors/arc_schedule.json",
+                        "trace_replay_60fps");
     validate_fountain("golden_vectors/fountain_esi.json", "roundtrip", 0, 0);
     validate_fountain("golden_vectors/fountain_esi.json", "lossy_repair", 1, 0);
     validate_codec_group("golden_vectors/fountain_esi.json", "nanorq",
