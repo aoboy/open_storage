@@ -678,7 +678,7 @@ storage-dataflow/
 |---|---|---|---|
 | Common primitives | C | C | Fixed-layout structs and ABI stability are the point |
 | Whack-a-Mole dispatch | C | C | Table lookup; marginal benefit from Rust |
-| Fountain codec | C (LT + Nanorq) | Rust first | Pure compute, no I/O, golden-vector tested |
+| Fountain codec | C default; opt-in Rust LT; Nanorq stays C | Rust LT A/B open (W6.8) | Pure compute, no I/O, golden-vector tested |
 | FLUID gate | C | C | Small state machine; low risk |
 | ARC pacer | C | Rust second | Heap + timing + callback; ownership removes a bug class |
 | Control plane | Python | Python | Orchestration, A/B, metrics, config |
@@ -785,7 +785,10 @@ files. No caller changes.
 
 1. **Fountain** — pure compute, no I/O, no shared state. Validate against
    `golden_vectors/fountain_esi.json`. Use cbindgen to regenerate
-   `fountain.h` and diff it against the C header.
+   `fountain.h` and diff it against the C header. **W6.8 as-built:** the Rust
+   LT internal arm is available via `SDF_USE_RUST_FOUNTAIN=ON`; C dispatch and
+   nanorq are unchanged, both variants pass the same 556-comparison parity
+   report, and C remains the default during the comparison window.
 2. **ARC** — heap + timing + callback. Ownership removes the heap/ordering bug
    class.
 3. **Whack-a-Mole** — leave in C longest. Table lookup; marginal benefit.

@@ -1,7 +1,8 @@
 # Rust Migration Plan
 
-**Status:** Deferred to phase 4. Directories `src/rust/sdf-fountain` and
-`src/rust/sdf-arc` are placeholders.
+**Status:** W6.8 fountain LT comparison window open. The Rust implementation
+is functional behind `SDF_USE_RUST_FOUNTAIN=ON`; the C arm remains the default
+and nanorq remains C. `src/rust/sdf-arc` is still a placeholder.
 **Related:** [Overview §9, §12](00-overview.md#9-language-strategy-c-python-rust),
 [ADR-0003](../adr/0003-rust-migration-order.md).
 
@@ -44,6 +45,17 @@ test coverage.
 - Link the staticlib into `sdf_fountain`; keep the C implementation behind a
   CMake option for one release.
 
+**W6.8 implementation note.** `src/lt.rs` ports the C xorshift64* stream,
+robust-soliton draw order, deterministic neighbors, fixed-size layouts and
+peeling decoder. It exports the internal `lt_*`/`lt_prng_next` arm, not a
+second set of public dispatch symbols. The unchanged C frontends and nanorq
+adapter coexist with it. There is no codec heap allocation, caller storage and
+lifecycle rules are unchanged, and panic-capable exports catch/abort at the
+boundary. The staticlib is merged into `libsdf_fountain.a`; no separate Rust
+archive appears in the install or package surface. Both variants run the same
+23 C tests and produce byte-identical 556-comparison parity reports. The C arm
+is not removed and remains the build default.
+
 ### 2. ARC pacer (`src/rust/sdf-arc`)
 
 Why second: heap + timing + callback. Ownership removes the heap/ordering bug
@@ -70,14 +82,30 @@ When enabled, the target links the Rust staticlib and skips the C sources for
 that module. When disabled, the C sources are used. CI builds both variants
 and runs the same tests.
 
+For fountain specifically, CMake skips only `fe_codec_lt.c` and `fe_prng.c`,
+then merges the Rust staticlib into the normal archive. A generated C rebuild
+anchor makes Rust source edits re-archive and relink consumers. pkg-config,
+`find_package(sdf)` and CFFI receive the staticlib's recorded native support
+libraries; their archive names and public API do not change.
+
 ## CI gates
 
-- `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`.
-- Golden-vector conformance for both implementations.
-- cbindgen header diff: no unintended ABI changes.
-- Sanitizer run (ASan/UBSan) on the Rust-backed variant.
-- Benchmark parity: no p99 or throughput regression beyond the nightly noise
-  threshold.
+- `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test --locked` (pinned Rust 1.100.0 in hosted CI).
+- Golden-vector conformance for both implementations, with complete parity
+  reports compared byte-for-byte.
+- cbindgen header diff: no unintended ABI changes; internal LT exports are
+  deliberately excluded from the public declaration surface.
+- Sanitizer run (ASan/UBSan) on the Rust-backed variant. The C callers and
+  allocator boundary are instrumented; the Rust staticlib is the pinned release
+  build, so this is not represented as Rust-internal ASan instrumentation.
+- Installed pkg-config, `find_package(sdf)`, CFFI and Debian consumers execute
+  the unchanged LT+nanorq test in both implementation variants.
+- `scripts/test_rust_fountain.sh --require` is the authoritative aggregate;
+  without `--require`, absent cargo/components produce explicit local skips.
+- Benchmark parity before default cutover/C removal: no p99 or throughput
+  regression beyond the nightly noise threshold. W6.8 does not cut over the
+  default, so no such performance claim is made.
 
 ## Non-goals
 

@@ -1,6 +1,6 @@
 # ADR-0003: Rust Migration Order
 
-**Status:** Proposed
+**Status:** Accepted — fountain comparison window open (W6.8)
 **Date:** 2026-11-16
 **Related:** [Rust migration plan](../design/04-rust-migration.md),
 [ADR-0001](0001-c-abi-as-contract.md)
@@ -52,7 +52,12 @@ Negative:
 
 ## Compliance
 
-- `src/rust/sdf-fountain` and `src/rust/sdf-arc` are placeholders until their
-  phase starts.
-- CI must build both variants and run golden vectors before remove of a C
-  implementation.
+- W6.8 started the fountain step: `src/rust/sdf-fountain` now implements LT,
+  while `src/rust/sdf-arc` remains a placeholder. Only the internal LT arm is
+  replaced; C public dispatch and nanorq stay in the same archive.
+- `scripts/test_rust_fountain.sh --require` builds both variants, runs the full
+  C suites and golden vectors, diffs the cbindgen surface, checks exact archive
+  symbols, and exercises sanitizer/install/package consumers.
+- The C LT implementation remains available and default throughout the
+  comparison window. It can be removed only after the required benchmark and
+  hosted-run evidence; no removal is part of W6.8.

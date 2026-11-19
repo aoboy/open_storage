@@ -16,8 +16,11 @@ decoder, stateful codec objects, and a smaller community.
 
 Keep one codec ABI, `include/sdf/fountain.h`, and implement it twice:
 
-- `src/c/fountain/fe_codec_lt.c` — reference LT implementation.
-- `src/c/fountain/fe_codec_nanorq.c` — adapter over Nanorq's low-level API.
+- `src/c/fountain/fe_codec_lt.c` — reference LT implementation (default during
+  the W6.8 comparison window); `src/rust/sdf-fountain/src/lt.rs` is its
+  opt-in, behaviorally identical internal-arm replacement.
+- `src/c/fountain/fe_codec_nanorq.c` — adapter over Nanorq's low-level API;
+  nanorq deliberately remains C in both build variants.
 
 Run three arms in Prototype 2:
 

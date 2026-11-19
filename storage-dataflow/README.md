@@ -6,8 +6,8 @@ distributed storage and caching.
 This repository contains the design corpus and the W0-W6 implementation:
 the C data plane (Whack-a-Mole dispatch, FLUID repair, ARC pacing), the
 Python control plane, the live SHM chain, golden-vector parity, the fuzz
-and packaging legs, and the Rust seam declaration gate. The C headers
-under `include/sdf/` are the ABI contract.
+and packaging legs, and an opt-in Rust LT fountain arm behind the unchanged C
+ABI. The C headers under `include/sdf/` are the ABI contract.
 
 See [`docs/design/00-overview.md`](docs/design/00-overview.md) for the full
 design and plan.
@@ -20,13 +20,15 @@ design and plan.
 ./scripts/run_bench.sh    # benchmark harness entry point
 ./scripts/lint.sh         # clang-format, clang-tidy, ruff, mypy (if installed)
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
-make ci                   # local gate: lint, test, ASan+UBSan, TSan, install, rust seam
+make ci                   # lint, C tests/sanitizers, install/deb, Rust C/Rust A/B gates
 ```
 
 Requirements: CMake >= 3.24, a C17 compiler, and Python >= 3.10. The FFI,
 lint, documentation, and benchmark steps are optional and skip cleanly when
-their tooling is not installed. The Rust seam needs cargo; the hosted matrix
-installs it, while `make ci` skips that leg cleanly when cargo is absent.
+their tooling is not installed. The Rust gates need cargo; the hosted matrix
+pins Rust 1.100.0 with rustfmt/clippy, while local Rust legs report clean skips
+when cargo/components are absent. Configure one functional Rust build with
+`cmake -S . -B build-rust -DSDF_USE_RUST_FOUNTAIN=ON`.
 
 ## Layout
 
@@ -35,7 +37,7 @@ installs it, while `make ci` skips that leg cleanly when cargo is absent.
 | `include/sdf/` | Public C ABI (the migration contract) |
 | `src/c/` | Data-plane hot path (C) |
 | `python/sdf/` | Control plane (Python) |
-| `src/rust/` | Rust seam crate (full fountain declaration; no functional module yet) |
+| `src/rust/` | Rust LT fountain arm + full declaration/cbindgen seam (C arm retained for A/B) |
 | `tests/` | Unit, integration, fuzz, and system tests |
 | `golden_vectors/` | Cross-language ABI conformance vectors |
 | `docs/design/` | Design and planning documents |
@@ -54,19 +56,19 @@ installs it, while `make ci` skips that leg cleanly when cargo is absent.
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
-| Packaging | **As-built (Wave 5/W6.4/W6.6)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested (rpm/Helm remain placeholders) |
-| Rust seam | **As-built (W6.5)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff, authoritative in CI (`--require`); no functional Rust yet |
+| Packaging | **As-built (Wave 5/W6.4/W6.6/W6.8)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested with both C and Rust LT (rpm/Helm remain placeholders) |
+| Rust seam + LT | **As-built (W6.5/W6.8)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff; functional opt-in Rust LT with C dispatch/nanorq retained, exact archive symbols and identical 556 goldens |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
-| CI | **W6.5**: 8-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, authoritative rust seam, full fuzz) + nightly p99 gate; actionlint 1.7.12 clean; local mirror green; first hosted run pending a remote |
-| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); no functional Rust yet (W6.8, schedule-gated); true shadow-mode ARC scoring is deferred — shadow still maps to IMMEDIATE, so promotion SLO evidence is not yet non-vacuous (W6.4 note, [design 03](docs/design/03-arc-pacing.md#implementation-note--mode-switching-w64)) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
+| CI | **W6.5/W6.8**: 8-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, authoritative Rust quality + C/Rust functional A/B, full fuzz) + nightly p99 gate; local mirror green; first hosted run pending a remote |
+| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); Rust LT remains opt-in with C as the comparison-window default and no C removal/cutover is claimed (W6.8); true shadow-mode ARC scoring is deferred — shadow still maps to IMMEDIATE, so promotion SLO evidence is not yet non-vacuous (W6.4 note, [design 03](docs/design/03-arc-pacing.md#implementation-note--mode-switching-w64)) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
 | Golden-vector parity gate | Active: **556 comparisons, zero pending** — WM, both fountain arms, ARC §12.3 (W6.2; ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | **As-built (W6.4)**: CFFI covers origin → wm → arc → fluid → fountain, links the PIC archives, and builds against an installed prefix (`SDF_CFFI_DIR` override); `CffiSidecarTransport` drives the live C ARC sidecar (mode flips in one pump); SHM bridge live (W6.1 process-pair chain) |
-| Fountain codecs (P2) | **As-built (Wave 3)**: nanorq (RaptorQ) + LT arms behind one ABI; the parity gate now covers 556 comparisons total (W6.2) |
+| Fountain codecs (P2) | **As-built (Wave 3/W6.8)**: nanorq (RaptorQ) + LT arms behind one ABI; LT is selectable as C (default) or Rust with no caller change; the parity gate covers 556 comparisons total, byte-identical across variants |
 | FLUID repair (P2) | **As-built (Wave 3/W6.3)**: budget + gate on the section-4.3 identity, coordinator with mandatory per-block ARQ fallback, three-arm loss ladder green; N-block objects (≤64) with per-block codec/budget/gate, deficit-ranked admission, per-block round accounting, and a **byte-exact** decode gate |
 | ARC pacing sidecar (P3) | **As-built (Wave 4/W6.4)**: ARC-QG core on the paper's analytic fixed point, shadow/live/killed sidecar with ABI mode setters (one-pump flips, killed drains the backlog), deploy gate + armed kill switch, runbook executed as a test; true shadow-mode metrics remain the recorded open item |
-| Rust modules | Deferred to phase 4 |
+| Rust modules | Fountain LT functional and opt-in (W6.8 comparison window); ARC migration remains deferred |
 
 ## Documentation
 
