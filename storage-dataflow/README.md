@@ -3,10 +3,11 @@
 Applying **Whack-a-Mole**, **FLUID**, **ARC**, and **Nanorq** to large-scale
 distributed storage and caching.
 
-This repository currently contains the planning documents and a buildable
-skeleton. The C headers under `include/sdf/` are the ABI contract. The
-Whack-a-Mole dispatch core is implemented; the remaining C sources are stubs
-to be filled in per the design documents.
+This repository contains the design corpus and the W0-W6 implementation:
+the C data plane (Whack-a-Mole dispatch, FLUID repair, ARC pacing), the
+Python control plane, the live SHM chain, golden-vector parity, the fuzz
+and packaging legs, and the Rust seam declaration gate. The C headers
+under `include/sdf/` are the ABI contract.
 
 See [`docs/design/00-overview.md`](docs/design/00-overview.md) for the full
 design and plan.
@@ -19,12 +20,13 @@ design and plan.
 ./scripts/run_bench.sh    # benchmark harness entry point
 ./scripts/lint.sh         # clang-format, clang-tidy, ruff, mypy (if installed)
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
-make ci                   # local gate: lint (+clean skips), test, ASan+UBSan, TSan
+make ci                   # local gate: lint, test, ASan+UBSan, TSan, install, rust seam
 ```
 
 Requirements: CMake >= 3.24, a C17 compiler, and Python >= 3.10. The FFI,
 lint, documentation, and benchmark steps are optional and skip cleanly when
-their tooling is not installed.
+their tooling is not installed. The Rust seam needs cargo; the hosted matrix
+installs it, while `make ci` skips that leg cleanly when cargo is absent.
 
 ## Layout
 
@@ -33,7 +35,7 @@ their tooling is not installed.
 | `include/sdf/` | Public C ABI (the migration contract) |
 | `src/c/` | Data-plane hot path (C) |
 | `python/sdf/` | Control plane (Python) |
-| `src/rust/` | Phase 4 Rust modules (empty until then) |
+| `src/rust/` | Rust seam crate (full fountain declaration; no functional module yet) |
 | `tests/` | Unit, integration, fuzz, and system tests |
 | `golden_vectors/` | Cross-language ABI conformance vectors |
 | `docs/design/` | Design and planning documents |
@@ -46,20 +48,21 @@ their tooling is not installed.
 | Component | State |
 |---|---|
 | Public C ABI headers | Defined |
-| CMake build | Working (libraries, 10-test suite, benches) |
+| CMake build | Working (libraries, 23-test suite, benches, fuzzers) |
 | Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
 | Packaging | **As-built (Wave 5)**: install + pkg-config + find_package legs in ci; version.h single source of truth |
-| Rust seam | Skeleton crate + cbindgen declaration-diff gate (advisory without cargo; no functional Rust) |
+| Rust seam | **As-built (W6.5)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff, authoritative in CI (`--require`); no functional Rust yet |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
-| Known gaps (owned) | Hosted CI still unexercised (W6.5, the wam L.8 posture); rust-seam advisory until cargo exists (W6.5/W6.8) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
-| Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
+| CI | **W6.5**: 8-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, authoritative rust seam, full fuzz) + nightly p99 gate; actionlint 1.7.12 clean; local mirror green; first hosted run pending a remote |
+| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); no functional Rust yet (W6.8, schedule-gated) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
+| Golden-vector parity gate | Active: **556 comparisons, zero pending** — WM, both fountain arms, ARC §12.3 (W6.2; ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
-| SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
-| Fountain codecs (P2) | **As-built (Wave 3)**: nanorq (RaptorQ) + LT arms behind one ABI, 356 golden comparisons |
+| SHM / CFFI integration | CFFI build wired; SHM bridge live (W6.1 process-pair chain) |
+| Fountain codecs (P2) | **As-built (Wave 3)**: nanorq (RaptorQ) + LT arms behind one ABI; the parity gate now covers 556 comparisons total (W6.2) |
 | FLUID repair (P2) | **As-built (Wave 3)**: budget + gate on the section-4.3 identity, coordinator with mandatory ARQ fallback, three-arm loss ladder green |
 | ARC pacing sidecar (P3) | **As-built (Wave 4)**: ARC-QG core on the paper's analytic fixed point, shadow/live/killed sidecar, deploy gate + armed kill switch, runbook executed as a test |
 | Rust modules | Deferred to phase 4 |

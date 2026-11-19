@@ -245,7 +245,8 @@ ADRs [0001–0009](../adr/).
   to the last seam.
 
   KNOWN GAPS (owned — recorded at the M5 truth-pass; Wave 6 closes
-  the first three; the last two are environment-blocked by design):
+  all five; one external evidence line remains — the first hosted run,
+  which needs a remote this environment does not have):
   1. live scrape endpoint  — CLOSED by W6.1 (8942d34..b029aec): the
                              K.1b endpoint behind
                              SDF_METRICS_ENDPOINT serves the proxy
@@ -263,12 +264,59 @@ ADRs [0001–0009](../adr/).
                              driver) closed it live — 16 published
                              versions, v16 acquired, 28 slots,
                              7 heartbeat ticks, scrape green.
-  4. hosted CI             — ci.yml is a placeholder; no runner ever
-                             executed it; lint/cargo legs advisory
-                             (the wam L.8 posture). -> W6.5
-  5. Rust seam             — skeleton-only BY DESIGN; the declaration
-                             diff is advisory until cargo exists in
-                             CI. -> W6.5, then W6.8
+  4. hosted CI             — CLOSED for implementation by W6.5
+                             (07a7a18, e5141e2, cbc5bd9): the
+                             placeholder is an 8-job matrix (style/
+                             tidy, gcc+clang, sanitizers, e2e,
+                             bench gate, install, authoritative
+                             rust seam, full fuzz) plus the nightly
+                             p99 gate; actionlint 1.7.12 clean and
+                             every leg locally mirrored green. The
+                             one remaining evidence item is the
+                             FIRST HOSTED RUN itself: this repo has
+                             no remote, so no runner can be
+                             dispatched from here. Not a code gap.
+  5. Rust seam             — CLOSED by W6.5 (9599843): cargo 1.100
+                             ran the declaration diff for the first
+                             time and found a real divergence (8 of
+                             15 functions, c_void handles, uintptr_t/
+                             int32_t, cbindgen tag style). The crate
+                             now declares 15 functions / 5 typedefs
+                             / 2 structs / 1 enum; the checker is a
+                             parsed surface with a selftest; CI runs
+                             --require (missing cargo is a failure).
+
+  W6.5 hosted CI matrix      : done — implementation-complete; the
+                                FIRST HOSTED RUN is the one external
+                                evidence line (no remote in this
+                                environment). ci.yml: 8 jobs — style
+                                (clang-format 23.1.5 + clang-tidy
+                                23.1.4, both pinned; format check +
+                                analyzer gate), build-and-test on
+                                gcc AND clang, ASan+UBSan + TSan, the
+                                four e2e harnesses, the seeded-spray
+                                bench gate, the W5.2 install leg, the
+                                rust seam with --require, and the
+                                full fuzz budgets. bench.yml: the
+                                design-00 §11.3 nightly gate (p99 >
+                                5% vs the 7-day median; first two
+                                nights skip, min 3 samples), with
+                                offline selftests for the history
+                                fetch + gate. The seam found a real
+                                divergence on its first real run;
+                                the skeleton now declares the full
+                                ABI and the line-based checker was
+                                replaced by a parsed surface (the
+                                old one false-failed on wrapped
+                                prototypes). Latent lint debt paid:
+                                5 C analyzer findings, 6 ruff, 13
+                                strict-mypy errors. Local evidence:
+                                make ci green with ruff/mypy/cargo
+                                on PATH — 23/23 x {default,
+                                ASan+UBSan, TSan} + install + seam;
+                                e2e x4; bench 5.0/5.8 cyc/dec (gate
+                                30); fuzz 200k/200k/100k in 0.3 s;
+                                actionlint 1.7.12 clean.
 
   W6.2 ARC goldens extracted  : done — gen_goldens_arc drives the
                                 public ABI on the real clock and
@@ -1000,7 +1048,7 @@ Sequencing (leverage first):
 ```text
 W6.1 (scrape + telemetry chain)   <- closes gaps 1+3, highest value
 W6.2 (ARC goldens)                <- cheap, finishes the parity story
-W6.5 (hosted CI matrix)           <- unblocks W6.8, makes legs real
+W6.5 (hosted CI matrix)           <- DONE (cbc5bd9): legs real + wired
    |- W6.3 (multi-block)          <- parallel-safe after W6.1
    |- W6.4 (CFFI surface)         <- parallel-safe
 W6.6 (v1.0 release)              <- after the above land
@@ -1189,10 +1237,14 @@ upstream — migrating the adapter adds no proof).
 
 ### Milestone M6
 
-Reached when W6.1 + W6.2 + W6.5 land: **the production chain closed
-end to end** — scrape live, telemetry driving a live proxy, the
-goldens complete, the hosted matrix green with every advisory leg
-real. W6.6 (the release) is the natural follow-on.
+Implementation-complete at W6.1 + W6.2 + W6.5: **the production chain
+closed end to end** — scrape live, telemetry driving a live proxy, the
+goldens complete, the matrix wired with every advisory leg real and
+locally mirrored green (including the rust seam). The milestone's one
+remaining evidence line is the first hosted run itself: no remote is
+configured in this environment, so a runner cannot be dispatched from
+here. Reported as implementation-complete, not as a fabricated hosted
+run. W6.6 (the release) is the natural follow-on.
 
 
 *End of document.*
