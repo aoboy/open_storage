@@ -1,2 +1,15 @@
 language = "C"
 include_guard = "SDF_GENERATED_H"
+
+# Emit the C header's shapes, not cbindgen's defaults: anonymous-style
+# typedefs (style = "type"), size_t (not uintptr_t), and the public
+# typedef names the ABI uses. Without these the declaration diff is all
+# spelling, not seam.
+style = "type"
+usize_is_size_t = true
+
+[export]
+# The codec enum is part of the public surface even though no function
+# takes it by type (fe_cfg_t.codec is a uint32_t, per the C header).
+include = ["sdf_fountain_codec_t"]
+rename = { "FeCfg" = "fe_cfg_t", "FdCfg" = "fd_cfg_t" }

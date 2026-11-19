@@ -1,14 +1,23 @@
-// sdf-fountain — the Rust seam skeleton (plan prompt W5.3, ADR-0003).
+// sdf-fountain — the Rust seam skeleton (plan prompt W5.3/W6.5, ADR-0003).
 //
-// NO functional Rust yet: this crate exists to validate the C ABI seam
-// per ADR-0003's migration order (fountain first). `cargo build` runs
-// cbindgen over the extern declarations below and emits the header that
-// `scripts/test_rust_seam.sh` diffs against `include/sdf/fountain.h`.
-// An empty diff proves the C header and the Rust view of it agree; any
-// intentional delta must ride an ADR that bumps golden_vectors
-// (ADR-0001's process). The build.rs invokes cbindgen with
-// bindings/cbindgen.toml.
+// The crate declares the COMPLETE public fountain ABI v2 so cbindgen's
+// header diff is a real seam check: every exported typedef, enum,
+// constant and function in include/sdf/fountain.h must appear here with
+// the same name and ABI shape. `cargo build` runs cbindgen over these
+// declarations and emits sdf_fountain_generated.h;
+// scripts/test_rust_seam.sh compares the declaration surfaces. An empty
+// diff proves the C header and the Rust view agree; any intentional
+// delta must ride an ADR that bumps golden_vectors (ADR-0001).
+//
+// Only the pure-compute entry points will be implemented by the Rust
+// module; the rest stay C-owned until their migration lands. A
+// declaration without a definition is the correct seam skeleton.
 
+#![allow(non_camel_case_types)]
+
+use std::os::raw::c_int;
+
+/// Encoder configuration (one block). Layout mirrors `fe_cfg_t`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FeCfg {
@@ -18,6 +27,7 @@ pub struct FeCfg {
     pub codec: u32,
 }
 
+/// Decoder configuration (one block). Layout mirrors `fd_cfg_t`.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct FdCfg {
@@ -25,31 +35,59 @@ pub struct FdCfg {
     pub sym_len: usize,
 }
 
-pub const SDF_FOUNTAIN_LT: u32 = 0;
-pub const SDF_FOUNTAIN_NANORQ: u32 = 1;
+/// Codec arms behind one ABI (ADR-0004).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub enum sdf_fountain_codec_t {
+    SDF_FOUNTAIN_LT = 0,
+    SDF_FOUNTAIN_NANORQ = 1,
+}
 
-// The admissible surface ADR-0003 names (order: fountain first). Only
-// the pure-compute entry points the Rust module would reimplement are
-// declared; telemetry/lifecycle stay C-owned until a module ships.
+// Opaque handles (the C header forward-declares these). The zero-length
+// body is a cbindgen device; consumers only ever see the pointer.
+#[repr(C)]
+pub struct fountain_enc {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+pub struct fountain_dec {
+    _private: [u8; 0],
+}
+
+pub type fountain_enc_t = fountain_enc;
+pub type fountain_dec_t = fountain_dec;
+
 extern "C" {
     pub fn fe_sizeof(cfg: *const FeCfg) -> usize;
     pub fn fd_sizeof(cfg: *const FdCfg) -> usize;
-    pub fn fe_symbol_count(e: *const std::ffi::c_void) -> u32;
-    pub fn fe_generate(
-        e: *mut std::ffi::c_void,
-        esi: u32,
-        out: *mut u8,
-        out_len: usize,
-    ) -> i32;
+
+    pub fn fe_init_in(e: *mut fountain_enc_t, cfg: *const FeCfg, block: *const u8) -> c_int;
+    pub fn fd_init_in(d: *mut fountain_dec_t, cfg: *const FdCfg) -> c_int;
+    pub fn fe_init(
+        e: *mut fountain_enc_t,
+        block: *const u8,
+        block_len: usize,
+        k: u32,
+        overhead_pct: u32,
+    ) -> c_int;
+    pub fn fd_init(d: *mut fountain_dec_t, k: u32, sym_len: usize) -> c_int;
+
+    pub fn fe_symbol_count(e: *const fountain_enc_t) -> u32;
+    pub fn fe_generate(e: *mut fountain_enc_t, esi: u32, out: *mut u8, out_len: usize) -> c_int;
     pub fn fd_push(
-        d: *mut std::ffi::c_void,
+        d: *mut fountain_dec_t,
         esi: u32,
         sym: *const u8,
         len: usize,
-    ) -> i32;
-    pub fn fd_ready(d: *const std::ffi::c_void) -> bool;
-    pub fn fd_rank(d: *const std::ffi::c_void) -> u32;
-    pub fn fd_decode(d: *mut std::ffi::c_void, out: *mut u8, block_len: usize) -> i32;
+    ) -> c_int;
+    pub fn fd_ready(d: *const fountain_dec_t) -> bool;
+    pub fn fd_init_codec(d: *mut fountain_dec_t, cfg: *const FdCfg, codec: u32) -> c_int;
+    pub fn fd_rank(d: *const fountain_dec_t) -> u32;
+    pub fn fd_decode(d: *mut fountain_dec_t, out: *mut u8, block_len: usize) -> c_int;
+
+    pub fn fe_destroy(e: *mut fountain_enc_t);
+    pub fn fd_destroy(d: *mut fountain_dec_t);
 }
 
 #[cfg(test)]
@@ -58,7 +96,7 @@ mod tests {
     // this unit test just pins the enum values to the C header's.
     #[test]
     fn codec_enums_match_the_c_header() {
-        assert_eq!(super::SDF_FOUNTAIN_LT, 0);
-        assert_eq!(super::SDF_FOUNTAIN_NANORQ, 1);
+        assert_eq!(super::sdf_fountain_codec_t::SDF_FOUNTAIN_LT as i32, 0);
+        assert_eq!(super::sdf_fountain_codec_t::SDF_FOUNTAIN_NANORQ as i32, 1);
     }
 }
