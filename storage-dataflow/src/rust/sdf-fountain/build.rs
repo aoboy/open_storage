@@ -7,8 +7,7 @@ fn main() {
         .join("../../..")
         .join("bindings")
         .join("cbindgen.toml");
-    let config = cbindgen::Config::from_file(&cfg)
-        .unwrap_or_else(|_| cbindgen::Config::default());
+    let config = cbindgen::Config::from_file(&cfg).unwrap_or_else(|_| cbindgen::Config::default());
     cbindgen::Builder::new()
         .with_crate(&crate_dir)
         .with_config(config)

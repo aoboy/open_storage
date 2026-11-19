@@ -9,13 +9,15 @@
 // diff proves the C header and the Rust view agree; any intentional
 // delta must ride an ADR that bumps golden_vectors (ADR-0001).
 //
-// Only the pure-compute entry points will be implemented by the Rust
-// module; the rest stay C-owned until their migration lands. A
-// declaration without a definition is the correct seam skeleton.
+// W6.8 implements the internal LT arm in lt.rs. The public fe_*/fd_*
+// declarations below remain C-owned definitions; nanorq stays in C too.
 
 #![allow(non_camel_case_types)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 use std::os::raw::c_int;
+
+mod lt;
 
 /// Encoder configuration (one block). Layout mirrors `fe_cfg_t`.
 #[repr(C)]
@@ -75,12 +77,7 @@ extern "C" {
 
     pub fn fe_symbol_count(e: *const fountain_enc_t) -> u32;
     pub fn fe_generate(e: *mut fountain_enc_t, esi: u32, out: *mut u8, out_len: usize) -> c_int;
-    pub fn fd_push(
-        d: *mut fountain_dec_t,
-        esi: u32,
-        sym: *const u8,
-        len: usize,
-    ) -> c_int;
+    pub fn fd_push(d: *mut fountain_dec_t, esi: u32, sym: *const u8, len: usize) -> c_int;
     pub fn fd_ready(d: *const fountain_dec_t) -> bool;
     pub fn fd_init_codec(d: *mut fountain_dec_t, cfg: *const FdCfg, codec: u32) -> c_int;
     pub fn fd_rank(d: *const fountain_dec_t) -> u32;

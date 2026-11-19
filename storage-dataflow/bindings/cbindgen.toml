@@ -13,3 +13,13 @@ usize_is_size_t = true
 # takes it by type (fe_cfg_t.codec is a uint32_t, per the C header).
 include = ["sdf_fountain_codec_t"]
 rename = { "FeCfg" = "fe_cfg_t", "FdCfg" = "fd_cfg_t" }
+
+# W6.8's no_mangle exports are the INTERNAL arm behind fe_*/fd_*, not new
+# public declarations. Keeping them out of the generated public header makes
+# the pre-existing 15-function ABI diff authoritative for the Rust build too.
+exclude = [
+  "lt_prng_next",
+  "lt_enc_sizeof", "lt_dec_sizeof", "lt_enc_init", "lt_dec_init",
+  "lt_symbol_count", "lt_generate", "lt_push", "lt_ready", "lt_rank",
+  "lt_decode", "lt_enc_destroy", "lt_dec_destroy",
+]

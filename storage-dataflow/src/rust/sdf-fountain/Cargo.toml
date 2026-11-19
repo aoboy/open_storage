@@ -3,8 +3,18 @@ name = "sdf-fountain"
 version = "1.0.0"
 edition = "2021"
 build = "build.rs"
-description = "Rust seam skeleton for the sdf fountain ABI (no functional module yet)"
+description = "Rust LT fountain arm behind the unchanged sdf C ABI (W6.8)"
 publish = false
+
+[lib]
+# rlib for cargo test; staticlib for the opt-in CMake implementation swap.
+crate-type = ["rlib", "staticlib"]
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
 
 [build-dependencies]
 # pinned per the plan's vendoring discipline
