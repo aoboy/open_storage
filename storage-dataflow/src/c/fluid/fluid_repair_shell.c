@@ -12,10 +12,16 @@
 
 #include "sdf/fluid_repair.h"
 
+#include "sdf/common/metrics_endpoint.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+static int repair_render(void *ud, FILE *out) {
+    return sdf_fluid_repair_render_metrics(out, ud);
+}
 
 int main(int argc, char **argv) {
     sdf_fluid_repair_cfg_t cfg;
@@ -50,7 +56,8 @@ int main(int argc, char **argv) {
             fprintf(stderr,
                     "usage: %s [--arm control|lt|nanorq] [--eps E] "
                     "[--loss PCT] [--k K] [--sym T] [--blocks N] "
-                    "[--wave W]\n",
+                    "[--wave W]\n"
+                    "  SDF_METRICS_ENDPOINT=host:port serves the live scrape\n",
                     argv[0]);
             return 2;
         }
@@ -93,7 +100,22 @@ int main(int argc, char **argv) {
     }
 
     sdf_fluid_repair_stats_t st;
-    if (sdf_fluid_repair_run(&cfg, &st) != 0) {
+    memset(&st, 0, sizeof(st));
+    st.arm = (uint32_t)cfg.arm;
+    st.eps = cfg.arm == SDF_REPAIR_CONTROL ? 0.0 : cfg.eps;
+    sdf_metrics_endpoint_t *ep = NULL;
+    const char *mep = getenv("SDF_METRICS_ENDPOINT");
+    if (mep != NULL && mep[0] != '\0') {
+        ep = sdf_metrics_endpoint_start(mep, repair_render, &st);
+        if (ep == NULL) {
+            return 1;
+        }
+    }
+    int run_rc = sdf_fluid_repair_run(&cfg, &st);
+    if (ep != NULL) {
+        sdf_metrics_endpoint_stop(ep);
+    }
+    if (run_rc != 0) {
         return 1;
     }
 

@@ -10,7 +10,9 @@ from __future__ import annotations
 import time
 
 import pytest
+from prometheus_client import generate_latest
 
+from sdf.common.metrics import SdfMetrics
 from sdf.control.arc_deploy import (
     ArcDeployConfig,
     ArcDeployLoop,
@@ -251,6 +253,24 @@ def test_operator_kill_switch():
     assert sc.flips[-1] == "killed"
     rec = loop.step()
     assert rec["action"] == "killed-idle"
+
+
+def test_deploy_loop_exports_mode_and_liveness():
+    sc = StubSidecar()
+    metrics = SdfMetrics()
+    loop = ArcDeployLoop(sc, metrics=metrics)
+    loop.start()
+    sc.serve_shadow()
+    assert loop.step()["action"] == "hold-shadow"
+    body = generate_latest(metrics.registry).decode()
+    assert 'sdf_arc_deploy_mode{mode="shadow"} 1.0' in body
+    assert "sdf_arc_deploy_steps_total 1.0" in body
+    assert 'sdf_control_loop_missed_intervals{loop="arc"} 0.0' in body
+    loop.kill()
+    assert (
+        'sdf_arc_deploy_mode{mode="killed"} 1.0'
+        in generate_latest(metrics.registry).decode()
+    )
 
 
 def test_unarmed_step_refuses():

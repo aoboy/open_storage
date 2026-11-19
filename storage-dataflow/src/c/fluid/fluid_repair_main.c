@@ -321,6 +321,8 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
 
     memset(out, 0, sizeof(*out));
     out->n_blocks = nblocks;
+    out->arm = (uint32_t)cfg->arm;
+    out->eps = cfg->arm == SDF_REPAIR_CONTROL ? 0.0 : cfg->eps;
     uint64_t t0 = sdf_now_ns();
     uint32_t count = stream_symbols(cfg);
     uint64_t per_block_bytes = (uint64_t)count * cfg->sym_len;
@@ -504,6 +506,9 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
                     blocks[b].rounds++;
                 }
             }
+            if (admitted > 0) {
+                sdf_histogram_observe(&out->round_size, admitted);
+            }
 
             if (wait_quiet(&o, cfg->n_origins) != 0) {
                 break;
@@ -618,5 +623,45 @@ done:
         o.ops->close(&o);
     }
     out->wall_ns = sdf_now_ns() - t0;
+    sdf_histogram_observe(&out->repair_duration_ns, out->wall_ns);
     return rc;
+}
+
+int sdf_fluid_repair_render_metrics(FILE *out, const sdf_fluid_repair_stats_t *stats) {
+    if (out == NULL || stats == NULL) {
+        return -EINVAL;
+    }
+    static const char *const arms[] = {"control", "lt", "nanorq"};
+    if (stats->arm >= 3) {
+        return -EINVAL;
+    }
+    const char *arm = arms[stats->arm];
+    const char *codec = stats->arm == SDF_REPAIR_CONTROL
+                            ? "arq"
+                            : (stats->arm == SDF_REPAIR_NANORQ ? "nanorq" : "lt");
+    char labels[96];
+    snprintf(labels, sizeof(labels), "arm=\"%s\",class=\"default\"", arm);
+
+    fprintf(out, "sdf_fluid_repair_bytes_total{%s,kind=\"sent\"} %llu\n", labels,
+            (unsigned long long)stats->bytes_tx);
+    fprintf(out, "sdf_fluid_repair_bytes_total{%s,kind=\"useful\"} %llu\n", labels,
+            (unsigned long long)stats->bytes_rx);
+    fprintf(out, "sdf_fluid_rounds_total{%s} %llu\n", labels, (unsigned long long)stats->rounds);
+    fprintf(out, "sdf_fluid_arq_fallback_total{%s} %d\n", labels, stats->arq_fallback ? 1 : 0);
+    fprintf(out, "sdf_fluid_eps{%s} %.17g\n", labels, stats->eps);
+    fprintf(out, "sdf_fluid_decode_rank{%s} %u\n", labels, stats->decode_rank);
+    fprintf(out, "sdf_fluid_codec{codec=\"%s\"} 1\n", codec);
+    fprintf(out, "sdf_fluid_repair_ok{%s} %d\n", labels, stats->ok ? 1 : 0);
+
+    fprintf(out, "# TYPE sdf_fluid_repair_duration_seconds histogram\n");
+    if (sdf_histogram_render(out, "sdf_fluid_repair_duration_seconds", labels,
+                             &stats->repair_duration_ns, 1e-9) != 0) {
+        return -EINVAL;
+    }
+    fprintf(out, "# TYPE sdf_fluid_repair_round_size histogram\n");
+    if (sdf_histogram_render(out, "sdf_fluid_repair_round_size", labels, &stats->round_size, 1.0) !=
+        0) {
+        return -EINVAL;
+    }
+    return 0;
 }

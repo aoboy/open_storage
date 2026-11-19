@@ -1,83 +1,103 @@
 {
-  "title": "FLUID repair",
+  "title": "SDF / FLUID repair",
   "uid": "sdf-fluid",
-  "tags": ["sdf", "fluid"],
+  "tags": ["sdf", "fluid", "w6.14"],
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
       "title": "Repair p99 by arm and class",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(fluid_repair_duration_seconds_bucket[5m])) by (le, arm, class))",
-          "legendFormat": "{{arm}} / {{class}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(sdf_fluid_repair_duration_seconds_bucket[5m])) by (le, arm, class))",
+        "legendFormat": "{{arm}} / {{class}}"
+      }]
     },
     {
       "id": 2,
       "type": "timeseries",
       "title": "Bandwidth overhead ratio",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "targets": [
-        {
-          "expr": "sum(rate(fluid_repair_bytes{kind=\"sent\"}[5m])) / sum(rate(fluid_repair_bytes{kind=\"useful\"}[5m]))",
-          "legendFormat": "sent / useful"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{
+        "expr": "sum(rate(sdf_fluid_repair_bytes_total{kind=\"sent\"}[5m])) / sum(rate(sdf_fluid_repair_bytes_total{kind=\"useful\"}[5m]))",
+        "legendFormat": "sent / useful"
+      }]
     },
     {
       "id": 3,
       "type": "timeseries",
-      "title": "ARQ fallback rate",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "targets": [
-        {
-          "expr": "sum(rate(fluid_arq_fallback_total[5m]))",
-          "legendFormat": "fallback/s"
-        }
-      ]
+      "title": "ARQ fallback fraction",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "sum(rate(sdf_fluid_arq_fallback_total[5m])) / sum(rate(sdf_fluid_repair_duration_seconds_count[5m]))",
+        "legendFormat": "fallback / repairs"
+      }]
     },
     {
       "id": 4,
       "type": "timeseries",
-      "title": "Repair rounds",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(fluid_rounds_bucket[5m])) by (le, arm))",
-          "legendFormat": "{{arm}}"
-        }
-      ]
+      "title": "Admit-round batch size p99",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(sdf_fluid_repair_round_size_bucket[5m])) by (le, arm, class))",
+        "legendFormat": "{{arm}} / {{class}}"
+      }]
     },
     {
       "id": 5,
       "type": "timeseries",
       "title": "Decode rank at completion",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(fluid_decode_rank_bucket[5m])) by (le, codec))",
-          "legendFormat": "{{codec}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [{
+        "expr": "sdf_fluid_decode_rank",
+        "legendFormat": "{{arm}} / {{class}}"
+      }]
     },
     {
       "id": 6,
       "type": "stat",
       "title": "Active epsilon by class",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "targets": [
-        {
-          "expr": "fluid_eps",
-          "legendFormat": "{{class}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [{
+        "expr": "sdf_fluid_eps",
+        "legendFormat": "{{arm}} / {{class}}"
+      }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Coordinator rounds",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [{
+        "expr": "sum(rate(sdf_fluid_rounds_total[5m])) by (arm, class)",
+        "legendFormat": "{{arm}} / {{class}}"
+      }]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Active codec",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [{
+        "expr": "sdf_fluid_codec",
+        "legendFormat": "{{codec}}"
+      }]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Byte-exact repair",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "targets": [{
+        "expr": "sdf_fluid_repair_ok",
+        "legendFormat": "{{arm}} / {{class}}"
+      }]
     }
   ]
 }

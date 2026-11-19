@@ -84,6 +84,33 @@ static void base_cfg(sdf_wm_proxy_cfg_t *pc, uint64_t units) {
     }
 }
 
+static char *render_metrics(const sdf_wm_proxy_stats_t *st) {
+    char *body = NULL;
+    size_t len = 0;
+    FILE *out = open_memstream(&body, &len);
+    CHECK(out != NULL);
+    CHECK(sdf_wm_proxy_render_metrics(out, st) == 0);
+    CHECK(fclose(out) == 0);
+    CHECK(body != NULL);
+
+    const char *dir = getenv("SDF_METRICS_FIXTURE_DIR");
+    if (dir != NULL && dir[0] != '\0') {
+        char path[4096];
+        CHECK(snprintf(path, sizeof(path), "%s/wm.prom", dir) > 0);
+        FILE *fixture = fopen(path, "w");
+        CHECK(fixture != NULL);
+        CHECK(fwrite(body, 1, len, fixture) == len);
+        CHECK(fclose(fixture) == 0);
+    }
+    return body;
+}
+
+static uint64_t metric_value(const char *body, const char *series) {
+    const char *p = strstr(body, series);
+    CHECK(p != NULL);
+    return strtoull(p + strlen(series), NULL, 10);
+}
+
 static void test_steady_discrepancy_bound(void) {
     sdf_wm_proxy_cfg_t pc;
     sdf_wm_proxy_stats_t st;
@@ -104,6 +131,31 @@ static void test_steady_discrepancy_bound(void) {
     CHECK(total_ok == 8192);
     CHECK(st.bytes_rx == 8192ull * 4096);
     CHECK(st.dispatch_treatment == 8192 && st.dispatch_control == 0);
+    CHECK(atomic_load(&st.fill_bytes_by_arm[1]) == st.bytes_rx);
+    CHECK(atomic_load(&st.fill_bytes_by_arm[0]) == 0);
+    CHECK(atomic_load(&st.fill_latency_by_arm[1].count) == 8192);
+    CHECK(atomic_load(&st.fill_latency_by_arm[0].count) == 0);
+
+    char *metrics = render_metrics(&st);
+    CHECK(metric_value(metrics, "sdf_wm_fill_duration_seconds_count{arm=\"treatment\"} ") == 8192);
+    CHECK(metric_value(metrics,
+                       "sdf_wm_fill_duration_seconds_bucket{arm=\"treatment\",le=\"+Inf\"} ") ==
+          8192);
+    CHECK(metric_value(metrics, "sdf_wm_fill_duration_seconds_count{arm=\"control\"} ") == 0);
+    CHECK(metric_value(metrics, "sdf_wm_fill_bytes_total{arm=\"treatment\"} ") == st.bytes_rx);
+    CHECK(metric_value(metrics, "sdf_proxy_units_total ") == 8192);
+    const char *sum_series = "sdf_wm_fill_duration_seconds_sum{arm=\"treatment\"} ";
+    const char *sum_at = strstr(metrics, sum_series);
+    CHECK(sum_at != NULL);
+    double exported_ns = strtod(sum_at + strlen(sum_series), NULL) * 1e9;
+    double expected_ns = (double)atomic_load(&st.fill_latency_by_arm[1].sum);
+    double sum_error =
+        exported_ns > expected_ns ? exported_ns - expected_ns : expected_ns - exported_ns;
+    CHECK(sum_error <= expected_ns * 1e-12 + 1e-6);
+    free(metrics);
+    CHECK(sdf_wm_proxy_render_metrics(NULL, &st) != 0);
+    CHECK(sdf_wm_proxy_render_metrics(stdout, NULL) != 0);
+
     /* The controller may legitimately whack on latency noise in the
      * tight loop (found live at 2048 units); the discrepancy assertion
      * only holds on an unchanged profile. */

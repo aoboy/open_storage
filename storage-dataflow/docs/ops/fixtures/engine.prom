@@ -1,0 +1,8 @@
+# HELP engine_apply_p99_seconds Externally exported engine apply p99 in seconds.
+# TYPE engine_apply_p99_seconds gauge
+engine_apply_p99_seconds{pipeline="default",mode="bypass"} 0.010
+engine_apply_p99_seconds{pipeline="default",mode="arc"} 0.0085
+# HELP engine_backpressure_events_total Externally exported cumulative engine backpressure events.
+# TYPE engine_backpressure_events_total counter
+engine_backpressure_events_total{pipeline="default",mode="bypass"} 100
+engine_backpressure_events_total{pipeline="default",mode="arc"} 70

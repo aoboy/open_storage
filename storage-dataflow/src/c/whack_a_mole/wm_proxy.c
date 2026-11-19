@@ -120,11 +120,49 @@ static uint64_t xxhash64(const void *data, size_t len) {
 
 /* ---- run state ---------------------------------------------------------- */
 
+#define PROXY_LATENCY_SLOTS 4096u
+
+typedef struct {
+    _Atomic uint32_t used;
+    uint64_t start_ns;
+    uint32_t arm;
+} proxy_latency_slot_t;
+
 typedef struct {
     _Atomic uint64_t ok[WM_MAX_PATHS];
     _Atomic uint64_t failed[WM_MAX_PATHS];
     _Atomic uint64_t bytes_rx;
+    sdf_wm_proxy_stats_t *stats;
+    proxy_latency_slot_t latency[PROXY_LATENCY_SLOTS];
 } proxy_cb_state_t;
+
+/* The origin seam copies the complete request, including its padding word.
+ * The proxy uses that word as a private slot cookie; no public layout or
+ * driver contract changes, and callback lookup is O(1) without a mutex. */
+static int proxy_latency_acquire(proxy_cb_state_t *st, uint64_t cursor, uint32_t arm,
+                                 sdf_fetch_req_t *req) {
+    for (uint32_t n = 0; n < PROXY_LATENCY_SLOTS; n++) {
+        uint32_t idx = (uint32_t)((cursor + n) % PROXY_LATENCY_SLOTS);
+        uint32_t expected = 0;
+        if (!atomic_compare_exchange_weak_explicit(&st->latency[idx].used, &expected, 1,
+                                                   memory_order_acquire, memory_order_relaxed)) {
+            continue;
+        }
+        st->latency[idx].start_ns = sdf_now_ns();
+        st->latency[idx].arm = arm;
+        atomic_store_explicit(&st->latency[idx].used, 2, memory_order_release);
+        req->_pad = idx + 1;
+        return 0;
+    }
+    return -EAGAIN;
+}
+
+static void proxy_latency_release(proxy_cb_state_t *st, uint32_t cookie) {
+    if (cookie == 0 || cookie > PROXY_LATENCY_SLOTS) {
+        return;
+    }
+    atomic_store_explicit(&st->latency[cookie - 1].used, 0, memory_order_release);
+}
 
 static void proxy_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
                      int status) {
@@ -135,6 +173,22 @@ static void proxy_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, u
         atomic_fetch_add_explicit(&st->bytes_rx, len, memory_order_relaxed);
     } else {
         atomic_fetch_add_explicit(&st->failed[req->origin_id], 1, memory_order_relaxed);
+    }
+
+    uint32_t cookie = req->_pad;
+    if (cookie > 0 && cookie <= PROXY_LATENCY_SLOTS) {
+        proxy_latency_slot_t *slot = &st->latency[cookie - 1];
+        if (atomic_load_explicit(&slot->used, memory_order_acquire) == 2) {
+            uint64_t now = sdf_now_ns();
+            uint64_t elapsed = now > slot->start_ns ? now - slot->start_ns : 0;
+            uint32_t arm = slot->arm < 2 ? slot->arm : 0;
+            sdf_histogram_observe(&st->stats->fill_latency_by_arm[arm], elapsed);
+            if (status == 0) {
+                atomic_fetch_add_explicit(&st->stats->fill_bytes_by_arm[arm], len,
+                                          memory_order_relaxed);
+            }
+            atomic_store_explicit(&slot->used, 0, memory_order_release);
+        }
     }
 }
 
@@ -169,6 +223,8 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     }
 
     memset(out, 0, sizeof(*out));
+    out->n_origins = n_origins;
+    out->kill_switch = cfg->kill_switch ? 1u : 0u;
 
     sdf_origin_t o = {.ops = sdf_loopback_ops(), .impl = NULL};
     if (o.ops->open(&o, cfg->origins, n_origins) != 0) {
@@ -177,6 +233,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
 
     proxy_cb_state_t cbst;
     memset(&cbst, 0, sizeof(cbst));
+    cbst.stats = out;
 
     /* base profile -> working compiled form (treatment arm) */
     wm_profile_t work = cfg->profile;
@@ -332,14 +389,20 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         req.len = cfg->unit_bytes;
 
         uint64_t before = dispatched;
+        uint32_t arm = treatment ? 1u : 0u;
         int rc;
         do {
-            rc = o.ops->fetch(&o, &req, proxy_cb, &cbst);
+            rc = proxy_latency_acquire(&cbst, dispatched, arm, &req);
+            if (rc == 0) {
+                rc = o.ops->fetch(&o, &req, proxy_cb, &cbst);
+            }
             if (rc == -EAGAIN) {
+                proxy_latency_release(&cbst, req._pad);
                 sdf_sleep_ns(100000);
             }
         } while (rc == -EAGAIN);
         if (rc != 0) {
+            proxy_latency_release(&cbst, req._pad);
             /* -ENOLINK lands here: the drain contract keeps counts */
             sdf_counter_inc(&out->enolink[origin]);
         }
@@ -348,6 +411,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
             sdf_sleep_ns(cfg->dispatch_pace_ns);
         }
         out->dispatched[origin]++;
+        out->dispatch_by_arm[arm][origin]++;
         timeline_apply(cfg, &o, before, dispatched);
     }
 
@@ -371,6 +435,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         out->failed[i] = atomic_load_explicit(&cbst.failed[i], memory_order_relaxed);
     }
     out->bytes_rx = atomic_load_explicit(&cbst.bytes_rx, memory_order_relaxed);
+    out->end_profile_m = work.m;
     for (uint32_t i = 0; i < n_origins; i++) {
         out->end_profile_b[i] = work.b[i];
     }
@@ -380,5 +445,61 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                                  * owns the segment lifecycle */
     }
     o.ops->close(&o);
+    return 0;
+}
+
+int sdf_wm_proxy_render_metrics(FILE *out, const sdf_wm_proxy_stats_t *stats) {
+    if (out == NULL || stats == NULL) {
+        return -EINVAL;
+    }
+    static const char *const arms[2] = {"control", "treatment"};
+    uint32_t n_paths = stats->n_origins < WM_MAX_PATHS ? stats->n_origins : WM_MAX_PATHS;
+    uint64_t total_dispatch = stats->dispatch_treatment + stats->dispatch_control;
+
+    /* W6.1 aliases retained for existing scrape/runbook consumers. */
+    fprintf(out, "sdf_proxy_units_total %llu\n", (unsigned long long)total_dispatch);
+    fprintf(out, "sdf_proxy_control_heartbeat_ticks %llu\n",
+            (unsigned long long)stats->control_ticks);
+    fprintf(out, "sdf_proxy_shm_profile_version %u\n", stats->shm_version_acquired);
+    fprintf(out, "sdf_proxy_shm_telemetry_pushed %llu\n",
+            (unsigned long long)stats->shm_telemetry_pushed);
+    fprintf(out, "sdf_wm_kill_switch %u\n", stats->kill_switch ? 1u : 0u);
+    for (uint32_t i = 0; i < n_paths; i++) {
+        fprintf(out, "sdf_proxy_origin_dispatched{origin=\"%u\"} %llu\n", i,
+                (unsigned long long)stats->dispatched[i]);
+    }
+
+    for (uint32_t arm = 0; arm < 2; arm++) {
+        for (uint32_t path = 0; path < n_paths; path++) {
+            fprintf(out, "sdf_wm_dispatch_total{path=\"%u\",arm=\"%s\"} %llu\n", path, arms[arm],
+                    (unsigned long long)stats->dispatch_by_arm[arm][path]);
+        }
+        uint64_t bytes = atomic_load_explicit(&stats->fill_bytes_by_arm[arm], memory_order_relaxed);
+        fprintf(out, "sdf_wm_fill_bytes_total{arm=\"%s\"} %llu\n", arms[arm],
+                (unsigned long long)bytes);
+    }
+    for (uint32_t path = 0; path < n_paths; path++) {
+        double discrepancy = 0.0;
+        if (stats->end_profile_m != 0) {
+            double expected = (double)total_dispatch * (double)stats->end_profile_b[path] /
+                              (double)stats->end_profile_m;
+            discrepancy = (double)stats->dispatched[path] - expected;
+        }
+        fprintf(out, "sdf_wm_discrepancy{path=\"%u\"} %.17g\n", path, discrepancy);
+        fprintf(out, "sdf_wm_shed_events_total{path=\"%u\"} %llu\n", path,
+                (unsigned long long)sdf_counter_read(&stats->shed_events[path]));
+        fprintf(out, "sdf_wm_enolink_total{path=\"%u\"} %llu\n", path,
+                (unsigned long long)sdf_counter_read(&stats->enolink[path]));
+    }
+
+    fprintf(out, "# TYPE sdf_wm_fill_duration_seconds histogram\n");
+    for (uint32_t arm = 0; arm < 2; arm++) {
+        char labels[32];
+        snprintf(labels, sizeof(labels), "arm=\"%s\"", arms[arm]);
+        if (sdf_histogram_render(out, "sdf_wm_fill_duration_seconds", labels,
+                                 &stats->fill_latency_by_arm[arm], 1e-9) != 0) {
+            return -EINVAL;
+        }
+    }
     return 0;
 }

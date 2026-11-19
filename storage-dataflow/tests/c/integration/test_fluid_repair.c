@@ -13,6 +13,7 @@
 
 #include "sdf/fluid_repair.h"
 
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -74,6 +75,33 @@ static void base_cfg(sdf_fluid_repair_cfg_t *cfg, sdf_repair_arm_t arm, double e
         memcpy(cfg->origins[i].dst, g_path[i], plen);
         cfg->origins[i].max_inflight = 64;
     }
+}
+
+static char *render_metrics(const sdf_fluid_repair_stats_t *st) {
+    char *body = NULL;
+    size_t len = 0;
+    FILE *out = open_memstream(&body, &len);
+    CHECK(out != NULL);
+    CHECK(sdf_fluid_repair_render_metrics(out, st) == 0);
+    CHECK(fclose(out) == 0);
+    CHECK(body != NULL);
+
+    const char *dir = getenv("SDF_METRICS_FIXTURE_DIR");
+    if (dir != NULL && dir[0] != '\0') {
+        char path[4096];
+        CHECK(snprintf(path, sizeof(path), "%s/fluid.prom", dir) > 0);
+        FILE *fixture = fopen(path, "w");
+        CHECK(fixture != NULL);
+        CHECK(fwrite(body, 1, len, fixture) == len);
+        CHECK(fclose(fixture) == 0);
+    }
+    return body;
+}
+
+static uint64_t metric_value(const char *body, const char *series) {
+    const char *p = strstr(body, series);
+    CHECK(p != NULL);
+    return strtoull(p + strlen(series), NULL, 10);
 }
 
 static void test_control_arm(void) {
@@ -150,6 +178,38 @@ static void test_multi_block_checkpoint(void) {
     CHECK(received == st.received);
     CHECK(st.rounds >= 2);
     CHECK(rounds >= st.rounds); /* blocks share the coordinator rounds */
+
+    char *metrics = render_metrics(&st);
+    CHECK(metric_value(
+              metrics,
+              "sdf_fluid_repair_duration_seconds_count{arm=\"nanorq\",class=\"default\"} ") == 1);
+    CHECK(metric_value(metrics, "sdf_fluid_repair_duration_seconds_bucket{arm=\"nanorq\",class="
+                                "\"default\",le=\"+Inf\"} ") == 1);
+    CHECK(metric_value(metrics,
+                       "sdf_fluid_repair_round_size_count{arm=\"nanorq\",class=\"default\"} ") >=
+          2);
+    CHECK(metric_value(metrics,
+                       "sdf_fluid_repair_round_size_sum{arm=\"nanorq\",class=\"default\"} ") > 0);
+    CHECK(metric_value(
+              metrics,
+              "sdf_fluid_repair_bytes_total{arm=\"nanorq\",class=\"default\",kind=\"sent\"} ") ==
+          st.bytes_tx);
+    const char *sum_series =
+        "sdf_fluid_repair_duration_seconds_sum{arm=\"nanorq\",class=\"default\"} ";
+    const char *sum_at = strstr(metrics, sum_series);
+    CHECK(sum_at != NULL);
+    double exported_ns = strtod(sum_at + strlen(sum_series), NULL) * 1e9;
+    double expected_ns = (double)st.wall_ns;
+    double sum_error =
+        exported_ns > expected_ns ? exported_ns - expected_ns : expected_ns - exported_ns;
+    CHECK(sum_error <= expected_ns * 1e-12 + 1e-6);
+    free(metrics);
+    CHECK(sdf_fluid_repair_render_metrics(NULL, &st) != 0);
+    CHECK(sdf_fluid_repair_render_metrics(stdout, NULL) != 0);
+    sdf_fluid_repair_stats_t invalid = st;
+    invalid.arm = 99;
+    CHECK(sdf_fluid_repair_render_metrics(stdout, &invalid) == -EINVAL);
+
     printf("  multi-block: blocks=%u sent=%llu received=%llu rounds=%llu "
            "block_rounds=%llu,%llu,%llu,%llu ok=%d\n",
            st.n_blocks, (unsigned long long)st.sent, (unsigned long long)st.received,

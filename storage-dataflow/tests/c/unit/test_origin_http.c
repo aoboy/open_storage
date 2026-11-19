@@ -232,6 +232,8 @@ typedef struct {
     _Atomic uint64_t bytes_ok;
 } tally_t;
 static tally_t g_t;
+static _Atomic int g_callback_entered;
+static _Atomic int g_callback_release;
 
 static void reset_tally(void) {
     memset(&g_t, 0, sizeof(g_t));
@@ -268,6 +270,16 @@ static void cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_
         fprintf(stderr, "FAIL: unexpected cb status %d\n", status);
         exit(1);
     }
+}
+
+static void blocking_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
+                        int status) {
+    atomic_store_explicit(&g_callback_entered, 1, memory_order_release);
+    while (!atomic_load_explicit(&g_callback_release, memory_order_acquire)) {
+        struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000};
+        nanosleep(&ts, NULL);
+    }
+    cb(ud, req, out, len, status);
 }
 
 static void wait_quiet(sdf_origin_t *o, uint32_t n) {
@@ -373,6 +385,39 @@ static void test_fetch_and_stats(void) {
     CHECK(o.impl == NULL);
 }
 
+static void test_inflight_covers_callback(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+    atomic_store_explicit(&g_callback_entered, 0, memory_order_relaxed);
+    atomic_store_explicit(&g_callback_release, 0, memory_order_relaxed);
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 0, .len = 32};
+    CHECK(o.ops->fetch(&o, &req, blocking_cb, NULL) == 0);
+    for (int i = 0; i < 2000 && !atomic_load_explicit(&g_callback_entered, memory_order_acquire);
+         i++) {
+        struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000};
+        nanosleep(&ts, NULL);
+    }
+    CHECK(atomic_load_explicit(&g_callback_entered, memory_order_acquire) == 1);
+
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.in_flight == 1); /* the callback is part of completion */
+
+    atomic_store_explicit(&g_callback_release, 1, memory_order_release);
+    wait_quiet(&o, 1);
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.in_flight == 0);
+    CHECK(atomic_load(&g_t.ok) == 1);
+    o.ops->close(&o);
+}
+
 static void test_timeout_and_refused(void) {
     /* blackhole server: accept, never respond */
     test_srv_t bh;
@@ -467,6 +512,7 @@ int main(void) {
     srv_start(&g_srv, srv_main);
     test_open_validation();
     test_fetch_and_stats();
+    test_inflight_covers_callback();
     test_timeout_and_refused();
     test_drain_and_close_flush();
     srv_stop(&g_srv);

@@ -1,6 +1,6 @@
 # Observability, Config, and CI
 
-**Status:** Metric inventory and gates defined; dashboards are placeholders.
+**Status:** W6.14 schema, executable metrics, dashboards, and alert rules implemented; local gate green.
 **Related:** [Overview §11](00-overview.md#11-observability-config-ci).
 
 ## Principles
@@ -9,44 +9,104 @@
 - No high-cardinality labels on the hot path. Path IDs, classes, and arms are
   bounded sets.
 - Control-plane metrics are exported by Python; data-plane metrics are
-  lock-free counters and log-linear histograms read through shared memory.
+  lock-free counters and log-linear histograms.
 - Alerts page only on user-visible symptoms, not on internal churn.
+- A dashboard never implies a signal that the exporter does not own. External
+  engine inputs have a separate, explicit contract.
+
+## Naming and schema contract
+
+All locally emitted series use the `sdf_` prefix. The historical names in the
+design tables below are reconciled to the actual scrape names in this section.
+Existing `sdf_proxy_*`, `sdf_arc_D_ns`, `sdf_arc_E_ns`, and the existing
+`sdf_arc_shadow_*` series remain compatibility aliases; they are not removed
+by this schema change.
+
+The Python control plane owns `sdf_wm_control_*`, `sdf_arc_deploy_*`, and
+`sdf_control_loop_missed_intervals`. The C data plane owns the WM, FLUID, and
+ARC families listed below.
+
+### Prometheus histogram contract
+
+Every owned latency or batch metric is one Prometheus cumulative histogram
+family. Its exposition contains `_bucket`, `_sum`, and `_count` samples, with
+`le="+Inf"` present exactly once per label set.
+
+The C histogram has 32 storage buckets:
+
+| Storage bucket | Inclusive values | Exported finite `le` |
+|---|---|---|
+| 0 | 0..1 | 1 |
+| i, 1..30 | 2^i..2^(i+1)-1 | 2^(i+1)-1 |
+| 31 | 2^31 and above | `+Inf` only |
+
+The finite bucket samples are cumulative and monotonically non-decreasing.
+`le="+Inf"` equals the exact observation count. `_count` is exact. `_sum` is
+the exact integer sum scaled into the exported unit: nanoseconds for the ARC
+histograms and seconds for WM/FLUID latency (`1e-9` scale). Tests compare
+scaled sums within their numeric tolerance.
+
+### Bounded labels
+
+| Label | Domain | Owner |
+|---|---|---|
+| `path`, `origin` | Decimal path ID 0..63 | WM |
+| `arm` | `control`, `treatment` (WM); `control`, `lt`, `nanorq` (FLUID) | WM/FLUID |
+| `class` | `default` in this release | FLUID |
+| `kind` | `sent`, `useful` | FLUID |
+| `codec` | `arq`, `lt`, `nanorq` | FLUID |
+| `reason` | `ring_full`, `invalid_input`, `engine` | ARC |
+| `mode` on `sdf_arc_deploy_mode` | `shadow`, `live`, `killed` | Python |
+| `mode` on engine series | `bypass`, `arc` | external engine exporter |
+| `pipeline` | Deployment-configured bounded pipeline names | external engine exporter |
+| `loop` | `wm`, `fluid`, `arc` | Python liveness |
+
+Object IDs, byte offsets, URLs, file paths, and unbounded error strings are
+never labels.
 
 ## Metric inventory
 
 ### Whack-a-Mole
 
-| Metric | Type | Meaning |
+| Actual series | Type | Meaning |
 |---|---|---|
-| `wm_dispatch_total{path,arm}` | counter | Units dispatched per path and arm |
-| `wm_discrepancy{path}` | gauge | Actual minus target allocation, in units |
-| `wm_fill_duration_seconds{arm}` | histogram | End-to-end fill latency |
-| `wm_fill_bytes_total` | counter | Bytes fetched; must stay neutral |
-| `wm_shed_events_total{path}` | counter | Soft-shedding decisions |
+| `sdf_wm_dispatch_total{path,arm}` | counter | Units dispatched per path and arm |
+| `sdf_wm_discrepancy{path}` | gauge | Actual minus target allocation, in units |
+| `sdf_wm_fill_duration_seconds{arm}` | histogram | Dispatch-to-completion fill latency |
+| `sdf_wm_fill_bytes_total{arm}` | counter | Bytes fetched; must stay neutral |
+| `sdf_wm_shed_events_total{path}` | counter | Soft-shedding decisions |
+| `sdf_wm_enolink_total{path}` | counter | Submissions refused by a drained origin |
+| `sdf_wm_kill_switch` | gauge | 1 when the proxy forces the control arm |
 
 ### FLUID
 
-| Metric | Type | Meaning |
+| Actual series | Type | Meaning |
 |---|---|---|
-| `fluid_repair_duration_seconds{arm,class}` | histogram | Repair completion latency |
-| `fluid_repair_bytes{sent,useful}` | counter | Bandwidth overhead |
-| `fluid_rounds{arm}` | histogram | Rounds per repair |
-| `fluid_arq_fallback_total` | counter | Gate fired before decode sufficiency |
-| `fluid_eps{class}` | gauge | Active slack parameter |
-| `fluid_decode_rank` | histogram | Rank at completion |
-| `fluid_codec{lt,nanorq}` | counter | Symbols generated/decoded per codec |
+| `sdf_fluid_repair_duration_seconds{arm,class}` | histogram | Repair completion latency |
+| `sdf_fluid_repair_round_size{arm,class}` | histogram | Symbols admitted per non-empty round |
+| `sdf_fluid_repair_bytes_total{arm,class,kind}` | counter | Bytes sent and useful bytes received |
+| `sdf_fluid_rounds_total{arm,class}` | counter | Coordinator admit rounds |
+| `sdf_fluid_arq_fallback_total{arm,class}` | counter | Gate fired before decode sufficiency |
+| `sdf_fluid_eps{arm,class}` | gauge | Active slack parameter |
+| `sdf_fluid_decode_rank{arm,class}` | gauge | Rank at completion |
+| `sdf_fluid_codec{codec}` | gauge | Active codec identity (1) |
+| `sdf_fluid_repair_ok{arm,class}` | gauge | Byte-exact repair result (1/0) |
 
 ### ARC
 
-| Metric | Type | Meaning |
+| Actual series | Type | Meaning |
 |---|---|---|
-| `arc_offset_ns` | gauge | Current release offset |
-| `arc_heap_depth` | gauge | Queued entries awaiting release |
-| `arc_release_batch_size` | histogram | Entries per apply batch |
-| `arc_added_latency_ns` | histogram | Pacer-added delay |
-| `arc_dropped_total` | counter | Entries dropped; must be zero |
-| `engine_apply_p99_seconds` | gauge | Engine apply tail latency |
-| `engine_backpressure_events_total` | counter | Leader backpressure events |
+| `sdf_arc_D_ns`, `sdf_arc_E_ns` | gauge | Adaptive offset and quantized offset |
+| `sdf_arc_heap_depth` | gauge | Queued entries awaiting release |
+| `sdf_arc_release_batch_size` | histogram | Entries per apply batch |
+| `sdf_arc_live_added_latency_ns` | histogram | Added latency on the live apply path |
+| `sdf_arc_shadow_added_latency_ns` | histogram | Added latency of the non-applying shadow schedule |
+| `sdf_arc_accepted_total` | counter | Entries accepted into the sidecar's input ring |
+| `sdf_arc_caller_refused_total{reason="ring_full"}` | counter | Caller retains ownership after a full ring |
+| `sdf_arc_dropped_total{reason}` | counter | Invalid input or engine rejection after acceptance |
+| `sdf_arc_kill_switch` | gauge | 1 in the killed/oracle mode |
+| `sdf_arc_releases_total` | counter | Pacer releases |
+| `sdf_arc_guard_waits_total` | counter | Ordered-release guard waits |
 
 True shadow (W6.10) publishes separate `sdf_arc_shadow_*` series for the
 non-applying QG schedule releases/samples, immediate shadow applies,
@@ -54,6 +114,47 @@ scheduled backlog, epoch, record count, and schedule added-latency
 percentiles. The shadow schedule and immediate paths are distinct evidence
 and must not be summed as one apply count; promotion uses the shadow epoch
 plus the non-vacuity checks in design 03.
+
+The W6.9 accepted-entry contract is explicit: an entry accepted by the input
+ring is retained if the pacer refuses it. Such internal backpressure is not
+a drop and does not increment `sdf_arc_dropped_total`. Only an invalid input
+rejected before acceptance (`reason="invalid_input"`) or an engine rejection
+of an already accepted entry (`reason="engine"`) is a drop.
+
+### Python control plane
+
+| Actual series | Type | Meaning |
+|---|---|---|
+| `sdf_wm_control_steps_total` | counter | Completed WM control intervals |
+| `sdf_wm_control_version` | gauge | Last published profile version |
+| `sdf_wm_control_units{path}` | gauge | Published units per bounded path |
+| `sdf_wm_control_fresh_paths` | gauge | Paths with fresh telemetry |
+| `sdf_wm_control_down_mask` | gauge | C fast-path down mask |
+| `sdf_arc_deploy_steps_total` | counter | Completed ARC deployment intervals |
+| `sdf_arc_deploy_mode{mode}` | gauge | Exactly one active ARC deployment mode |
+| `sdf_arc_shadow_elapsed_seconds` | gauge | Current shadow epoch elapsed time |
+| `sdf_control_loop_missed_intervals{loop}` | gauge | Whole heartbeat intervals missed |
+
+`SdfMetrics` owns a private Prometheus registry, so independent controllers
+and tests cannot collide on metric registration. `LivenessMonitor` samples
+whole missed intervals from monotonic time: warning at two, page at ten.
+
+### External engine input contract
+
+The ARC sidecar does not own storage-engine apply latency or leader
+backpressure. The external exporter contract requires:
+
+| Series | Type | Required labels | Unit/semantics |
+|---|---|---|---|
+| `engine_apply_p99_seconds` | gauge | `pipeline`, `mode` | Latest engine apply p99 in seconds |
+| `engine_backpressure_events_total` | counter | `pipeline`, `mode` | Monotonic cumulative backpressure events |
+
+`mode` is `bypass` or `arc`; `pipeline` comes from the deployment's bounded
+configured set. The checked-in parser/query fixture is
+`docs/ops/fixtures/engine.prom`. See
+[`docs/ops/external-engine-metrics.md`](../ops/external-engine-metrics.md).
+An absent external exporter leaves those panels empty; it is not a zero
+measurement and never substitutes for locally owned evidence.
 
 ## SLOs and alert thresholds
 
@@ -63,19 +164,30 @@ plus the non-vacuity checks in design 03.
 | Repair p99 vs. ARQ baseline | +0% | +10% |
 | FLUID overhead ratio | > 1.20 | > 1.50 |
 | FLUID ARQ fallback rate | > 2% | > 5% |
-| ARC added latency p99 | > 10 ms | > 25 ms |
-| `arc_dropped_total` | any increase | any increase |
+| ARC live added latency p99 | > 10 ms | > 25 ms |
+| `sdf_arc_dropped_total` | any increase | any increase |
 | Control-loop liveness | 2 missed intervals | 10 missed intervals |
+
+`python/sdf/common/alerts.py` is the executable source for these thresholds.
+Regenerate `docs/ops/alerts/sdf-alerts.yml` from the storage-dataflow root with
+`PYTHONPATH=python python3 -m sdf.common.alerts`; threshold tests cover every
+warning/page boundary, including an ARC drop. Regression and latency
+boundaries use strict `>`; missed-interval boundaries use `>=`.
 
 ## Dashboards
 
-`docs/ops/dashboards/{wm,fluid,arc}.json` contain placeholder Grafana
-definitions. Each dashboard should show:
+`docs/ops/dashboards/{wm,fluid,arc}.json` are importable Grafana JSON with
+stable UIDs `sdf-wm`, `sdf-fluid`, and `sdf-arc`. They show:
 
-- The experiment arm split and rollout percentage.
+- The experiment arm split and rollout traffic.
 - The primary success metric and its baseline.
-- The guardrail metrics (bytes, errors, fallback rate, added latency).
-- A kill-switch state panel.
+- Guardrail metrics (bytes, errors, fallback rate, added latency).
+- Kill-switch state where the component owns it.
+- Separate ARC shadow-schedule and live/immediate apply behavior.
+
+Local tests resolve every query's metric references against C-generated scrape
+bodies and the checked-in external engine fixture. This is local query
+validation, not a hosted Grafana import and not hosted evidence.
 
 ## Configuration
 
@@ -94,6 +206,9 @@ at zero until the relevant gate is signed off.
 4. Python unit tests, ruff, mypy.
 5. Integration via docker-compose (once system tests are implemented).
 6. CFFI build and golden-vector conformance.
+7. Observability validation: C integration tests write live scrape fixtures,
+   then Python validates dashboard queries, alert inputs, histogram
+   invariants, and bounded labels.
 
 `bench.yml` (nightly): fail if p99 regresses more than 5% against the 7-day
 rolling median. `docs.yml`: build the PDF and fail on broken links.
@@ -112,10 +227,8 @@ version bump.
 
 ## Open work
 
-- Replace dashboard placeholders with exported Grafana JSON.
 - Define the fuzz corpus and seed inputs.
 - Wire the CFFI golden-vector check into `run_tests.sh`.
-
 
 ## Embedding notes (plan prompt W5.2)
 

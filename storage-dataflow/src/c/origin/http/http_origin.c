@@ -139,7 +139,6 @@ static void complete(http_origin_t *og, const http_job_t *j, const uint8_t *out,
     uint64_t now = sdf_now_ns();
     double lat = (double)(now - j->submit_ns);
 
-    atomic_fetch_sub_explicit(&og->in_flight, 1, memory_order_relaxed);
     if (status == 0) {
         atomic_fetch_add_explicit(&og->reqs_done, 1, memory_order_relaxed);
         atomic_fetch_add_explicit(&og->bytes_rx, len, memory_order_relaxed);
@@ -154,6 +153,11 @@ static void complete(http_origin_t *og, const http_job_t *j, const uint8_t *out,
                           err_e + HTTP_EWMA_GAIN * ((status == 0 ? 0.0 : 1.0) - err_e),
                           memory_order_relaxed);
     j->cb(j->ud, &j->req, out, len, status);
+
+    /* in_flight covers the whole completion, including the callback.
+     * A waiter that observes zero therefore knows the callback has
+     * returned and its observable completion effects are visible. */
+    atomic_fetch_sub_explicit(&og->in_flight, 1, memory_order_release);
 }
 
 /* Connect og->sock (or leave -1). Returns 0 / -errno. */
@@ -491,12 +495,13 @@ static int http_stats(sdf_origin_t *o, uint32_t origin_id, sdf_origin_stats_t *s
     memset(st, 0, sizeof(*st));
     st->id = og->cfg.id;
     st->cls = og->cfg.cls;
+    /* Acquire the completion boundary before reading its counters. */
+    st->in_flight = atomic_load_explicit(&og->in_flight, memory_order_acquire);
     st->reqs_out = atomic_load(&og->reqs_out);
     st->reqs_done = atomic_load(&og->reqs_done);
     st->reqs_failed = atomic_load(&og->reqs_failed);
     st->bytes_tx = atomic_load(&og->bytes_tx);
     st->bytes_rx = atomic_load(&og->bytes_rx);
-    st->in_flight = atomic_load(&og->in_flight);
     st->ewma_lat_ns = atomic_load(&og->ewma_lat_ns);
     st->ewma_err = atomic_load(&og->ewma_err);
     st->hard_down = atomic_load(&og->hard_down);

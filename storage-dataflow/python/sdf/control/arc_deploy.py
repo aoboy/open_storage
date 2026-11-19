@@ -22,7 +22,10 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from sdf.common.metrics import SdfMetrics
 
 
 class ArcMode(str, Enum):
@@ -184,11 +187,26 @@ class ArcDeployLoop:
     """One control interval per step(); the operator surface is the
     decision record, the transport applies the flips."""
 
-    def __init__(self, transport: SidecarTransport, config: ArcDeployConfig | None = None) -> None:
+    def __init__(
+        self,
+        transport: SidecarTransport,
+        config: ArcDeployConfig | None = None,
+        *,
+        metrics: SdfMetrics | None = None,
+    ) -> None:
         self.transport = transport
         self.config = config or ArcDeployConfig()
+        self.metrics = metrics
         self.state = ArcDeployState()
         self._started = False
+
+    def _record_step(self) -> None:
+        if self.metrics is not None:
+            self.metrics.record_arc_step(
+                mode=self.state.mode.value,
+                shadow_elapsed_s=self.state.shadow_elapsed_s,
+                interval_s=self.config.poll_interval_s,
+            )
 
     def _shadow_evidence(self, stats: dict[str, int], now_ns: int) -> tuple[bool, str]:
         """Classify shadow evidence for the promotion gate (W6.10).
@@ -241,6 +259,8 @@ class ArcDeployLoop:
             shadow_started_ns=time.monotonic_ns(),
         )
         self.transport.set_mode(ArcMode.SHADOW)
+        if self.metrics is not None:
+            self.metrics.record_arc_mode(ArcMode.SHADOW.value)
         self._started = True
         return self.state
 
@@ -288,6 +308,7 @@ class ArcDeployLoop:
                 record["action"] = "promote"
             else:
                 record["action"] = "hold-shadow"
+            self._record_step()
             return record
 
         if self.state.mode == ArcMode.LIVE:
@@ -304,14 +325,18 @@ class ArcDeployLoop:
                     record["action"] = "breach-recommend-kill"
             else:
                 record["action"] = "hold-live"
+            self._record_step()
             return record
 
         record["action"] = "killed-idle"
+        self._record_step()
         return record
 
     def kill(self) -> ArcMode:
         """The operator kill switch: flip to killed immediately."""
         self.state.mode = ArcMode.KILLED
         self.transport.set_mode(ArcMode.KILLED)
+        if self.metrics is not None:
+            self.metrics.record_arc_mode(ArcMode.KILLED.value)
         self.state.recommendations.append("operator kill switch")
         return self.state.mode

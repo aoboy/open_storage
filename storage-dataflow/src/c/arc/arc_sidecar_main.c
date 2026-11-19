@@ -21,6 +21,7 @@
 
 #include "arc_internal.h"
 
+#include "sdf/common/metrics.h"
 #include "sdf/common/metrics_endpoint.h"
 #include "sdf/common/ring.h"
 #include "sdf/common/timer.h"
@@ -65,6 +66,17 @@ typedef struct {
     size_t shadow_added_pos;
     size_t shadow_added_n;
     uint64_t shadow_budget_ns;
+
+    /* W6.14: accepted-entry accounting. Caller-refused entries stay
+     * caller-owned and are never counted as drops; invalid offers and
+     * engine rejections are distinct drop reasons. */
+    sdf_counter_t submit_accepted;
+    sdf_counter_t submit_caller_refused;
+    sdf_counter_t submit_invalid;
+    sdf_counter_t submit_engine;
+    sdf_histogram_t release_batch;
+    sdf_histogram_t live_added_latency;
+    sdf_histogram_t shadow_added_latency;
 } sidecar_t;
 
 static sidecar_t g_sidecar;
@@ -86,6 +98,7 @@ static void shadow_enter_epoch(void) {
     g_sidecar.shadow_record_count = 0;
     g_sidecar.shadow_added_pos = 0;
     g_sidecar.shadow_added_n = 0;
+    sdf_histogram_reset(&g_sidecar.shadow_added_latency);
 }
 
 static void shadow_add_record(const arc_sched_t *sched) {
@@ -131,6 +144,7 @@ static void shadow_note_schedule_release(const arc_rel_t *rel, uint64_t now_ns) 
     }
 
     uint64_t added = now_ns > rel->A_n ? now_ns - rel->A_n : 0;
+    sdf_histogram_observe(&g_sidecar.shadow_added_latency, added);
     if (g_sidecar.shadow_added_n < SIDECAR_SHADOW_RES) {
         g_sidecar.shadow_added[g_sidecar.shadow_added_n++] = added;
     } else {
@@ -169,6 +183,12 @@ static int apply_trampoline(void *ctx, const void *entry, size_t len, uint64_t r
         }
         return 0;
     }
+    if (g_sidecar.applied_mode == 1 && g_sidecar.pacer != NULL &&
+        g_sidecar.pacer->st.last_release_valid) {
+        uint64_t a_n = g_sidecar.pacer->st.last_release.A_n;
+        uint64_t added = release_ts > a_n ? release_ts - a_n : 0;
+        sdf_histogram_observe(&g_sidecar.live_added_latency, added);
+    }
     g_sidecar.applied++;
     return 0;
 }
@@ -193,6 +213,9 @@ static int sidecar_submit_one(const sidecar_slot_t *slot) {
         return -EAGAIN;
     }
     if (rc != 0 && rc != 1) {
+        /* The ring already accepted this entry, so an engine rejection
+         * is a real sidecar drop rather than caller backpressure. */
+        sdf_counter_inc(&g_sidecar.submit_engine);
         return rc;
     }
     if (g_sidecar.applied_mode == 0) {
@@ -232,6 +255,12 @@ static int sidecar_ingest(void) {
     return accepted;
 }
 
+static void note_release_batch(int released) {
+    if (released > 0) {
+        sdf_histogram_observe(&g_sidecar.release_batch, (uint64_t)released);
+    }
+}
+
 static void sidecar_poll_all(void) {
     uint64_t now = sdf_now_ns();
     arc_flush_ready(&g_sidecar.pacer->st, now);
@@ -239,7 +268,9 @@ static void sidecar_poll_all(void) {
         if (g_sidecar.pacer == NULL || g_sidecar.pacer->st.heap_n == 0) {
             break;
         }
-        if (arc_poll(g_sidecar.pacer, now) <= 0) {
+        int released = arc_poll(g_sidecar.pacer, now);
+        note_release_batch(released);
+        if (released <= 0) {
             break;
         }
     }
@@ -346,10 +377,11 @@ int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
  * stalling recovery).
  */
 int arc_sidecar_submit(const void *entry, size_t len, uint64_t producer_ts) {
-    if (!atomic_load(&g_sidecar.running) || (entry == NULL && len > 0)) {
+    if (!atomic_load(&g_sidecar.running)) {
         return -EINVAL;
     }
-    if (len > g_sidecar.entry_max || len > SIDECAR_SLOT_BYTES) {
+    if ((entry == NULL && len > 0) || len > g_sidecar.entry_max || len > SIDECAR_SLOT_BYTES) {
+        sdf_counter_inc(&g_sidecar.submit_invalid);
         return -EINVAL;
     }
     sidecar_slot_t slot;
@@ -360,8 +392,10 @@ int arc_sidecar_submit(const void *entry, size_t len, uint64_t producer_ts) {
         memcpy(slot.bytes, entry, len);
     }
     if (!spsc_try_push(g_sidecar.in, &slot)) {
+        sdf_counter_inc(&g_sidecar.submit_caller_refused);
         return -EAGAIN;
     }
+    sdf_counter_inc(&g_sidecar.submit_accepted);
     return 0;
 }
 
@@ -376,12 +410,14 @@ int arc_sidecar_pump_once(void) {
 
     int submitted = sidecar_ingest();
     int released = arc_poll(g_sidecar.pacer, sdf_now_ns());
+    note_release_batch(released);
 
     /* Killed is the oracle: deliver the whole backlog now, not one
      * batch, and not only the entries whose QG T_n has passed. */
     if (g_sidecar.applied_mode == 2) {
         for (int i = 0; i < 1024 && g_sidecar.pacer->st.heap_n > 0; i++) {
             int n = arc_poll(g_sidecar.pacer, sdf_now_ns());
+            note_release_batch(n);
             released += n;
             if (n == 0) {
                 break;
@@ -485,19 +521,30 @@ uint32_t arc_sidecar_shadow_records(arc_shadow_record_t *out, uint32_t max) {
 
 static sdf_metrics_endpoint_t *g_sidecar_ep;
 
-static int sidecar_render(void *ud, FILE *out) {
-    (void)ud;
-    arc_stats_t st = arc_sidecar_stats();
+int arc_sidecar_render_metrics(FILE *out) {
+    if (out == NULL || !atomic_load(&g_sidecar.running) || g_sidecar.pacer == NULL) {
+        return -EINVAL;
+    }
+    arc_stats_t st = arc_stats(g_sidecar.pacer);
     arc_shadow_stats_t ss;
     memset(&ss, 0, sizeof(ss));
     (void)arc_sidecar_shadow_stats(&ss);
     fprintf(out, "sdf_arc_releases_total %llu\n", (unsigned long long)st.releases);
     fprintf(out, "sdf_arc_mode %d\n", arc_sidecar_mode());
+    fprintf(out, "sdf_arc_kill_switch %d\n", g_sidecar.applied_mode == 2 ? 1 : 0);
     fprintf(out, "sdf_arc_D_ns %.0f\n", st.D);
     fprintf(out, "sdf_arc_E_ns %.0f\n", st.E);
     fprintf(out, "sdf_arc_heap_depth %u\n", st.heap_depth);
     fprintf(out, "sdf_arc_guard_waits_total %llu\n", (unsigned long long)st.guard_waits);
     fprintf(out, "sdf_arc_added_latency_p99_ns %.0f\n", st.added_p99_ns);
+    fprintf(out, "sdf_arc_accepted_total %llu\n",
+            (unsigned long long)sdf_counter_read(&g_sidecar.submit_accepted));
+    fprintf(out, "sdf_arc_caller_refused_total{reason=\"ring_full\"} %llu\n",
+            (unsigned long long)sdf_counter_read(&g_sidecar.submit_caller_refused));
+    fprintf(out, "sdf_arc_dropped_total{reason=\"invalid_input\"} %llu\n",
+            (unsigned long long)sdf_counter_read(&g_sidecar.submit_invalid));
+    fprintf(out, "sdf_arc_dropped_total{reason=\"engine\"} %llu\n",
+            (unsigned long long)sdf_counter_read(&g_sidecar.submit_engine));
     fprintf(out, "sdf_arc_shadow_active %u\n", ss.active);
     fprintf(out, "sdf_arc_shadow_epoch %llu\n", (unsigned long long)ss.epoch);
     fprintf(out, "sdf_arc_shadow_schedule_mode %u\n", ss.schedule_mode);
@@ -514,7 +561,28 @@ static int sidecar_render(void *ud, FILE *out) {
     fprintf(out, "sdf_arc_shadow_added_latency_p50_ns %.0f\n", ss.added_p50_ns);
     fprintf(out, "sdf_arc_shadow_added_latency_p95_ns %.0f\n", ss.added_p95_ns);
     fprintf(out, "sdf_arc_shadow_added_latency_p99_ns %.0f\n", ss.added_p99_ns);
+
+    fprintf(out, "# TYPE sdf_arc_release_batch_size histogram\n");
+    if (sdf_histogram_render(out, "sdf_arc_release_batch_size", NULL, &g_sidecar.release_batch,
+                             1.0) != 0) {
+        return -EINVAL;
+    }
+    fprintf(out, "# TYPE sdf_arc_live_added_latency_ns histogram\n");
+    if (sdf_histogram_render(out, "sdf_arc_live_added_latency_ns", NULL,
+                             &g_sidecar.live_added_latency, 1.0) != 0) {
+        return -EINVAL;
+    }
+    fprintf(out, "# TYPE sdf_arc_shadow_added_latency_ns histogram\n");
+    if (sdf_histogram_render(out, "sdf_arc_shadow_added_latency_ns", NULL,
+                             &g_sidecar.shadow_added_latency, 1.0) != 0) {
+        return -EINVAL;
+    }
     return 0;
+}
+
+static int sidecar_render(void *ud, FILE *out) {
+    (void)ud;
+    return arc_sidecar_render_metrics(out);
 }
 
 int arc_sidecar_serve(const char *addr) {

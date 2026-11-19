@@ -14,7 +14,9 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from prometheus_client import generate_latest
 
+from sdf.common.metrics import SdfMetrics
 from sdf.common.shm import ShmError, WmShm, unlink
 from sdf.control.wm_control import WmControlLoop, SoftSheddingController
 
@@ -136,6 +138,17 @@ def test_heartbeat_advances(segment):
         rec = loop.step()
         assert rec["heartbeat"] == i
         assert loop.last_step_ns is not None
+
+
+def test_control_loop_exports_step_and_liveness(segment):
+    shm, _ = segment
+    metrics = SdfMetrics()
+    loop = WmControlLoop(shm, m=1024, metrics=metrics)
+    rec = loop.step()
+    body = generate_latest(metrics.registry).decode()
+    assert f'sdf_wm_control_units{{path="0"}} {float(rec["units"][0])}' in body
+    assert "sdf_wm_control_steps_total 1.0" in body
+    assert 'sdf_control_loop_missed_intervals{loop="wm"} 0.0' in body
 
 
 def test_telemetry_ring_drains_and_overflows(segment):

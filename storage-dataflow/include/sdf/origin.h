@@ -97,7 +97,7 @@ typedef struct {
     uint64_t reqs_failed; /* failed completions (loss/err/timeout/range) */
     uint64_t bytes_tx;    /* request bytes accounted */
     uint64_t bytes_rx;    /* response bytes accounted */
-    uint64_t in_flight;   /* accepted, not yet completed */
+    uint64_t in_flight;   /* accepted, callback completion still pending */
     double ewma_lat_ns;   /* submit-to-completion EWMA (throttle included) */
     double ewma_err;      /* failed/done EWMA over completions */
     double goodput;       /* bytes_rx / seconds since open */

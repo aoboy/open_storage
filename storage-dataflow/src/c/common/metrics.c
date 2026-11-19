@@ -20,6 +20,8 @@
 
 #include "sdf/common/metrics.h"
 
+#include <errno.h>
+#include <inttypes.h>
 #include <stddef.h>
 
 static void counter_init_impl(sdf_counter_t *c, uint64_t v) {
@@ -91,4 +93,73 @@ void sdf_histogram_reset(sdf_histogram_t *h) {
     for (size_t i = 0; i < SDF_HISTOGRAM_BUCKETS; i++) {
         atomic_store_explicit(&h->buckets[i], 0, memory_order_relaxed);
     }
+}
+
+uint64_t sdf_histogram_bucket_bound(uint32_t index) {
+    if (index >= SDF_HISTOGRAM_BUCKETS) {
+        return UINT64_MAX;
+    }
+    if (index == 0) {
+        return 1;
+    }
+    if (index == SDF_HISTOGRAM_BUCKETS - 1) {
+        return UINT64_MAX; /* the saturation bucket is le="+Inf" */
+    }
+    return ((uint64_t)1 << (index + 1)) - 1;
+}
+
+static void render_labels(FILE *out, const char *labels, int with_le, uint64_t bound) {
+    if (labels != NULL && labels[0] != '\0') {
+        if (with_le) {
+            fprintf(out, "{%s,le=\"%" PRIu64 "\"}", labels, bound);
+        } else {
+            fprintf(out, "{%s}", labels);
+        }
+        return;
+    }
+    if (with_le) {
+        fprintf(out, "{le=\"%" PRIu64 "\"}", bound);
+    }
+}
+
+int sdf_histogram_render(FILE *out, const char *name, const char *labels, const sdf_histogram_t *h,
+                         double scale) {
+    if (out == NULL || name == NULL || name[0] == '\0' || h == NULL) {
+        return -EINVAL;
+    }
+    if (!(scale > 0.0)) {
+        scale = 1.0;
+    }
+
+    uint64_t cumulative = 0;
+    for (uint32_t i = 0; i + 1 < SDF_HISTOGRAM_BUCKETS; i++) {
+        cumulative += atomic_load_explicit(&h->buckets[i], memory_order_relaxed);
+        uint64_t bound = sdf_histogram_bucket_bound(i);
+        fprintf(out, "%s_bucket", name);
+        render_labels(out, labels, 1, bound);
+        fprintf(out, " %" PRIu64 "\n", cumulative);
+    }
+
+    /* Read the exact count after the finite buckets: observers only
+     * increment, so le="+Inf" is never below the cumulative tail. Read
+     * the sum first so a concurrent new observation cannot make the
+     * exported sum exceed the exported count. */
+    uint64_t sum = atomic_load_explicit(&h->sum, memory_order_relaxed);
+    uint64_t count = atomic_load_explicit(&h->count, memory_order_relaxed);
+    fprintf(out, "%s_bucket", name);
+    if (labels != NULL && labels[0] != '\0') {
+        fprintf(out, "{%s,le=\"+Inf\"}", labels);
+    } else {
+        fprintf(out, "{le=\"+Inf\"}");
+    }
+    fprintf(out, " %" PRIu64 "\n", count);
+
+    fprintf(out, "%s_sum", name);
+    render_labels(out, labels, 0, 0);
+    fprintf(out, " %.17g\n", (double)sum * scale);
+
+    fprintf(out, "%s_count", name);
+    render_labels(out, labels, 0, 0);
+    fprintf(out, " %" PRIu64 "\n", count);
+    return 0;
 }

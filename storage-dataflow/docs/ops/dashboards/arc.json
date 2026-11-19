@@ -1,83 +1,127 @@
 {
-  "title": "ARC pacing",
+  "title": "SDF / ARC pacing",
   "uid": "sdf-arc",
-  "tags": ["sdf", "arc"],
+  "tags": ["sdf", "arc", "w6.14"],
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
-      "title": "Release offset",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "title": "Release offset D and quantized E",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
       "targets": [
-        {
-          "expr": "arc_offset_ns",
-          "legendFormat": "{{pipeline}}"
-        }
+        {"expr": "sdf_arc_D_ns", "legendFormat": "D"},
+        {"expr": "sdf_arc_E_ns", "legendFormat": "E"}
       ]
     },
     {
       "id": 2,
       "type": "timeseries",
       "title": "Heap depth",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "targets": [
-        {
-          "expr": "arc_heap_depth",
-          "legendFormat": "{{pipeline}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "sdf_arc_heap_depth", "legendFormat": "entries"}]
     },
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Added latency p99",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(arc_added_latency_ns_bucket[5m])) by (le, pipeline))",
-          "legendFormat": "{{pipeline}}"
-        }
-      ]
+      "title": "Live added-latency p99",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(sdf_arc_live_added_latency_ns_bucket[5m])) by (le))",
+        "legendFormat": "live apply"
+      }]
     },
     {
       "id": 4,
-      "type": "stat",
-      "title": "Dropped entries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "targets": [
-        {
-          "expr": "sum(increase(arc_dropped_total[1h]))",
-          "legendFormat": "dropped / 1h"
-        }
-      ]
+      "type": "timeseries",
+      "title": "Shadow schedule added-latency p99",
+      "description": "Non-applying QG schedule evidence; never summed with immediate applies.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(sdf_arc_shadow_added_latency_ns_bucket[5m])) by (le))",
+        "legendFormat": "shadow schedule"
+      }]
     },
     {
       "id": 5,
       "type": "timeseries",
-      "title": "Engine apply p99",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "title": "Shadow immediate applies vs schedule releases",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
       "targets": [
-        {
-          "expr": "engine_apply_p99_seconds",
-          "legendFormat": "{{pipeline}}"
-        }
+        {"expr": "rate(sdf_arc_shadow_immediate_applies_total[5m])", "legendFormat": "immediate applies"},
+        {"expr": "rate(sdf_arc_shadow_schedule_releases_total[5m])", "legendFormat": "schedule releases"}
       ]
     },
     {
       "id": 6,
       "type": "timeseries",
-      "title": "Backpressure events",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "targets": [
-        {
-          "expr": "sum(rate(engine_backpressure_events_total[5m]))",
-          "legendFormat": "events/s"
-        }
-      ]
+      "title": "Release batch size p99",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(sdf_arc_release_batch_size_bucket[5m])) by (le))",
+        "legendFormat": "entries"
+      }]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Dropped accepted entries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [{
+        "expr": "sum(increase(sdf_arc_dropped_total[1h])) by (reason)",
+        "legendFormat": "{{reason}}"
+      }]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Caller backpressure (not drops)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [{
+        "expr": "sum(rate(sdf_arc_caller_refused_total{reason=\"ring_full\"}[5m]))",
+        "legendFormat": "caller-refused/s"
+      }]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Accepted entries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "targets": [{"expr": "rate(sdf_arc_accepted_total[5m])", "legendFormat": "accepted/s"}]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Kill switch",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "targets": [{"expr": "sdf_arc_kill_switch", "legendFormat": "1 = killed"}]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Engine apply p99 (external exporter)",
+      "description": "Input contract: docs/ops/external-engine-metrics.md; not emitted by the ARC sidecar.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 40},
+      "targets": [{
+        "expr": "engine_apply_p99_seconds",
+        "legendFormat": "{{pipeline}} / {{mode}}"
+      }]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Engine backpressure (external exporter)",
+      "description": "Input contract: docs/ops/external-engine-metrics.md; not emitted by the ARC sidecar.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 40},
+      "targets": [{
+        "expr": "sum(rate(engine_backpressure_events_total[5m])) by (pipeline, mode)",
+        "legendFormat": "{{pipeline}} / {{mode}}"
+      }]
     }
   ]
 }

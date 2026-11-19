@@ -9,6 +9,11 @@ cd "$ROOT"
 # stale binaries against edited sources.
 ./scripts/build.sh
 
+# C integration tests render their real scrape bodies for the Python
+# dashboard/query validator. Keep this inside the ignored build tree.
+export SDF_METRICS_FIXTURE_DIR="$ROOT/build/metrics-fixtures"
+mkdir -p "$SDF_METRICS_FIXTURE_DIR"
+rm -f "$SDF_METRICS_FIXTURE_DIR"/{arc,wm,fluid}.prom
 ctest --test-dir build --output-on-failure
 
 if python3 -c 'import pytest' >/dev/null 2>&1; then

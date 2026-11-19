@@ -11,10 +11,12 @@
 
 #include "sdf/common/metrics.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(x)                                                                                   \
     do {                                                                                           \
@@ -40,6 +42,77 @@ static void test_counter(void) {
     CHECK(sdf_counter_read(NULL) == 0);
     sdf_counter_inc(NULL);
     sdf_counter_add(NULL, 5);
+}
+
+static uint64_t rendered_value(const char *body, const char *line_prefix) {
+    const char *p = strstr(body, line_prefix);
+    CHECK(p != NULL);
+    p += strlen(line_prefix);
+    return strtoull(p, NULL, 10);
+}
+
+static void test_histogram_render(void) {
+    sdf_histogram_t h;
+    sdf_histogram_init(&h);
+    sdf_histogram_observe(&h, 0);
+    sdf_histogram_observe(&h, 1);
+    sdf_histogram_observe(&h, 2);
+    sdf_histogram_observe(&h, 3);
+    sdf_histogram_observe(&h, 4);
+    sdf_histogram_observe(&h, 1024);
+    sdf_histogram_observe(&h, (1ull << 31) + 5);
+    sdf_histogram_observe(&h, 1ull << 40);
+
+    char *body = NULL;
+    size_t len = 0;
+    FILE *out = open_memstream(&body, &len);
+    CHECK(out != NULL);
+    CHECK(sdf_histogram_render(out, "sdf_test_latency_ns", "arm=\"treatment\"", &h, 1.0) == 0);
+    CHECK(fclose(out) == 0);
+    CHECK(body != NULL);
+
+    CHECK(rendered_value(body, "sdf_test_latency_ns_bucket{arm=\"treatment\",le=\"1\"} ") == 2);
+    CHECK(rendered_value(body, "sdf_test_latency_ns_bucket{arm=\"treatment\",le=\"3\"} ") == 4);
+    CHECK(rendered_value(body, "sdf_test_latency_ns_bucket{arm=\"treatment\",le=\"7\"} ") == 5);
+    CHECK(rendered_value(body, "sdf_test_latency_ns_bucket{arm=\"treatment\",le=\"+Inf\"} ") == 8);
+    CHECK(rendered_value(body, "sdf_test_latency_ns_count{arm=\"treatment\"} ") == 8);
+    CHECK(strstr(body, "sdf_test_latency_ns_sum{arm=\"treatment\"} ") != NULL);
+
+    /* cumulative finite buckets are monotone; +Inf is the exact count */
+    uint64_t prev = 0;
+    const char *line = body;
+    while ((line = strstr(line, "sdf_test_latency_ns_bucket{")) != NULL) {
+        const char *v = strchr(line, '}');
+        CHECK(v != NULL);
+        uint64_t cur = strtoull(v + 2, NULL, 10);
+        CHECK(cur >= prev);
+        prev = cur;
+        line = v;
+    }
+    CHECK(prev == 8);
+
+    /* scale converts the stored integer sum (seconds export) */
+    char *scaled = NULL;
+    size_t scaled_len = 0;
+    FILE *sout = open_memstream(&scaled, &scaled_len);
+    CHECK(sout != NULL);
+    CHECK(sdf_histogram_render(sout, "sdf_test_seconds", NULL, &h, 1e-9) == 0);
+    CHECK(fclose(sout) == 0);
+    CHECK(scaled != NULL);
+    CHECK(strstr(scaled, "sdf_test_seconds_bucket{le=\"+Inf\"} 8\n") != NULL);
+    CHECK(strstr(scaled, "sdf_test_seconds_count 8\n") != NULL);
+
+    free(body);
+    free(scaled);
+    CHECK(sdf_histogram_bucket_bound(0) == 1);
+    CHECK(sdf_histogram_bucket_bound(1) == 3);
+    CHECK(sdf_histogram_bucket_bound(30) == ((1ull << 31) - 1));
+    CHECK(sdf_histogram_bucket_bound(31) == UINT64_MAX);
+    CHECK(sdf_histogram_bucket_bound(99) == UINT64_MAX);
+
+    CHECK(sdf_histogram_render(NULL, "x", NULL, &h, 1.0) == -EINVAL);
+    CHECK(sdf_histogram_render(stdout, NULL, NULL, &h, 1.0) == -EINVAL);
+    CHECK(sdf_histogram_render(stdout, "x", NULL, NULL, 1.0) == -EINVAL);
 }
 
 static void test_histogram_buckets(void) {
@@ -127,8 +200,10 @@ static void test_concurrent_observe(void) {
 
 int main(void) {
     test_counter();
+    test_histogram_render();
     test_histogram_buckets();
     test_concurrent_observe();
-    printf("test_metrics: ok (bucket map pinned; 4-thread exact totals)\n");
+    printf("test_metrics: ok (bucket map pinned; cumulative render; "
+           "4-thread exact totals)\n");
     return 0;
 }

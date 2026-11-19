@@ -30,11 +30,13 @@
  * block for b. `n_blocks == 0` or 1 is the legacy single-block job.
  */
 
+#include "sdf/common/metrics.h"
 #include "sdf/fluid.h"
 #include "sdf/origin.h"
 #include "sdf/wm.h"
 
 #include <stdint.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -93,6 +95,13 @@ typedef struct {
     /* W6.3 per-block evidence, valid for indexes < n_blocks. */
     uint32_t n_blocks;
     sdf_fluid_repair_block_stats_t blocks[SDF_REPAIR_MAX_BLOCKS];
+
+    /* W6.14: one repair observation plus each non-empty admit round.
+     * Appended so every pre-W6.14 member keeps its offset. */
+    uint32_t arm;
+    double eps;
+    sdf_histogram_t repair_duration_ns;
+    sdf_histogram_t round_size;
 } sdf_fluid_repair_stats_t;
 
 /*
@@ -102,6 +111,9 @@ typedef struct {
  * block was decoded AND compared against the expected sender block.
  */
 int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_stats_t *out);
+
+/* W6.14: render this job's bounded-label Prometheus metric families. */
+int sdf_fluid_repair_render_metrics(FILE *out, const sdf_fluid_repair_stats_t *stats);
 
 /* Bytes the origin files must hold for the arm's symbol stream
  * (all blocks: n_blocks * per-block stream bytes). */

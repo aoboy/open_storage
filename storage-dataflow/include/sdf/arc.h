@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -216,6 +217,15 @@ uint32_t arc_sidecar_shadow_records(arc_shadow_record_t *out, uint32_t max);
  * endpoint stops with the sidecar or serve_stop()). */
 int arc_sidecar_serve(const char *addr);
 void arc_sidecar_serve_stop(void);
+
+/*
+ * W6.14: render the sidecar's Prometheus text body. Exposed so the
+ * endpoint, tests, and the checked-in dashboard fixtures all exercise
+ * one contract. Returns 0, or -EINVAL on NULL out or a stopped sidecar.
+ * Existing series keep their names; the live/shadow histogram and
+ * drop/backpressure families are additive.
+ */
+int arc_sidecar_render_metrics(FILE *out);
 
 #ifdef __cplusplus
 }

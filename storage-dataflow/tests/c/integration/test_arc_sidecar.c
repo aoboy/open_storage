@@ -40,6 +40,33 @@ static void base_cfg(arc_cfg_t *cfg) {
     cfg->mode = ARC_MODE_QG;
 }
 
+static char *render_metrics(void) {
+    char *body = NULL;
+    size_t len = 0;
+    FILE *out = open_memstream(&body, &len);
+    CHECK(out != NULL);
+    CHECK(arc_sidecar_render_metrics(out) == 0);
+    CHECK(fclose(out) == 0);
+    CHECK(body != NULL);
+
+    const char *dir = getenv("SDF_METRICS_FIXTURE_DIR");
+    if (dir != NULL && dir[0] != '\0') {
+        char path[4096];
+        CHECK(snprintf(path, sizeof(path), "%s/arc.prom", dir) > 0);
+        FILE *fixture = fopen(path, "w");
+        CHECK(fixture != NULL);
+        CHECK(fwrite(body, 1, len, fixture) == len);
+        CHECK(fclose(fixture) == 0);
+    }
+    return body;
+}
+
+static uint64_t metric_value(const char *body, const char *series) {
+    const char *p = strstr(body, series);
+    CHECK(p != NULL);
+    return strtoull(p + strlen(series), NULL, 10);
+}
+
 static void test_modes(void) {
     arc_cfg_t cfg;
     base_cfg(&cfg);
@@ -112,8 +139,15 @@ static void test_validation(void) {
     char big[4096];
     CHECK(arc_sidecar_start(&cfg, 1) == 0);
     CHECK(arc_sidecar_submit(big, sizeof(big), 0) == -EINVAL);
+    char *metrics = render_metrics();
+    CHECK(metric_value(metrics, "sdf_arc_accepted_total ") == 0);
+    CHECK(metric_value(metrics, "sdf_arc_caller_refused_total{reason=\"ring_full\"} ") == 0);
+    CHECK(metric_value(metrics, "sdf_arc_dropped_total{reason=\"invalid_input\"} ") == 1);
+    CHECK(metric_value(metrics, "sdf_arc_dropped_total{reason=\"engine\"} ") == 0);
+    free(metrics);
     arc_sidecar_stop();
     arc_sidecar_stop(); /* double stop safe */
+    CHECK(arc_sidecar_render_metrics(stdout) == -EINVAL);
 }
 
 /* W6.4: mode flips land within one pump interval. A future producer
@@ -215,6 +249,12 @@ static void test_shadow_evidence(void) {
     CHECK(ss.immediate_applies == (uint64_t)N);
     CHECK(arc_sidecar_applied() == (uint64_t)N); /* no late shadow apply */
 
+    char *metrics = render_metrics();
+    CHECK(metric_value(metrics, "sdf_arc_shadow_added_latency_ns_count ") == (uint64_t)N);
+    CHECK(metric_value(metrics, "sdf_arc_live_added_latency_ns_count ") == 0);
+    CHECK(metric_value(metrics, "sdf_arc_accepted_total ") == (uint64_t)N);
+    free(metrics);
+
     n = arc_sidecar_shadow_records(recs, ARC_SHADOW_RECORD_CAP);
     CHECK(n == (uint32_t)N);
     for (int i = 0; i < N; i++) {
@@ -229,6 +269,16 @@ static void test_shadow_evidence(void) {
     CHECK(recs[2].block_n == (uint64_t)(N - 1));
     CHECK(arc_sidecar_shadow_records(NULL, 10) == 0);
     CHECK(arc_sidecar_shadow_records(recs, 0) == 0);
+
+    /* A new shadow epoch resets its schedule-latency histogram with the
+     * other epoch-scoped evidence. */
+    CHECK(arc_sidecar_set_mode(1) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_set_mode(0) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    metrics = render_metrics();
+    CHECK(metric_value(metrics, "sdf_arc_shadow_added_latency_ns_count ") == 0);
+    free(metrics);
 
     arc_sidecar_stop();
     CHECK(arc_sidecar_shadow_stats(&ss) == -EINVAL);
@@ -390,6 +440,18 @@ static void test_saturation_retention(void) {
     CHECK(arc_sidecar_pump_once() >= 0);
     CHECK(arc_sidecar_applied() == 4);
     CHECK(arc_sidecar_stats().releases == 4);
+    char *metrics = render_metrics();
+    CHECK(metric_value(metrics, "sdf_arc_accepted_total ") == 4);
+    CHECK(metric_value(metrics, "sdf_arc_caller_refused_total{reason=\"ring_full\"} ") == 1);
+    CHECK(metric_value(metrics, "sdf_arc_dropped_total{reason=\"invalid_input\"} ") == 0);
+    CHECK(metric_value(metrics, "sdf_arc_dropped_total{reason=\"engine\"} ") == 0);
+    /* The killed oracle is not the live path: its applies must not
+     * contaminate the live added-latency histogram. */
+    CHECK(metric_value(metrics, "sdf_arc_live_added_latency_ns_count ") == 0);
+    CHECK(metric_value(metrics, "sdf_arc_release_batch_size_count ") == 2);
+    CHECK(metric_value(metrics, "sdf_arc_release_batch_size_sum ") == 4);
+    CHECK(metric_value(metrics, "sdf_arc_kill_switch ") == 1);
+    free(metrics);
     arc_sidecar_stop();
     CHECK(arc_sidecar_applied() == 4);
 }
@@ -446,7 +508,7 @@ static void test_scrape(void) {
     CHECK(connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == 0);
     const char *get = "GET /metrics HTTP/1.1\r\nHost: x\r\n\r\n";
     CHECK(send(fd, get, strlen(get), 0) == (ssize_t)strlen(get));
-    static char buf[4096];
+    static char buf[32768];
     size_t got = 0;
     while (got + 1 < sizeof(buf)) {
         ssize_t n = recv(fd, buf + got, sizeof(buf) - 1 - got, 0);
@@ -464,6 +526,13 @@ static void test_scrape(void) {
     CHECK(strstr(buf, "sdf_arc_shadow_active 0") != NULL);
     CHECK(strstr(buf, "sdf_arc_shadow_schedule_mode 0") != NULL);
     CHECK(strstr(buf, "sdf_arc_shadow_added_latency_p99_ns") != NULL);
+    CHECK(strstr(buf, "sdf_arc_live_added_latency_ns_bucket{le=\"+Inf\"} 1") != NULL);
+    CHECK(strstr(buf, "sdf_arc_release_batch_size_count 1") != NULL);
+
+    char *metrics = render_metrics(); /* also writes the optional live fixture */
+    CHECK(metric_value(metrics, "sdf_arc_live_added_latency_ns_count ") == 1);
+    CHECK(metric_value(metrics, "sdf_arc_live_added_latency_ns_bucket{le=\"+Inf\"} ") == 1);
+    free(metrics);
 
     arc_sidecar_stop();                        /* stops the endpoint with the sidecar */
     CHECK(arc_sidecar_serve(addr) == -EINVAL); /* stopped: refuse */

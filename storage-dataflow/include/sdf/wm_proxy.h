@@ -16,6 +16,7 @@
 #include "sdf/wm.h"
 
 #include <stdint.h>
+#include <stdio.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -98,6 +99,15 @@ typedef struct {
     uint64_t shm_acquires;         /* acquire attempts (one per tick) */
     uint64_t shm_telemetry_pushed; /* telemetry slots landed in the ring */
     uint64_t control_ticks;        /* the heartbeat (one per interval) */
+
+    /* W6.14: bounded path/arm series and exact completion observations.
+     * Appended so every pre-W6.14 member keeps its offset. */
+    uint64_t dispatch_by_arm[2][WM_MAX_PATHS]; /* 0 control, 1 treatment */
+    _Atomic uint64_t fill_bytes_by_arm[2];
+    sdf_histogram_t fill_latency_by_arm[2]; /* submit-to-completion ns */
+    uint32_t n_origins;
+    uint32_t kill_switch;
+    uint32_t end_profile_m;
 } sdf_wm_proxy_stats_t;
 
 /*
@@ -106,6 +116,9 @@ typedef struct {
  * driver on open failure.
  */
 int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out);
+
+/* W6.14: render the owned Prometheus families plus the W6.1 aliases. */
+int sdf_wm_proxy_render_metrics(FILE *out, const sdf_wm_proxy_stats_t *stats);
 
 #ifdef __cplusplus
 }

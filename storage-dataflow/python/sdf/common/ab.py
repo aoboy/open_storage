@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 import xxhash
 
 
@@ -13,5 +11,5 @@ def bucket(key: str | bytes, buckets: int = 100) -> int:
         raise ValueError("buckets must be positive")
     if isinstance(key, str):
         key = key.encode("utf-8")
-    digest = cast(int, xxhash.xxh64(key).intdigest())
+    digest = xxhash.xxh64(key).intdigest()
     return digest % buckets

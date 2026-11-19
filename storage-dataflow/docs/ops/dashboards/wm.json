@@ -1,59 +1,93 @@
 {
-  "title": "Whack-a-Mole dispatch",
+  "title": "SDF / Whack-a-Mole dispatch",
   "uid": "sdf-wm",
-  "tags": ["sdf", "wm"],
+  "tags": ["sdf", "wm", "w6.14"],
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
       "title": "Cache-fill p99 by arm",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
-      "targets": [
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(wm_fill_duration_seconds_bucket[5m])) by (le, arm))",
-          "legendFormat": "{{arm}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "histogram_quantile(0.99, sum(rate(sdf_wm_fill_duration_seconds_bucket[5m])) by (le, arm))",
+        "legendFormat": "{{arm}}"
+      }]
     },
     {
       "id": 2,
       "type": "timeseries",
       "title": "Fill bytes rate by arm",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
-      "targets": [
-        {
-          "expr": "sum(rate(wm_fill_bytes_total[5m])) by (arm)",
-          "legendFormat": "{{arm}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{
+        "expr": "sum(rate(sdf_wm_fill_bytes_total[5m])) by (arm)",
+        "legendFormat": "{{arm}}"
+      }]
     },
     {
       "id": 3,
       "type": "timeseries",
-      "title": "Allocation discrepancy by path",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "targets": [
-        {
-          "expr": "max_over_time(wm_discrepancy[5m])",
-          "legendFormat": "path {{path}}"
-        }
-      ]
+      "title": "Dispatch rate by path and arm",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "sum(rate(sdf_wm_dispatch_total[5m])) by (path, arm)",
+        "legendFormat": "path {{path}} / {{arm}}"
+      }]
     },
     {
       "id": 4,
       "type": "timeseries",
+      "title": "Allocation discrepancy by path",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [{
+        "expr": "max_over_time(sdf_wm_discrepancy[5m])",
+        "legendFormat": "path {{path}}"
+      }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
       "title": "Soft-shedding events",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-      "targets": [
-        {
-          "expr": "sum(rate(wm_shed_events_total[5m])) by (path)",
-          "legendFormat": "path {{path}}"
-        }
-      ]
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [{
+        "expr": "sum(rate(sdf_wm_shed_events_total[5m])) by (path)",
+        "legendFormat": "path {{path}}"
+      }]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Experiment arm split",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [{
+        "expr": "sum(rate(sdf_wm_dispatch_total[5m])) by (arm)",
+        "legendFormat": "{{arm}}"
+      }]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Control heartbeat",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [{
+        "expr": "rate(sdf_proxy_control_heartbeat_ticks[5m])",
+        "legendFormat": "ticks/s"
+      }]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Kill switch",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [{
+        "expr": "sdf_wm_kill_switch",
+        "legendFormat": "1 = control only"
+      }]
     }
   ]
 }

@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `3e25194` (W6.9/W6.10); earlier rows cite their landing commits)
+## IMPLEMENTATION STATUS (informative — judgement; as of the W6.14 change set; earlier rows cite their landing commits)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -566,6 +566,42 @@ ADRs [0001–0009](../adr/).
                                 dependent Rust legs were skipped in
                                 this environment. No hosted, performance,
                                 or 24 h soak claim is made (3e25194).
+  W6.14 executable observability: implemented — design 05 now carries the
+                                canonical `sdf_` naming/schema contract,
+                                exact 32-bucket histogram bounds, bounded
+                                label domains, compatibility aliases, and
+                                the external-engine input contract. The C
+                                metric primitive renders cumulative
+                                `_bucket`/`_sum`/`_count` families with
+                                `le="+Inf"`. WM exports per-path/arm
+                                dispatch, fill bytes, kill state, and
+                                exact dispatch-to-completion latency
+                                through a bounded lock-free slot table;
+                                FLUID exports repair latency and admit
+                                round size; ARC exports release batch,
+                                live/shadow added latency, accepted
+                                entries, caller-refused backpressure,
+                                invalid/engine drops, and kill state.
+                                W6.9 saturation keeps the drop counter at
+                                zero while caller refusal is distinct.
+                                Python SdfMetrics owns a private registry,
+                                records WM/ARC control samples, and exports
+                                deterministic 2/10-missed-interval
+                                liveness. The alert specification generates
+                                docs/ops/alerts/sdf-alerts.yml and tests
+                                every warning/page boundary. The three
+                                importable Grafana JSON dashboards resolve
+                                against C-generated scrape fixtures and the
+                                declared external engine fixture. Evidence:
+                                make test green — 23/23 C and 58/58 Python;
+                                the new dashboard/query leg is 11/11. Local
+                                make ci is green: 23/23 C tests in default,
+                                ASan+UBSan, and TSan; 58/58 Python; ruff and
+                                mypy clean; install and Debian legs green.
+                                The cargo-dependent Rust legs skipped in
+                                this environment. Local query validation is
+                                not a hosted Grafana import; no hosted,
+                                performance, or 24 h evidence is claimed.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
@@ -1270,7 +1306,7 @@ W6.8 (Rust LT)                   <- DONE (77e0292, 568c30c, 180f025);
 W6.7 (S3/peer)                   <- existing; endpoint/stand-in gated
 W6.9 (ARC entry retention)       <- DONE (this change set)
    |- W6.10 (true ARC shadow)     <- DONE (this change set)
-   |    └─ W6.14 (observability)  <- real shadow/drop/histogram semantics
+   |    └─ W6.14 (observability)  <- DONE (this change set)
    └─ W6.12 (measurement gates)   <- benchmark the corrected ARC
 W6.11 (hosted + conformance)     <- NEXT; external runner; expanded corpus
    |- W6.12 -> W6.13 (LT decision) <- evidence review, not automatic cutover
@@ -1706,7 +1742,7 @@ decision grounded in hosted correctness and same-runner performance evidence.
 
 ### PROMPT W6.14 — Executable metrics, dashboards, alerts, and Python export
 
-**Status:** proposed.
+**Status:** implemented — local gate green; no hosted Grafana or hosted CI claim.
 
 **Objective:** reconcile the documented metric inventory, actual C/Python
 series, and dashboard queries so every rollout guardrail is backed by an

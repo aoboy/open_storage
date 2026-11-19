@@ -8,8 +8,12 @@ from __future__ import annotations
 import statistics
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sdf.common.shm import TelemetrySlot, WmShm
+
+if TYPE_CHECKING:
+    from sdf.common.metrics import SdfMetrics
 
 
 @dataclass
@@ -84,9 +88,7 @@ class SoftSheddingController:
         self.beta = beta
         self.units = renormalize([m // n] * n, m)
 
-    def step_with_opinions(
-        self, opinions: list[tuple[int, int, float, float] | None]
-    ) -> list[int]:
+    def step_with_opinions(self, opinions: list[tuple[int, int, float, float] | None]) -> list[int]:
         """Soft shedding over per-path opinions.
 
         ``opinions[i]`` is ``(sent, acked, ewma_lat_ns, ewma_err)`` or
@@ -138,8 +140,6 @@ class SoftSheddingController:
         return self.units
 
 
-
-
 # ---- W2.4: the live control loop (plan prompt, design 01) --------------
 
 
@@ -156,13 +156,20 @@ class WmControlLoop:
     advance every step.
     """
 
-    def __init__(self, shm: WmShm, m: int = 1024, alpha: float = 0.25,
-                 beta: float = 0.02) -> None:
+    def __init__(
+        self,
+        shm: WmShm,
+        m: int = 1024,
+        alpha: float = 0.25,
+        beta: float = 0.02,
+        *,
+        metrics: SdfMetrics | None = None,
+    ) -> None:
         n = shm.n_paths
         self.shm = shm
+        self.metrics = metrics
         self.n = n
-        self.controller = SoftSheddingController(n, m=m, alpha=alpha,
-                                                 beta=beta)
+        self.controller = SoftSheddingController(n, m=m, alpha=alpha, beta=beta)
         self.version = 0
         self.heartbeat = 0
         self.last_step_ns: int | None = None
@@ -175,8 +182,17 @@ class WmControlLoop:
         # latest snapshot per path; absent => no opinion
         latest: dict[int, tuple[int, int, float, float]] = {}
         for slot in slots:
-            (pid, _pad, reqs_out, reqs_done, _reqs_failed, _bytes,
-             _inflight, ewma_lat, ewma_err) = slot
+            (
+                pid,
+                _pad,
+                reqs_out,
+                reqs_done,
+                _reqs_failed,
+                _bytes,
+                _inflight,
+                ewma_lat,
+                ewma_err,
+            ) = slot
             latest[pid] = (reqs_out, reqs_done, ewma_lat, ewma_err)
 
         # C hard-down deference: a masked path carries no opinion this
@@ -196,6 +212,13 @@ class WmControlLoop:
         self.heartbeat += 1
         self.last_step_ns = time.monotonic_ns()
         self.shm.publish(self.version, self.controller.m, self.n, units)
+        if self.metrics is not None:
+            self.metrics.record_wm_step(
+                version=self.version,
+                units=units,
+                down_mask=mask,
+                fresh_paths=len(latest),
+            )
         return {
             "version": self.version,
             "units": units,
