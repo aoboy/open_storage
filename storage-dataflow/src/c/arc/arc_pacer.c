@@ -228,3 +228,16 @@ void arc_set_rtt(arc_pacer_t *p, uint64_t rtt_sm_ns) {
         return;
     p->st.rtt_sm_ns = rtt_sm_ns;
 }
+
+int arc_set_mode(arc_pacer_t *p, arc_mode_t mode) {
+    if (p == NULL)
+        return -EINVAL;
+    if (mode != ARC_MODE_BASE && mode != ARC_MODE_Q && mode != ARC_MODE_QG &&
+        mode != ARC_MODE_IMMEDIATE)
+        return -EINVAL;
+    /* The mode is read by the next submit/poll on the pacer's thread;
+     * callers that own the pacer (the sidecar pump) serialize the
+     * flip, so no extra synchronization is needed here. */
+    p->st.mode = mode;
+    return 0;
+}

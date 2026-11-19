@@ -16,13 +16,22 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class ArcMode(str, Enum):
     SHADOW = "shadow"
     LIVE = "live"
     KILLED = "killed"
+
+
+# The C sidecar's ABI mode codes (arc.h / design 03). CFFI users pass
+# these integers, not the Python enum.
+_MODE_CODE: dict[ArcMode, int] = {
+    ArcMode.SHADOW: 0,
+    ArcMode.LIVE: 1,
+    ArcMode.KILLED: 2,
+}
 
 
 class SidecarTransport(Protocol):
@@ -33,6 +42,94 @@ class SidecarTransport(Protocol):
 
     def set_mode(self, mode: ArcMode) -> None:
         ...
+
+
+class CffiSidecarTransport:
+    """The real transport: the C ARC sidecar driven through CFFI (W6.4).
+
+    One sidecar per process (the C side is a singleton). ``pump()`` is
+    the sidecar's poll interval: requested mode flips land there, which
+    is design 03's "within one poll interval" contract, and entering
+    killed drains the pacer backlog in that same pump.
+
+    ``stats()`` maps ``arc_stats_t`` onto the controller's vocabulary;
+    ``budget_alerts`` is the pacer's cumulative alert count.
+    Use as a context manager or call ``close()``.
+    """
+
+    def __init__(
+        self,
+        *,
+        capacity: int = 256,
+        entry_max: int = 248,
+        batch_max: int = 64,
+        batch_deadline_ns: int = 2_000_000,
+        budget_ns: int = 0,
+        mode: ArcMode = ArcMode.SHADOW,
+    ) -> None:
+        try:
+            from sdf_cffi import ffi, lib
+        except ImportError as exc:  # pragma: no cover - build-state dependent
+            raise RuntimeError(
+                "CFFI extension unavailable; run ./scripts/build.sh first"
+            ) from exc
+        self.ffi: Any = ffi
+        self.lib: Any = lib
+        cfg = ffi.new("arc_cfg_t *")
+        cfg.capacity = capacity
+        cfg.entry_max = entry_max
+        cfg.batch_max = batch_max
+        cfg.batch_deadline_ns = batch_deadline_ns
+        cfg.budget_ns = budget_ns
+        cfg.mode = lib.ARC_MODE_QG
+        rc = lib.arc_sidecar_start(cfg, _MODE_CODE[mode])
+        if rc != 0:
+            raise RuntimeError(f"arc_sidecar_start failed: {rc}")
+        self._closed = False
+
+    def stats(self) -> dict[str, int]:
+        st = self.lib.arc_sidecar_stats()
+        return {
+            "mode": int(self.lib.arc_sidecar_mode()),
+            "releases": int(st.releases),
+            "in_flight": int(st.in_flight),
+            "heap_depth": int(st.heap_depth),
+            "budget_alerts": int(st.budget_alerts),
+            "guard_waits": int(st.guard_waits),
+            "guard_timeouts": int(st.guard_timeouts),
+            "added_p50_ns": int(st.added_p50_ns),
+            "added_p95_ns": int(st.added_p95_ns),
+            "added_p99_ns": int(st.added_p99_ns),
+            "applied": int(self.lib.arc_sidecar_applied()),
+        }
+
+    def set_mode(self, mode: ArcMode) -> None:
+        """Record the desired mode; the next pump applies it."""
+        rc = self.lib.arc_sidecar_set_mode(_MODE_CODE[ArcMode(mode)])
+        if rc != 0:
+            raise RuntimeError(f"arc_sidecar_set_mode({mode.value}) failed: {rc}")
+
+    def pump(self) -> int:
+        """One sidecar poll interval (submissions + releases)."""
+        return int(self.lib.arc_sidecar_pump_once())
+
+    def submit(self, entry: bytes, producer_ts: int | None = None) -> int:
+        """Push one recovered entry; returns 0, or -EAGAIN when full."""
+        if producer_ts is None:
+            producer_ts = time.monotonic_ns()
+        buf = self.ffi.new("char[]", entry)
+        return int(self.lib.arc_sidecar_submit(buf, len(entry), producer_ts))
+
+    def close(self) -> None:
+        if not self._closed:
+            self.lib.arc_sidecar_stop()
+            self._closed = True
+
+    def __enter__(self) -> CffiSidecarTransport:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
 
 @dataclass
@@ -113,6 +210,13 @@ class ArcDeployLoop:
             ):
                 self.state.mode = ArcMode.LIVE
                 self.transport.set_mode(ArcMode.LIVE)
+                # Baseline the cumulative counter at promotion: alerts
+                # observed during shadow are evidence, not fresh breaches
+                # for the live watch (W6.4 fix — without this the first
+                # live step called the whole shadow history "new").
+                self.state.budget_alerts_seen = int(
+                    stats.get("budget_alerts", 0)
+                )
                 self.state.recommendations.append(
                     f"promoted to live after {self.state.shadow_elapsed_s:.0f}s"
                 )

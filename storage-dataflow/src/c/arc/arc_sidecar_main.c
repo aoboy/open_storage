@@ -39,12 +39,20 @@ typedef struct {
     uint8_t *in_mem;
     _Atomic int running;
     arc_pacer_t *pacer;
-    int mode; /* 0 shadow, 1 live, 2 killed */
+    _Atomic int mode; /* desired: 0 shadow, 1 live, 2 killed */
+    int applied_mode; /* last mode pushed into the pacer (pump-owned) */
     uint64_t applied;
     uint64_t shadow_delta_total;
 } sidecar_t;
 
 static sidecar_t g_sidecar;
+
+/* The sidecar's shadow/killed states both use the IMMEDIATE oracle at
+ * the pacer; live is ARC-QG. See the W6.4 implementation note in
+ * docs/design/03-arc-pacing.md for the deferred true-shadow metrics. */
+static arc_mode_t pacer_mode_for(int mode) {
+    return mode == 1 ? ARC_MODE_QG : ARC_MODE_IMMEDIATE;
+}
 
 static int apply_trampoline(void *ctx, const void *entry, size_t len, uint64_t release_ts) {
     (void)ctx;
@@ -62,7 +70,8 @@ int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
         return -EINVAL;
 
     memset(&g_sidecar, 0, sizeof(g_sidecar));
-    g_sidecar.mode = mode;
+    atomic_store(&g_sidecar.mode, mode);
+    g_sidecar.applied_mode = mode;
 
     size_t need = arc_sizeof(cfg);
     if (need == 0)
@@ -72,9 +81,7 @@ int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
         return -ENOMEM;
 
     arc_cfg_t eff = *cfg;
-    /* shadow(0) and killed(2) both run the IMMEDIATE pacer; live(1)
-     * runs ARC-QG (see the header comment) */
-    eff.mode = mode == 1 ? ARC_MODE_QG : ARC_MODE_IMMEDIATE;
+    eff.mode = pacer_mode_for(mode);
     if (arc_init(g_sidecar.pacer, &eff, apply_trampoline, NULL) != 0) {
         free(g_sidecar.pacer);
         return -EINVAL;
@@ -121,7 +128,8 @@ int arc_sidecar_submit(const void *entry, size_t len, uint64_t producer_ts) {
     return 0;
 }
 
-/* One poll iteration: drain the ring into ARC, then ARC into apply. */
+/* One poll iteration: drain the ring into ARC, apply a requested mode
+ * flip, then ARC into apply. */
 int arc_sidecar_pump_once(void) {
     if (!atomic_load(&g_sidecar.running))
         return -EINVAL;
@@ -139,7 +147,21 @@ int arc_sidecar_pump_once(void) {
         }
         submitted++;
     }
+
+    /* W6.4: the desired mode is atomic; the flip lands on the pump, so
+     * the controller sees it within one poll interval. */
+    int want = atomic_load(&g_sidecar.mode);
+    if (want != g_sidecar.applied_mode && arc_set_mode(g_sidecar.pacer, pacer_mode_for(want)) == 0)
+        g_sidecar.applied_mode = want;
+
     int released = arc_poll(g_sidecar.pacer, sdf_now_ns());
+
+    /* Killed is the oracle: deliver the whole backlog now, not one
+     * batch, and not only the entries whose QG T_n has passed. */
+    if (want == 2) {
+        for (int i = 0; i < 1024 && arc_stats(g_sidecar.pacer).in_flight > 0; i++)
+            released += arc_poll(g_sidecar.pacer, sdf_now_ns());
+    }
     return submitted + released;
 }
 
@@ -147,10 +169,10 @@ void arc_sidecar_stop(void) {
     if (!atomic_load(&g_sidecar.running))
         return;
     arc_sidecar_serve_stop();
-    atomic_store(&g_sidecar.running, 0);
-    /* flush: entries in the ring are not stranded */
+    /* flush before marking stopped: pump_once() refuses when !running */
     (void)arc_sidecar_pump_once();
     arc_poll(g_sidecar.pacer, UINT64_MAX / 4);
+    atomic_store(&g_sidecar.running, 0);
     free(g_sidecar.in_mem);
     free(g_sidecar.pacer);
     g_sidecar.in_mem = NULL;
@@ -165,7 +187,16 @@ uint64_t arc_sidecar_applied(void) {
     return g_sidecar.applied;
 }
 int arc_sidecar_mode(void) {
-    return g_sidecar.mode;
+    return atomic_load(&g_sidecar.mode);
+}
+
+int arc_sidecar_set_mode(int mode) {
+    if (!atomic_load(&g_sidecar.running))
+        return -EINVAL;
+    if (mode < 0 || mode > 2)
+        return -EINVAL;
+    atomic_store(&g_sidecar.mode, mode);
+    return 0;
 }
 
 /* ---- W6.1: the live scrape over the sidecar's own dump -------------- */

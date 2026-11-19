@@ -122,11 +122,14 @@ arc_stats_t arc_stats(const arc_pacer_t *p);
 /* Feed the RTT estimator for auto_params (ARC auto-U). */
 void arc_set_rtt(arc_pacer_t *p, uint64_t rtt_sm_ns);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* SDF_ARC_H */
+/*
+ * Change the release mode without reinitializing the pacer (W6.4:
+ * the design-03 promotion/kill switch). Entries already queued stay
+ * queued; under IMMEDIATE the next poll releases the whole backlog
+ * (bypass semantics), under QG the guard applies from that poll on.
+ * Returns 0 or -EINVAL.
+ */
+int arc_set_mode(arc_pacer_t *p, arc_mode_t mode);
 
 /*
  * Sidecar (plan prompt W4.3, design 03): entries in over an SPSC ring,
@@ -144,7 +147,22 @@ arc_stats_t arc_sidecar_stats(void);
 uint64_t arc_sidecar_applied(void);
 int arc_sidecar_mode(void);
 
+/*
+ * W6.4: request a mode flip (0 shadow, 1 live, 2 killed). The request
+ * is atomic and lands on the next arc_sidecar_pump_once(), which is
+ * the design-03 "one poll interval" contract. Entering killed drains
+ * the pacer backlog in that same pump (data flows at arrival).
+ * Returns 0, -EINVAL (bad mode) or -EINVAL when not running.
+ */
+int arc_sidecar_set_mode(int mode);
+
 /* W6.1: live scrape over the sidecar's own dump (start() first; the
  * endpoint stops with the sidecar or serve_stop()). */
 int arc_sidecar_serve(const char *addr);
 void arc_sidecar_serve_stop(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SDF_ARC_H */

@@ -149,7 +149,11 @@ static uint64_t min_pred_T(const arc_state_t *s, uint64_t block_n) {
 int arc_drain(arc_state_t *s, uint64_t now_ns) {
     int released = 0;
     arc_rel_t rel;
-    while (s->heap_n > 0 && s->heap[0].T_n <= now_ns) {
+    /* IMMEDIATE is the kill-switch oracle: a mode flip must deliver the
+     * backlog that the QG schedule was holding, not just entries whose
+     * T_n has already passed (W6.4). Entries submitted while already in
+     * IMMEDIATE carry T_n == A_n, so the common path is unchanged. */
+    while (s->heap_n > 0 && (s->mode == ARC_MODE_IMMEDIATE || s->heap[0].T_n <= now_ns)) {
         if (arc_heap_pop(s, &rel) != 0)
             break;
 
