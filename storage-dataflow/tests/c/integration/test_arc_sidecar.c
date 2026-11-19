@@ -23,12 +23,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 static void base_cfg(arc_cfg_t *cfg) {
@@ -48,8 +48,7 @@ static void test_modes(void) {
     for (int i = 0; i < 10; i++) {
         char entry[64];
         memset(entry, (char)i, sizeof(entry));
-        CHECK(arc_sidecar_submit(entry, sizeof(entry),
-                                 sdf_now_ns() - 30000000ull) == 0);
+        CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns() - 30000000ull) == 0);
     }
     CHECK(arc_sidecar_pump_once() >= 10);
     CHECK(arc_sidecar_applied() == 10);
@@ -71,8 +70,7 @@ static void test_modes(void) {
         memset(entry, (char)i, sizeof(entry));
         /* bursty arrivals: alternating delay pattern */
         uint64_t d = (i % 3 == 1) ? 60000000ull : 10000000ull;
-        CHECK(arc_sidecar_submit(entry, sizeof(entry),
-                                 sdf_now_ns() - d) == 0);
+        CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns() - d) == 0);
         CHECK(arc_sidecar_pump_once() >= 0);
     }
     /* drain the schedule */
@@ -95,8 +93,7 @@ static void test_modes(void) {
     for (int i = 0; i < 10; i++) {
         char entry[64];
         memset(entry, (char)i, sizeof(entry));
-        CHECK(arc_sidecar_submit(entry, sizeof(entry),
-                                 sdf_now_ns() - 40000000ull) == 0);
+        CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns() - 40000000ull) == 0);
         CHECK(arc_sidecar_pump_once() >= 1); /* immediate apply */
     }
     CHECK(arc_sidecar_applied() == 10);
@@ -117,14 +114,50 @@ static void test_validation(void) {
     arc_sidecar_stop(); /* double stop safe */
 }
 
+/* W6.4: mode flips land within one pump interval. A future producer
+ * stamp parks an entry under QG; the kill request must drain it on the
+ * very next pump (design 03's kill switch, always armed). */
+static void test_mode_flip(void) {
+    arc_cfg_t cfg;
+    base_cfg(&cfg);
+    CHECK(arc_sidecar_start(&cfg, 1) == 0);
+    CHECK(arc_sidecar_set_mode(7) == -EINVAL);
+
+    char entry[64];
+    memset(entry, 3, sizeof(entry));
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns() + 40000000ull) == 0);
+    CHECK(arc_sidecar_pump_once() >= 1); /* submitted, held by QG */
+    CHECK(arc_sidecar_mode() == 1);
+    CHECK(arc_sidecar_applied() == 0);
+    CHECK(arc_sidecar_stats().in_flight == 1);
+
+    CHECK(arc_sidecar_set_mode(2) == 0);
+    CHECK(arc_sidecar_mode() == 2);
+    CHECK(arc_sidecar_pump_once() >= 1); /* one interval: flip + drain */
+    CHECK(arc_sidecar_applied() == 1);
+    CHECK(arc_sidecar_stats().in_flight == 0);
+    CHECK(arc_sidecar_stats().releases == 1);
+
+    /* shadow is the immediate path again; the flip is reversible */
+    CHECK(arc_sidecar_set_mode(0) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_mode() == 0);
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns()) == 0);
+    CHECK(arc_sidecar_pump_once() >= 1);
+    CHECK(arc_sidecar_applied() == 2);
+    arc_sidecar_stop();
+    CHECK(arc_sidecar_set_mode(1) == -EINVAL); /* no sidecar to flip */
+}
+
 static void test_scrape(void);
 
 int main(void) {
     test_modes();
+    test_mode_flip();
     test_scrape();
     test_validation();
     printf("test_arc_sidecar: ok (killed oracle, live ordered burst, "
-           "shadow immediate, validation)\n");
+           "shadow immediate, W6.4 one-pump mode flips, validation)\n");
     return 0;
 }
 
@@ -146,8 +179,7 @@ static void test_scrape(void) {
     /* drive one release so the scrape carries live numbers */
     char entry[64];
     memset(entry, 7, sizeof(entry));
-    CHECK(arc_sidecar_submit(entry, sizeof(entry),
-                             sdf_now_ns() - 30000000ull) == 0);
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns() - 30000000ull) == 0);
     for (int i = 0; i < 8; i++) {
         arc_sidecar_pump_once();
         sdf_sleep_ns(10000000ull);
@@ -179,6 +211,6 @@ static void test_scrape(void) {
     CHECK(strstr(buf, "sdf_arc_mode 1") != NULL);
     CHECK(strstr(buf, "sdf_arc_added_latency_p99_ns") != NULL);
 
-    arc_sidecar_stop(); /* stops the endpoint with the sidecar */
+    arc_sidecar_stop();                        /* stops the endpoint with the sidecar */
     CHECK(arc_sidecar_serve(addr) == -EINVAL); /* stopped: refuse */
 }

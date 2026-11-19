@@ -28,25 +28,61 @@ if ! build/tests/c/test_arc_core >/dev/null; then
     gate=1
 fi
 
-# 3. the deploy controller flow: shadow -> live -> (breach) -> killed
-if ! PYTHONPATH="$ROOT/python" python3 - <<'EOF'
+# 3. the deploy controller flow: shadow -> live -> (breach) -> killed.
+#    W6.4 drives the REAL C sidecar through CFFI when the extension is
+#    built; the stub flow remains the fallback for cffi-less hosts.
+if ! PYTHONPATH="$ROOT/python:$ROOT/bindings/cffi" python3 - <<'EOF'
+import time
+
 from sdf.control.arc_deploy import ArcDeployConfig, ArcDeployLoop, ArcMode
 
-class SC:
-    def __init__(self): self.mode = None
-    def set_mode(self, m): self.mode = m
-    def stats(self): return {"budget_alerts": 0}
+try:
+    import sdf_cffi  # noqa: F401
+except ImportError:
+    class SC:
+        def __init__(self): self.mode = None
+        def set_mode(self, m): self.mode = m
+        def stats(self): return {"budget_alerts": 0}
 
-sc = SC()
-loop = ArcDeployLoop(sc, ArcDeployConfig(shadow_min_seconds=1))
-loop.start()
-assert sc.mode == ArcMode.SHADOW
-loop.state.shadow_started_ns -= 2 * 10**9  # force the 24 h window
-rec = loop.step()
-assert rec["action"] == "promote" and sc.mode == ArcMode.LIVE
-loop.transport.set_mode(ArcMode.LIVE)
-assert loop.kill() == ArcMode.KILLED and sc.mode == ArcMode.KILLED
-print("runbook flow: shadow -> live -> killed OK")
+    sc = SC()
+    loop = ArcDeployLoop(sc, ArcDeployConfig(shadow_min_seconds=1))
+    loop.start()
+    assert sc.mode == ArcMode.SHADOW
+    loop.state.shadow_started_ns -= 2 * 10**9  # force the 24 h window
+    rec = loop.step()
+    assert rec["action"] == "promote" and sc.mode == ArcMode.LIVE
+    loop.transport.set_mode(ArcMode.LIVE)
+    assert loop.kill() == ArcMode.KILLED and sc.mode == ArcMode.KILLED
+    print("runbook flow (stub: cffi unavailable): shadow -> live -> killed OK")
+else:
+    from sdf.control.arc_deploy import CffiSidecarTransport
+
+    with CffiSidecarTransport(mode=ArcMode.SHADOW) as tr:
+        loop = ArcDeployLoop(
+            tr, ArcDeployConfig(shadow_min_seconds=0, auto_kill=True)
+        )
+        loop.start()
+        tr.pump()  # apply shadow
+
+        loop.state.shadow_started_ns -= 1
+        rec = loop.step()
+        assert rec["action"] == "promote"
+        tr.pump()  # live flip lands on this pump
+        assert tr.stats()["mode"] == 1
+
+        # live owns the timing: a future stamp stays queued
+        assert tr.submit(
+            b"k" * 64, producer_ts=time.monotonic_ns() + 50_000_000
+        ) == 0
+        assert tr.pump() >= 1
+        assert tr.stats()["in_flight"] == 1
+
+        assert loop.kill() == ArcMode.KILLED
+        assert tr.pump() >= 1
+        st = tr.stats()
+        assert st["mode"] == 2 and st["applied"] == 1 and st["in_flight"] == 0
+        print("runbook flow (live C sidecar via CFFI): "
+              "shadow -> live -> killed OK")
 EOF
 then
     echo "E2E FAIL: deploy runbook flow" >&2
