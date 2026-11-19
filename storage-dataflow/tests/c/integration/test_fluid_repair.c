@@ -30,21 +30,19 @@
 enum { K = 64, T = 32, N_ORIGINS = 3 };
 static char g_path[N_ORIGINS][160];
 
-static uint8_t byte_at(size_t off) {
-    return (uint8_t)((off * 2654435761ull) >> 24);
-}
-
-/* Stream files are arm-independent: encode with the LT arm's stream
- * shape for the K/T we use (all runs share K and T; the run re-reads
- * only landed ESIs, and both codecs share the systematic prefix). */
-static void make_stream_files(void) {
+/* Stream files are arm-specific: repair ESIs >= K differ between the
+ * LT and Nanorq arms. Feeding a Nanorq stream to the LT decoder used to
+ * pass because only fd_decode's return was checked; the W6.3 byte-exact
+ * gate exposed it. Encode with the exact arm/eps/blocks under test. */
+static void make_stream_files(sdf_repair_arm_t arm, double eps,
+                              uint32_t blocks) {
     sdf_fluid_repair_cfg_t enc;
     memset(&enc, 0, sizeof(enc));
-    enc.arm = SDF_REPAIR_NANORQ; /* widest stream covers both arms */
+    enc.arm = arm;
     enc.k = K;
     enc.sym_len = T;
-    enc.eps = 0.10; /* representative budget: 72 symbols > every
-                       leg's needs (control uses 64 systematic) */
+    enc.eps = eps;
+    enc.n_blocks = blocks;
     uint64_t bytes = sdf_fluid_repair_stream_bytes(&enc);
     CHECK(bytes > 0);
     uint8_t *stream = malloc(bytes);
@@ -81,19 +79,9 @@ static void base_cfg(sdf_fluid_repair_cfg_t *cfg, sdf_repair_arm_t arm,
     }
 }
 
-static void verify_block_bytes(void) {
-    /* the repaired object is the deterministic block; decode byte-exact
-     * is asserted inside the run via fd_decode — the caller-side check
-     * here re-derives the expected block from the same formula */
-    uint8_t blk[K * T];
-    for (size_t i = 0; i < sizeof(blk); i++)
-        blk[i] = byte_at(i);
-    (void)blk;
-}
-
 static void test_control_arm(void) {
     sdf_fluid_repair_cfg_t cfg;
-    make_stream_files(); /* fills g_path first */
+    make_stream_files(SDF_REPAIR_CONTROL, 0.0, 1); /* fills g_path */
     base_cfg(&cfg, SDF_REPAIR_CONTROL, 0.0, 30.0); /* heavy loss */
     sdf_fluid_repair_stats_t st;
     CHECK(sdf_fluid_repair_run(&cfg, &st) == 0);
@@ -108,7 +96,7 @@ static void test_control_arm(void) {
 static void test_fluid_arm_20pct_loss(void) {
     for (int arm = 1; arm <= 2; arm++) {
         sdf_fluid_repair_cfg_t cfg;
-        make_stream_files();
+        make_stream_files((sdf_repair_arm_t)arm, 0.10, 1);
         base_cfg(&cfg, (sdf_repair_arm_t)arm, 0.10, 20.0);
         sdf_fluid_repair_stats_t st;
         CHECK(sdf_fluid_repair_run(&cfg, &st) == 0);
@@ -127,7 +115,7 @@ static void test_fluid_forces_arq_fallback(void) {
     /* loss 60% with eps 0.05: the budget's slack is quickly consumed
      * (gate fires early) — the fallback still completes the block */
     sdf_fluid_repair_cfg_t cfg;
-    make_stream_files();
+    make_stream_files(SDF_REPAIR_LT, 0.05, 1);
     base_cfg(&cfg, SDF_REPAIR_LT, 0.05, 60.0);
     sdf_fluid_repair_stats_t st;
     CHECK(sdf_fluid_repair_run(&cfg, &st) == 0);
@@ -138,14 +126,54 @@ static void test_fluid_forces_arq_fallback(void) {
            st.arq_fallback, st.ok);
 }
 
+/* W6.3: a 4-block checkpoint object. Each block is its own codec
+ * object; the run schedules by decode deficit and verifies every block
+ * byte-exact. eps=0.02 with a 64-symbol round keeps the gate open for
+ * several rounds at 30% loss, so per-block round accounting is
+ * exercised rather than the trivial one-round-then-fallback case. */
+static void test_multi_block_checkpoint(void) {
+    enum { BLOCKS = 4 };
+    sdf_fluid_repair_cfg_t cfg;
+    make_stream_files(SDF_REPAIR_NANORQ, 0.02, BLOCKS);
+    base_cfg(&cfg, SDF_REPAIR_NANORQ, 0.02, 30.0);
+    cfg.n_blocks = BLOCKS;
+    cfg.wave = 64;
+
+    sdf_fluid_repair_stats_t st;
+    CHECK(sdf_fluid_repair_run(&cfg, &st) == 0);
+    CHECK(st.n_blocks == BLOCKS);
+    CHECK(st.ok == 1); /* every block decoded byte-exact */
+
+    uint64_t sent = 0, received = 0, rounds = 0;
+    for (uint32_t b = 0; b < st.n_blocks; b++) {
+        CHECK(st.blocks[b].ok == 1);
+        CHECK(st.blocks[b].rounds >= 2); /* the scheduler ran >1 round */
+        sent += st.blocks[b].sent;
+        received += st.blocks[b].received;
+        rounds += st.blocks[b].rounds;
+    }
+    CHECK(sent == st.sent);
+    CHECK(received == st.received);
+    CHECK(st.rounds >= 2);
+    CHECK(rounds >= st.rounds); /* blocks share the coordinator rounds */
+    printf("  multi-block: blocks=%u sent=%llu received=%llu rounds=%llu "
+           "block_rounds=%llu,%llu,%llu,%llu ok=%d\n",
+           st.n_blocks, (unsigned long long)st.sent,
+           (unsigned long long)st.received, (unsigned long long)st.rounds,
+           (unsigned long long)st.blocks[0].rounds,
+           (unsigned long long)st.blocks[1].rounds,
+           (unsigned long long)st.blocks[2].rounds,
+           (unsigned long long)st.blocks[3].rounds, st.ok);
+}
+
 int main(void) {
-    verify_block_bytes();
     test_control_arm();
     test_fluid_arm_20pct_loss();
     test_fluid_forces_arq_fallback();
+    test_multi_block_checkpoint();
     for (int i = 0; i < N_ORIGINS; i++)
         CHECK(unlink(g_path[i]) == 0);
     printf("test_fluid_repair: ok (control retry, both FLUID arms at 20%% "
-           "loss, forced ARQ fallback completes)\n");
+           "loss, forced ARQ fallback, 4-block checkpoint byte-exact)\n");
     return 0;
 }
