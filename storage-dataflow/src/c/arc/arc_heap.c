@@ -162,11 +162,19 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
                 uint64_t pred_T = min_pred_T(s, rel.block_n);
                 if (pred_T != UINT64_MAX) {
                     /* predecessor in flight: order beats the guard —
-                     * wake right after it */
+                     * re-queue right after it. DO NOT break the drain:
+                     * the re-pushed entry now sits strictly behind its
+                     * predecessor (T_n = pred_T + 1 > pred_T), so
+                     * heap[0] makes progress every pass — the break
+                     * stranded one absurd-stamp entry per drain call
+                     * (found by the W5.1 ARC fuzzer: multiple
+                     * out-of-order entries queued before their pred
+                     * needed one park pass each and the poll gave up
+                     * after the first). */
                     rel.T_n = pred_T + 1;
                     s->stats.guard_waits++;
                     (void)arc_heap_push(s, &rel);
-                    break;
+                    continue;
                 }
                 /* predecessor missing: park until T_n + G, then release */
                 if (now_ns < rel.T_deadline) {
@@ -174,7 +182,7 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
                     rel.parked = 1;
                     s->stats.guard_waits++;
                     (void)arc_heap_push(s, &rel);
-                    break;
+                    continue;
                 }
                 s->stats.guard_timeouts++;
             }
