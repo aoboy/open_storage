@@ -250,9 +250,11 @@ ADRs [0001–0009](../adr/).
                              K.1b endpoint behind
                              SDF_METRICS_ENDPOINT serves the proxy
                              and the ARC sidecar live.
-  2. arc_schedule.json     — schema-only: the 12.3 goldens are pinned
-                             in C (test_arc_core) instead of the
-                             vector file. -> W6.2
+  2. arc_schedule.json     — CLOSED by W6.2 (ab5ec88, e7ed21f): the
+                             12.3 cycles live in the vector file,
+                             extracted through the public ABI; the
+                             parity gate validates 556 comparisons,
+                             zero pending.
   3. telemetry chain      — CLOSED by W6.1 (67ccd86..b029aec): the
                              proxy pushes per-origin stats into the
                              ADR-0002 ring, acquires the published
@@ -267,6 +269,25 @@ ADRs [0001–0009](../adr/).
   5. Rust seam             — skeleton-only BY DESIGN; the declaration
                              diff is advisory until cargo exists in
                              CI. -> W6.5, then W6.8
+
+  W6.2 ARC goldens extracted  : done — gen_goldens_arc drives the
+                                public ABI on the real clock and
+                                pins the steady-state D trajectory
+                                (100 samples x 2 entries: the
+                                linear cycle measured exactly on the
+                                paper's analytic pair {94.7934,
+                                93.8016} ms; the exponent band inside
+                                the paper's ~[97.9, 100.5]); the 60
+                                fps replay stays in C by design
+                                (timing-based — its note says so in
+                                the file); arc.abi_v2 live in
+                                test_parity: 556 comparisons, ZERO
+                                pending. Live finds: python json.dump
+                                writes em-dashes as \u2014, which the
+                                C golden parser rejects BY DESIGN —
+                                vector text is ASCII-only; the JSON
+                                params are numbers (the atof-strings
+                                draft failed the type check).
 
   W6.1 live scrape + chain  : done — the K.1b endpoint (unit test
                                 pins the wam contract: exact

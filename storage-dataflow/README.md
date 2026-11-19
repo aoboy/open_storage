@@ -55,7 +55,7 @@ their tooling is not installed.
 | Rust seam | Skeleton crate + cbindgen declaration-diff gate (advisory without cargo; no functional Rust) |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
-| Known gaps (owned) | arc_schedule.json still schema-only (12.3 goldens pinned in C, closes in W6.2); hosted CI still unexercised (W6.5) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
+| Known gaps (owned) | Hosted CI still unexercised (W6.5, the wam L.8 posture); rust-seam advisory until cargo exists (W6.5/W6.8) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
 | Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
