@@ -108,3 +108,28 @@ version bump.
 - Replace dashboard placeholders with exported Grafana JSON.
 - Define the fuzz corpus and seed inputs.
 - Wire the CFFI golden-vector check into `run_tests.sh`.
+
+
+## Embedding notes (plan prompt W5.2)
+
+The install surface (`pkg-config sdf_*` / `find_package(sdf)`) exposes
+static libraries; the embedder's thread and allocation contract:
+
+- **Thread contract.** `sdf_common` primitives are single-producer /
+  single-consumer (`ring.h`) or single-writer (`seqlock.h`, the ADR-0002
+  publication). The ARC pacer is single-threaded by design: submit and
+  poll from one thread (the sidecar's pump). The origin drivers accept
+  fetches from one dispatcher thread and complete on their own worker —
+  callbacks run on the driver's completion context, never block the
+  dispatcher (ADR-0008's head-of-line rule).
+- **No allocation after warmup** on the data path: pool/ring/slab carry
+  the hot path; the fountain codecs allocate at init and free in
+  destroy (the v2 lifecycle pair exists exactly for that); the loopback
+  driver is zero-copy via mmap. The HTTP driver is the reference smoke
+  leg and does allocate per unit (risk S8, documented).
+- **Version.** `include/sdf/version.h` is the single source of truth
+  (CMake parses it for the pkg-config and find_package versions); the
+  on-wire/ABI contracts are separate and move only with their ADRs.
+- **Linking.** One `.pc` per link granularity; everything vendored
+  builds from source in-tree, so static linking carries no hidden
+  `--static` dependency surprises.
