@@ -70,14 +70,24 @@ violations, p95 12.4 ms (L.6 replay)", "done (`533c426`)".
   legitimate (that is the wack_a_mole pattern) but squash-free and
   traceable.
 
-## 6. Gates before every landing
+## 6. C coding style
+
+Follow [`storage-dataflow/docs/c-coding-style.md`](storage-dataflow/docs/c-coding-style.md).
+Always brace C control-statement bodies, including single-statement nested
+loops and conditionals. From `storage-dataflow/`, apply the canonical style
+with `make format` and verify it with `./scripts/format_c.sh --check`. The same
+script drives local lint and CI; do not bulk-format vendored or generated files.
+OpenCode contributors also have the project `c-coding-style` skill and automatic
+C formatter configuration.
+
+## 7. Gates before every landing
 
 From `storage-dataflow/`: `make build test`; `make lint` when touched
 paths are linted; `make asan`/`tsan` for concurrency-touching prompts
 (W0.2, W2.3, W4.3+); `make bench` recorded (never gated) when a prompt's
 threshold activates. CI mirrors these.
 
-## 7. Import-specific rules (from ADR-0009 and the import map)
+## 8. Import-specific rules (from ADR-0009 and the import map)
 
 - Every imported/adapted file carries a provenance block: source repo,
   path, commit, authorizing prompt + ADR.
