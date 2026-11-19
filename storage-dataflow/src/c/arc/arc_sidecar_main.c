@@ -18,6 +18,7 @@
 
 #include "arc_internal.h"
 
+#include "sdf/common/metrics_endpoint.h"
 #include "sdf/common/ring.h"
 #include "sdf/common/timer.h"
 
@@ -149,6 +150,7 @@ int arc_sidecar_pump_once(void) {
 void arc_sidecar_stop(void) {
     if (!atomic_load(&g_sidecar.running))
         return;
+    arc_sidecar_serve_stop();
     atomic_store(&g_sidecar.running, 0);
     /* flush: entries in the ring are not stranded */
     (void)arc_sidecar_pump_once();
@@ -165,3 +167,41 @@ arc_stats_t arc_sidecar_stats(void) {
 
 uint64_t arc_sidecar_applied(void) { return g_sidecar.applied; }
 int arc_sidecar_mode(void) { return g_sidecar.mode; }
+
+/* ---- W6.1: the live scrape over the sidecar's own dump -------------- */
+
+static sdf_metrics_endpoint_t *g_sidecar_ep;
+
+static int sidecar_render(void *ud, FILE *out) {
+    (void)ud;
+    arc_stats_t st = arc_sidecar_stats();
+    fprintf(out, "sdf_arc_releases_total %llu\n",
+            (unsigned long long)st.releases);
+    fprintf(out, "sdf_arc_mode %d\n", arc_sidecar_mode());
+    fprintf(out, "sdf_arc_D_ns %.0f\n", st.D);
+    fprintf(out, "sdf_arc_E_ns %.0f\n", st.E);
+    fprintf(out, "sdf_arc_heap_depth %u\n", st.heap_depth);
+    fprintf(out, "sdf_arc_guard_waits_total %llu\n",
+            (unsigned long long)st.guard_waits);
+    fprintf(out, "sdf_arc_added_latency_p99_ns %.0f\n", st.added_p99_ns);
+    return 0;
+}
+
+int arc_sidecar_serve(const char *addr) {
+    if (!atomic_load(&g_sidecar.running))
+        return -EINVAL; /* serve what exists: start() first */
+    if (g_sidecar_ep != NULL)
+        return -EEXIST;
+    g_sidecar_ep = sdf_metrics_endpoint_start(addr, sidecar_render, NULL);
+    return g_sidecar_ep != NULL ? 0 : -EINVAL; /* the endpoint prints its
+                                                * own diagnostic; a stable
+                                                * -EINVAL beats a stale
+                                                * errno */
+}
+
+void arc_sidecar_serve_stop(void) {
+    if (g_sidecar_ep != NULL) {
+        sdf_metrics_endpoint_stop(g_sidecar_ep);
+        g_sidecar_ep = NULL;
+    }
+}

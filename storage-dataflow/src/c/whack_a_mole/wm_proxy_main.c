@@ -12,6 +12,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "sdf/common/config.h"
+#include "sdf/common/metrics_endpoint.h"
 #include "sdf/common/timer.h"
 #include "sdf/origin.h"
 #include "sdf/wm.h"
@@ -43,6 +44,23 @@ static double parse_d(const sdf_config_t *cfg, const char *key,
                       double fallback) {
     const char *s = sdf_config_get(cfg, key, NULL);
     return s ? atof(s) : fallback;
+}
+
+/* the live scrape body: the run's own evidence, Prometheus text */
+static int proxy_render(void *ud, FILE *out) {
+    const sdf_wm_proxy_stats_t *st = ud;
+    fprintf(out, "sdf_proxy_units_total %llu\n",
+            (unsigned long long)(st->dispatch_treatment + st->dispatch_control));
+    fprintf(out, "sdf_proxy_control_heartbeat_ticks %llu\n",
+            (unsigned long long)st->control_ticks);
+    fprintf(out, "sdf_proxy_shm_profile_version %u\n",
+            st->shm_version_acquired);
+    fprintf(out, "sdf_proxy_shm_telemetry_pushed %llu\n",
+            (unsigned long long)st->shm_telemetry_pushed);
+    for (uint32_t i = 0; i < 4 && st->end_profile_b[i] != 0; i++)
+        fprintf(out, "sdf_proxy_origin_dispatched{origin=\"%u\"} %llu\n", i,
+                (unsigned long long)st->dispatched[i]);
+    return 0;
 }
 
 static int timeline_from_name(sdf_wm_proxy_cfg_t *pc, const char *name,
@@ -77,6 +95,8 @@ int main(int argc, char **argv) {
     uint32_t pc_rollout_override = 0;
     int pc_rollout_set = 0;
     int pc_kill_override = 0;
+    const char *pc_shm_name = NULL;
+    uint64_t pc_pace_ns = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-C") == 0 && i + 1 < argc)
@@ -95,11 +115,16 @@ int main(int argc, char **argv) {
         }
         else if (strcmp(argv[i], "--kill") == 0)
             pc_kill_override = 1;
+        else if (strcmp(argv[i], "--shm") == 0 && i + 1 < argc)
+            pc_shm_name = argv[++i];
+        else if (strcmp(argv[i], "--pace-ns") == 0 && i + 1 < argc)
+            pc_pace_ns = strtoull(argv[++i], NULL, 10); /* dispatch-side */
         else {
             fprintf(stderr,
                     "usage: %s [-C wm.toml] [--profile steady|slow|dies|"
                     "flapping] [--units N] [--unit-bytes B] [--jobs J] "
-                    "[--rollout PCT] [--kill]\n",
+                    "[--rollout PCT] [--kill] [--shm NAME] [--pace-ns N]\n"
+                    "  SDF_METRICS_ENDPOINT=host:port serves the live scrape\n",
                     argv[0]);
             return 2;
         }
@@ -191,6 +216,10 @@ int main(int argc, char **argv) {
     if (pc_kill_override)
         pc.kill_switch = 1;
 
+    /* W6.1: the live-chain knobs (CLI > config per ADR-0005) */
+    pc.shm_name = pc_shm_name;
+    pc.dispatch_pace_ns = pc_pace_ns;
+
     /* origins: loopback files we create now (harness mode) */
     char paths[SDF_ORIGIN_MAX][160];
     pc.n_origins = pc.profile.n;
@@ -237,15 +266,30 @@ int main(int argc, char **argv) {
 
     CHECK0(timeline_from_name(&pc, profile_name, pc.units));
 
+    /* live scrape (K.1b): render straight from the stats struct */
     sdf_wm_proxy_stats_t st;
+    memset(&st, 0, sizeof(st));
+    sdf_metrics_endpoint_t *ep = NULL;
+    const char *mep = getenv("SDF_METRICS_ENDPOINT");
+    if (mep != NULL && mep[0] != '\0') {
+        ep = sdf_metrics_endpoint_start(mep, proxy_render, &st);
+        if (ep == NULL)
+            return 1;
+    }
+
     CHECK0(sdf_wm_proxy_run(&pc, &st));
+    if (ep != NULL)
+        sdf_metrics_endpoint_stop(ep);
 
     printf("PROXY profile=%s units=%llu unit_bytes=%u jobs=%u wall_ms=%llu "
-           "updates=%u treatment=%llu control=%llu\n",
+           "updates=%u treatment=%llu control=%llu shm_version=%u "
+           "telemetry=%llu ticks=%llu\n",
            profile_name, (unsigned long long)pc.units, pc.unit_bytes, pc.jobs,
            (unsigned long long)(st.wall_ns / 1000000ull), st.updates_applied,
            (unsigned long long)st.dispatch_treatment,
-           (unsigned long long)st.dispatch_control);
+           (unsigned long long)st.dispatch_control, st.shm_version_acquired,
+           (unsigned long long)st.shm_telemetry_pushed,
+           (unsigned long long)st.control_ticks);
     int gate = 1;
     for (uint32_t i = 0; i < pc.n_origins; i++) {
         printf("ORIGIN %u dispatched=%llu ok=%llu failed=%llu enolink=%llu "
@@ -265,7 +309,7 @@ int main(int argc, char **argv) {
          * updated profile and comparing them against the base allocation
          * is a category error (found live: a tight dispatch loop's
          * latency noise crossed theta and the "steady" gate flaked). */
-        if (st.updates_applied == 0) {
+        if (st.updates_applied == 0 && st.shm_version_acquired == 0) {
             for (uint32_t i = 0; i < pc.n_origins; i++) {
                 double expect =
                     (double)pc.profile.b[i] / pc.profile.m * (double)pc.units;

@@ -25,6 +25,7 @@
 #include "sdf/common/timer.h"
 #include "sdf/origin.h"
 #include "sdf/origin/loopback.h"
+#include "sdf/wm_shm.h"
 
 #include <errno.h>
 #include <stdatomic.h>
@@ -184,6 +185,26 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         return -EINVAL;
     }
 
+    /* W6.1: the live chain — external loop authoritative when set.
+     * Attach-or-create: the standalone proxy owns the segment's
+     * lifecycle (creates it), while a supervisor or harness may
+     * pre-create and pre-publish a profile before the run starts (the
+     * in-process chain leg) — both flows are production-sane. A bad
+     * name fails both ways and aborts the run with the API's own
+     * errno (NOT a post-close -errno: close() can clobber it). */
+    sdf_shm_t shm;
+    int shm_on = 0;
+    if (cfg->shm_name != NULL && cfg->shm_name[0] != '\0') {
+        int rc = sdf_wm_shm_create(cfg->shm_name, cfg->n_origins, &shm);
+        if (rc != 0)
+            rc = sdf_wm_shm_attach(cfg->shm_name, cfg->n_origins, &shm);
+        if (rc != 0) {
+            o.ops->close(&o);
+            return rc;
+        }
+        shm_on = 1;
+    }
+
     /* controller (the C fast path; recovery stays with Python) */
     wm_ctrl_cfg_t kcfg;
     wm_ctrl_cfg_default(&kcfg);
@@ -223,19 +244,44 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         /* ---- control tick: sample stats, maybe recompile ---------- */
         if (dispatched - last_ctrl_at >= units_per_interval) {
             last_ctrl_at = dispatched;
+            out->control_ticks++;
             for (uint32_t i = 0; i < cfg->n_origins; i++) {
                 sdf_origin_stats_t st;
-                if (o.ops->stats(&o, i, &st) == 0)
-                    wm_ctrl_on_stats(&ctl, i, &st);
+                if (o.ops->stats(&o, i, &st) != 0)
+                    continue;
+                if (shm_on) {
+                    /* the live chain: telemetry to the Python loop */
+                    if (sdf_wm_shm_telemetry_push(&shm, &st) == 0)
+                        out->shm_telemetry_pushed++;
+                }
+                wm_ctrl_on_stats(&ctl, i, &st);
             }
-            wm_profile_t next;
-            if (wm_ctrl_tick(&ctl, sdf_now_ns(), &next) == 1) {
-                /* the dispatcher is the only compiled writer: swap */
-                if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0) {
-                    work = next;
-                    out->updates_applied++;
-                    for (uint32_t i = 0; i < cfg->n_origins; i++)
-                        sdf_counter_inc(&out->shed_events[i]);
+            if (shm_on) {
+                /* the external loop is authoritative (design 01): a
+                 * version advance swaps the working profile; the
+                 * in-process controller stays fed but never publishes */
+                wm_profile_t next;
+                uint32_t ver = 0;
+                if (sdf_wm_shm_acquire(&shm, &next, &ver) == 0) {
+                    out->shm_acquires++;
+                    if (ver > out->shm_version_acquired &&
+                        next.n == cfg->n_origins && next.m == work.m) {
+                        out->shm_version_acquired = ver;
+                        if (wm_profile_compile_cfg(&next, &compiled,
+                                                   &spray) == 0)
+                            work = next;
+                    }
+                }
+            } else {
+                wm_profile_t next;
+                if (wm_ctrl_tick(&ctl, sdf_now_ns(), &next) == 1) {
+                    /* the dispatcher is the only compiled writer: swap */
+                    if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0) {
+                        work = next;
+                        out->updates_applied++;
+                        for (uint32_t i = 0; i < cfg->n_origins; i++)
+                            sdf_counter_inc(&out->shed_events[i]);
+                    }
                 }
             }
         }
@@ -290,6 +336,8 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
             sdf_counter_inc(&out->enolink[origin]);
         }
         dispatched++;
+        if (cfg->dispatch_pace_ns > 0)
+            sdf_sleep_ns(cfg->dispatch_pace_ns);
         out->dispatched[origin]++;
         timeline_apply(cfg, &o, before, dispatched);
     }
@@ -316,6 +364,9 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     for (uint32_t i = 0; i < cfg->n_origins; i++)
         out->end_profile_b[i] = work.b[i];
 
+    if (shm_on)
+        sdf_wm_shm_close(&shm); /* close does not unlink: the harness
+                                  * owns the segment lifecycle */
     o.ops->close(&o);
     return 0;
 }

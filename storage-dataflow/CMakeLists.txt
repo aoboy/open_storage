@@ -29,6 +29,7 @@ add_library(sdf_common STATIC
     src/c/common/metrics.c
     src/c/common/log.c
     src/c/common/config.c
+    src/c/common/metrics_endpoint.c
 )
 target_include_directories(sdf_common PUBLIC include)
 
