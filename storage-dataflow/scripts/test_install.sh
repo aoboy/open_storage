@@ -39,4 +39,29 @@ cmake -S "$CONS" -B "$CONS/build" -DCMAKE_PREFIX_PATH="$DEST/usr/lib/cmake/sdf" 
 cmake --build "$CONS/build" >/dev/null
 "$CONS/build/consumer"
 
-echo "test_install: OK (pkg-config + find_package legs)"
+# 3. CFFI against the installed prefix (W6.4): the extension must link
+# from $DEST/usr, not the in-tree build, and drive the real ARC sidecar.
+if python3 -c 'import cffi' >/dev/null 2>&1; then
+    CFFI_OUT="$DEST/cffi"
+    python3 bindings/cffi/build_ffi.py --prefix "$DEST/usr" --out "$CFFI_OUT"
+    SDF_CFFI_DIR="$CFFI_OUT" PYTHONPATH="$ROOT/python:$ROOT/bindings/cffi" \
+        python3 - <<'PY'
+from sdf_cffi import ffi, lib
+
+cfg = ffi.new("arc_cfg_t *")
+cfg.capacity = 64
+cfg.entry_max = 248
+assert lib.arc_sidecar_start(cfg, 1) == 0
+assert lib.arc_sidecar_set_mode(2) == 0
+assert lib.arc_sidecar_pump_once() >= 0
+assert lib.arc_sidecar_mode() == 2
+lib.arc_sidecar_stop()
+assert lib.sdf_fluid_budget_n(64, 0.1) == 72
+assert ffi.sizeof("fe_cfg_t") > 0
+print("installed CFFI: OK (arc sidecar + fluid budget + fountain ABI)")
+PY
+else
+    echo "test_install: cffi unavailable; installed CFFI leg skipped" >&2
+fi
+
+echo "test_install: OK (pkg-config + find_package + installed-CFFI legs)"

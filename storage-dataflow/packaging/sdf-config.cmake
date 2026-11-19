@@ -20,6 +20,14 @@ foreach(_lib sdf_origin sdf_origin_loopback sdf_origin_http sdf_wm
     endif()
 endforeach()
 
+# Vendored RaptorQ archive: the fountain arm's private dep, exported so
+# sdf::sdf_fountain links from the install tree (W6.4).
+if(NOT TARGET sdf::nanorq)
+    add_library(sdf::nanorq STATIC IMPORTED)
+    set_target_properties(sdf::nanorq PROPERTIES
+        IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../../libnanorq.a")
+endif()
+
 # dependency chain (flat; m where math is used)
 set_target_properties(sdf::sdf_origin_loopback PROPERTIES
     INTERFACE_LINK_LIBRARIES "sdf::sdf_origin;sdf::sdf_common")
@@ -28,7 +36,7 @@ set_target_properties(sdf::sdf_origin_http PROPERTIES
 set_target_properties(sdf::sdf_wm PROPERTIES
     INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::sdf_origin;sdf::sdf_origin_loopback")
 set_target_properties(sdf::sdf_fountain PROPERTIES
-    INTERFACE_LINK_LIBRARIES "sdf::sdf_common;m")
+    INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::nanorq;m")
 set_target_properties(sdf::sdf_fluid PROPERTIES
     INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::sdf_wm;sdf::sdf_fountain;sdf::sdf_origin_loopback;m")
 set_target_properties(sdf::sdf_arc PROPERTIES

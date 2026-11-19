@@ -17,6 +17,11 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# W6.4: the CFFI extension is a shared object and links the static
+# archives; every in-tree object must be position independent (the
+# vendored nanorq archive builds with -fPIC for the same reason).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 add_compile_options(-Wall -Wextra -Werror)
 
 # --- Common primitives -------------------------------------------------------
@@ -124,6 +129,12 @@ install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS sdf_common sdf_origin sdf_origin_loopback sdf_origin_http
         sdf_wm sdf_fountain sdf_fluid sdf_arc
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# The vendored RaptorQ archive is sdf_fountain's private link dep; the
+# installed .pc/config surface names it so consumers (CFFI included)
+# resolve the fountain arm from the install tree (W6.4).
+install(FILES ${CMAKE_SOURCE_DIR}/third_party/nanorq/libnanorq.a
+    DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # pkg-config: one .pc per link granularity (core = the whole stack today;
 # consumers pick what they call — the deps chain is flat, no --static

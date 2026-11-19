@@ -83,7 +83,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install cffi mypy pytest ruff xxhash pyyaml
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" mypy pytest ruff xxhash pyyaml
 
       - name: Build + C tests
         run: |
@@ -92,14 +92,31 @@ jobs:
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
 
-      - name: Python tests
-        run: PYTHONPATH=python python3 -m pytest tests/python -q
-
-      - name: CFFI build + smoke
+      # Build first: the W6.4 controller tests drive the live C sidecar
+      # through CFFI and must execute, not skip.
+      - name: CFFI build + full-surface smoke
         run: |
           python3 bindings/cffi/build_ffi.py
-          PYTHONPATH=python:bindings/cffi python3 -c \
-            "import sdf_cffi; print(sdf_cffi.ffi.sizeof('wm_profile_t'))"
+          PYTHONPATH=python:bindings/cffi python3 - <<'PY'
+          from sdf_cffi import ffi, lib
+
+          assert ffi.sizeof("wm_profile_t") > 0
+          assert ffi.sizeof("arc_cfg_t") > 0
+          assert ffi.sizeof("fe_cfg_t") > 0
+          assert lib.sdf_fluid_budget_n(64, 0.1) == 72
+          cfg = ffi.new("arc_cfg_t *")
+          cfg.capacity = 64
+          cfg.entry_max = 248
+          assert lib.arc_sidecar_start(cfg, 1) == 0
+          assert lib.arc_sidecar_set_mode(2) == 0
+          assert lib.arc_sidecar_pump_once() >= 0
+          assert lib.arc_sidecar_mode() == 2
+          lib.arc_sidecar_stop()
+          print("cffi full-surface smoke: OK")
+          PY
+
+      - name: Python tests
+        run: PYTHONPATH=python python3 -m pytest tests/python -q
 
       - name: Python static checks
         run: |
@@ -201,7 +218,16 @@ jobs:
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y cmake pkg-config
 
-      - name: Install leg (pkg-config + find_package)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install cffi (installed-artifact leg)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22"
+
+      - name: Install leg (pkg-config + find_package + installed CFFI)
         run: ./scripts/test_install.sh
 
   rust-seam:
