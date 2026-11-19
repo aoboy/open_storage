@@ -27,14 +27,16 @@ static void counter_init_impl(sdf_counter_t *c, uint64_t v) {
 }
 
 void sdf_counter_init(sdf_counter_t *c) {
-    if (c == NULL)
+    if (c == NULL) {
         return;
+    }
     counter_init_impl(c, 0);
 }
 
 void sdf_counter_add(sdf_counter_t *c, uint64_t delta) {
-    if (c == NULL)
+    if (c == NULL) {
         return;
+    }
     atomic_fetch_add_explicit(&c->value, delta, memory_order_relaxed);
 }
 
@@ -43,15 +45,17 @@ void sdf_counter_inc(sdf_counter_t *c) {
 }
 
 uint64_t sdf_counter_read(const sdf_counter_t *c) {
-    if (c == NULL)
+    if (c == NULL) {
         return 0;
+    }
     return atomic_load_explicit(&c->value, memory_order_relaxed);
 }
 
 /* Bucket index for the log-linear map above. */
 static uint32_t hist_bucket(uint64_t v) {
-    if (v < 2u)
+    if (v < 2u) {
         return 0;
+    }
 #if defined(__GNUC__) || defined(__clang__)
     uint32_t log2v = 63u - (uint32_t)__builtin_clzll(v);
 #else
@@ -70,18 +74,21 @@ void sdf_histogram_init(sdf_histogram_t *h) {
 }
 
 void sdf_histogram_observe(sdf_histogram_t *h, uint64_t value) {
-    if (h == NULL)
+    if (h == NULL) {
         return;
+    }
     atomic_fetch_add_explicit(&h->count, 1, memory_order_relaxed);
     atomic_fetch_add_explicit(&h->sum, value, memory_order_relaxed);
     atomic_fetch_add_explicit(&h->buckets[hist_bucket(value)], 1, memory_order_relaxed);
 }
 
 void sdf_histogram_reset(sdf_histogram_t *h) {
-    if (h == NULL)
+    if (h == NULL) {
         return;
+    }
     atomic_store_explicit(&h->count, 0, memory_order_relaxed);
     atomic_store_explicit(&h->sum, 0, memory_order_relaxed);
-    for (size_t i = 0; i < SDF_HISTOGRAM_BUCKETS; i++)
+    for (size_t i = 0; i < SDF_HISTOGRAM_BUCKETS; i++) {
         atomic_store_explicit(&h->buckets[i], 0, memory_order_relaxed);
+    }
 }

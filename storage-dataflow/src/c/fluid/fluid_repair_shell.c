@@ -59,20 +59,24 @@ int main(int argc, char **argv) {
     /* stream files (all origins hold the same stream) */
     char paths[8][160];
     uint64_t bytes = sdf_fluid_repair_stream_bytes(&cfg);
-    if (bytes == 0)
+    if (bytes == 0) {
         return 1;
+    }
     /* the stream must cover the arm's own symbols; encode with this
      * cfg's arm directly */
     uint8_t *stream = malloc(bytes);
-    if (stream == NULL)
+    if (stream == NULL) {
         return 1;
-    if (sdf_fluid_repair_encode_stream(&cfg, stream, bytes) != 0)
+    }
+    if (sdf_fluid_repair_encode_stream(&cfg, stream, bytes) != 0) {
         return 1;
+    }
     for (uint32_t i = 0; i < cfg.n_origins; i++) {
         snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-fluid-repair-%d-%u.bin", (int)getpid(), i);
         FILE *f = fopen(paths[i], "wb");
-        if (f == NULL)
+        if (f == NULL) {
             return 1;
+        }
         if (fwrite(stream, 1, bytes, f) != bytes) {
             fclose(f);
             return 1;
@@ -81,18 +85,21 @@ int main(int argc, char **argv) {
         cfg.origins[i].id = i;
         cfg.origins[i].cls = SDF_ORIGIN_LOOPBACK;
         size_t plen = strlen(paths[i]) + 1;
-        if (plen > sizeof(cfg.origins[i].dst))
+        if (plen > sizeof(cfg.origins[i].dst)) {
             return 1;
+        }
         memcpy(cfg.origins[i].dst, paths[i], plen);
         cfg.origins[i].max_inflight = 64;
     }
 
     sdf_fluid_repair_stats_t st;
-    if (sdf_fluid_repair_run(&cfg, &st) != 0)
+    if (sdf_fluid_repair_run(&cfg, &st) != 0) {
         return 1;
+    }
 
-    for (uint32_t i = 0; i < cfg.n_origins; i++)
+    for (uint32_t i = 0; i < cfg.n_origins; i++) {
         unlink(paths[i]);
+    }
 
     const char *arm = cfg.arm == SDF_REPAIR_CONTROL
                           ? "control"
@@ -111,17 +118,21 @@ int main(int argc, char **argv) {
      * and the byte-exact gate. Single-block lines stay unchanged. */
     if (st.n_blocks > 1) {
         printf(" blocks=%u block_rounds=", st.n_blocks);
-        for (uint32_t b = 0; b < st.n_blocks; b++)
+        for (uint32_t b = 0; b < st.n_blocks; b++) {
             printf("%s%llu", b ? "," : "", (unsigned long long)st.blocks[b].rounds);
+        }
         printf(" block_fallback=");
-        for (uint32_t b = 0; b < st.n_blocks; b++)
+        for (uint32_t b = 0; b < st.n_blocks; b++) {
             printf("%s%d", b ? "," : "", st.blocks[b].arq_fallback);
+        }
         printf(" block_rank=");
-        for (uint32_t b = 0; b < st.n_blocks; b++)
+        for (uint32_t b = 0; b < st.n_blocks; b++) {
             printf("%s%u", b ? "," : "", st.blocks[b].decode_rank);
+        }
         printf(" block_ok=");
-        for (uint32_t b = 0; b < st.n_blocks; b++)
+        for (uint32_t b = 0; b < st.n_blocks; b++) {
             printf("%s%d", b ? "," : "", st.blocks[b].ok);
+        }
     }
     printf("\n");
     return st.ok == 1 ? 0 : 1;

@@ -201,15 +201,17 @@ int sdf_wm_rebuild(wm_compiled_t *c) {
 
 static int all_removed(const wm_profile_t *p, const uint32_t *e) {
     for (uint32_t i = 0; i < p->n; i++) {
-        if (p->b[i] > e[i])
+        if (p->b[i] > e[i]) {
             return 0;
+        }
     }
     return 1;
 }
 
 static void residual_walk(wm_profile_t *p, uint32_t steps) {
-    if (p->residual_r >= p->n)
+    if (p->residual_r >= p->n) {
         p->residual_r = 0;
+    }
     for (uint32_t i = 0; i < steps; i++) {
         p->b[p->residual_r]++;
         p->residual_r = (p->residual_r + 1) % p->n;
@@ -235,19 +237,22 @@ int wm_profile_update(wm_profile_t *p, const uint32_t *e, int mode) {
         uint32_t ej = 0;
         for (uint32_t i = 0; i < p->n; i++) {
             if (e[i] > 0) {
-                if (ej != 0)
+                if (ej != 0) {
                     return -EINVAL; /* exactly one positive entry */
+                }
                 j = i;
                 ej = e[i];
             }
         }
-        if (ej == 0)
+        if (ej == 0) {
             return 0; /* nothing to do */
+        }
         uint32_t x = ej / p->n;
         uint32_t y = ej % p->n;
         for (uint32_t i = 0; i < p->n; i++) {
-            if (i != j)
+            if (i != j) {
                 p->b[i] += x;
+            }
         }
         p->b[j] = p->b[j] - ej + x;
         residual_walk(p, y);
@@ -257,14 +262,17 @@ int wm_profile_update(wm_profile_t *p, const uint32_t *e, int mode) {
     if (mode == 2) {
         /* multi path: total removed spread over all n */
         uint32_t etot = 0;
-        for (uint32_t i = 0; i < p->n; i++)
+        for (uint32_t i = 0; i < p->n; i++) {
             etot += e[i];
-        if (etot == 0)
+        }
+        if (etot == 0) {
             return 0;
+        }
         uint32_t x = etot / p->n;
         uint32_t y = etot % p->n;
-        for (uint32_t i = 0; i < p->n; i++)
+        for (uint32_t i = 0; i < p->n; i++) {
             p->b[i] = p->b[i] - e[i] + x;
+        }
         residual_walk(p, y);
         return 0;
     }
@@ -281,23 +289,29 @@ int wm_profile_update(wm_profile_t *p, const uint32_t *e, int mode) {
                 kbar[kbar_n++] = i;
             }
         }
-        if (etot == 0 || kbar_n == 0)
+        if (etot == 0 || kbar_n == 0) {
             return -EINVAL; /* both sides must exist */
+        }
         uint32_t x = etot / kbar_n;
         uint32_t y = etot % kbar_n;
-        for (uint32_t i = 0; i < p->n; i++)
+        for (uint32_t i = 0; i < p->n; i++) {
             p->b[i] -= e[i];
-        for (uint32_t i = 0; i < kbar_n; i++)
+        }
+        for (uint32_t i = 0; i < kbar_n; i++) {
             p->b[kbar[i]] += x;
-        if (p->residual_r >= p->n)
+        }
+        if (p->residual_r >= p->n) {
             p->residual_r = 0;
+        }
         uint32_t need = y;
         while (need > 0) {
             uint32_t r = p->residual_r;
             int in_kbar = 0;
-            for (uint32_t i = 0; i < kbar_n; i++)
-                if (kbar[i] == r)
+            for (uint32_t i = 0; i < kbar_n; i++) {
+                if (kbar[i] == r) {
                     in_kbar = 1;
+                }
+            }
             if (in_kbar) {
                 p->b[r]++;
                 need--;
@@ -315,16 +329,20 @@ int wm_profile_update(wm_profile_t *p, const uint32_t *e, int mode) {
         uint32_t kbar[WM_MAX_PATHS];
         uint32_t kbar_n = 0;
         for (uint32_t i = 0; i < p->n; i++) {
-            if (e[i] > p->b[i])
+            if (e[i] > p->b[i]) {
                 return -EINVAL;
-            if (e[i] == 0)
+            }
+            if (e[i] == 0) {
                 kbar[kbar_n++] = i;
+            }
             etot += e[i];
         }
-        if (etot == 0)
+        if (etot == 0) {
             return 0;
-        if (etot >= p->m)
+        }
+        if (etot >= p->m) {
             return -EINVAL; /* would leave nothing */
+        }
         uint64_t m = p->m;
         uint64_t m_e = m - etot;
         uint32_t nb[WM_MAX_PATHS];
@@ -339,20 +357,25 @@ int wm_profile_update(wm_profile_t *p, const uint32_t *e, int mode) {
         uint32_t k = kbar_n ? kbar_n : n;
         uint32_t x = (uint32_t)(ellrem / k);
         uint32_t y = (uint32_t)(ellrem % k);
-        for (uint32_t i = 0; i < p->n; i++)
+        for (uint32_t i = 0; i < p->n; i++) {
             p->b[i] = nb[i];
-        for (uint32_t i = 0; i < k; i++)
+        }
+        for (uint32_t i = 0; i < k; i++) {
             p->b[kbar_n ? kbar[i] : i] += x;
-        if (p->residual_r >= p->n)
+        }
+        if (p->residual_r >= p->n) {
             p->residual_r = 0;
+        }
         uint32_t need = y;
         while (need > 0) {
             if (kbar_n) {
                 uint32_t r = p->residual_r;
                 int in_kbar = 0;
-                for (uint32_t i = 0; i < kbar_n; i++)
-                    if (kbar[i] == r)
+                for (uint32_t i = 0; i < kbar_n; i++) {
+                    if (kbar[i] == r) {
                         in_kbar = 1;
+                    }
+                }
                 if (in_kbar) {
                     p->b[r]++;
                     need--;

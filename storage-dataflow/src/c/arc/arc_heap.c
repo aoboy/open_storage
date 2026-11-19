@@ -14,8 +14,9 @@
 /* ---- min-heap over T_n --------------------------------------------------- */
 
 static int less_than(const arc_rel_t *a, const arc_rel_t *b) {
-    if (a->T_n != b->T_n)
+    if (a->T_n != b->T_n) {
         return a->T_n < b->T_n;
+    }
     return a->seq < b->seq; /* stable: submit order on ties */
 }
 
@@ -28,8 +29,9 @@ static void heap_swap(arc_state_t *s, size_t i, size_t j) {
 static void heap_up(arc_state_t *s, size_t i) {
     while (i > 0) {
         size_t parent = (i - 1) / 2;
-        if (!less_than(&s->heap[i], &s->heap[parent]))
+        if (!less_than(&s->heap[i], &s->heap[parent])) {
             break;
+        }
         heap_swap(s, i, parent);
         i = parent;
     }
@@ -38,20 +40,24 @@ static void heap_up(arc_state_t *s, size_t i) {
 static void heap_down(arc_state_t *s, size_t i) {
     for (;;) {
         size_t l = 2 * i + 1, r = 2 * i + 2, best = i;
-        if (l < s->heap_n && less_than(&s->heap[l], &s->heap[best]))
+        if (l < s->heap_n && less_than(&s->heap[l], &s->heap[best])) {
             best = l;
-        if (r < s->heap_n && less_than(&s->heap[r], &s->heap[best]))
+        }
+        if (r < s->heap_n && less_than(&s->heap[r], &s->heap[best])) {
             best = r;
-        if (best == i)
+        }
+        if (best == i) {
             break;
+        }
         heap_swap(s, i, best);
         i = best;
     }
 }
 
 int arc_heap_push(arc_state_t *s, const arc_rel_t *rel) {
-    if (s == NULL || rel == NULL || s->heap_n >= s->capacity)
+    if (s == NULL || rel == NULL || s->heap_n >= s->capacity) {
         return -1;
+    }
     s->heap[s->heap_n] = *rel;
     heap_up(s, s->heap_n);
     s->heap_n++;
@@ -59,8 +65,9 @@ int arc_heap_push(arc_state_t *s, const arc_rel_t *rel) {
 }
 
 int arc_heap_pop(arc_state_t *s, arc_rel_t *out) {
-    if (s == NULL || out == NULL || s->heap_n == 0)
+    if (s == NULL || out == NULL || s->heap_n == 0) {
         return -1;
+    }
     *out = s->heap[0];
     s->heap_n--;
     if (s->heap_n > 0) {
@@ -73,12 +80,14 @@ int arc_heap_pop(arc_state_t *s, arc_rel_t *out) {
 /* ---- release bookkeeping ------------------------------------------------- */
 
 double arc_res_pctl(const uint64_t *samples, size_t n, size_t cap, double p) {
-    if (n == 0)
+    if (n == 0) {
         return 0.0;
+    }
     uint64_t tmp[256];
     size_t take = n < cap ? n : cap;
-    if (take > 256)
+    if (take > 256) {
         take = 256;
+    }
     memcpy(tmp, samples, take * sizeof(uint64_t));
     /* insertion sort: take <= 256, called rarely (stats snapshots) */
     for (size_t i = 1; i < take; i++) {
@@ -90,13 +99,16 @@ double arc_res_pctl(const uint64_t *samples, size_t n, size_t cap, double p) {
         }
         tmp[j + 1] = v;
     }
-    if (p < 0.0)
+    if (p < 0.0) {
         p = 0.0;
-    if (p > 1.0)
+    }
+    if (p > 1.0) {
         p = 1.0;
+    }
     size_t idx = (size_t)((double)(take - 1) * p + 0.5);
-    if (idx >= take)
+    if (idx >= take) {
         idx = take - 1;
+    }
     return (double)tmp[idx];
 }
 
@@ -117,10 +129,12 @@ void arc_note_release(arc_state_t *s, const arc_rel_t *rel, uint64_t now_ns) {
         int64_t rel_gap = (int64_t)(now_ns - s->last_release_ts);
         int64_t prod_gap = (int64_t)(rel->S_n - s->last_release_S_ns);
         int64_t err = rel_gap - prod_gap;
-        if (err < 0)
+        if (err < 0) {
             err = -err;
-        if ((uint64_t)err > s->interval_error_max)
+        }
+        if ((uint64_t)err > s->interval_error_max) {
             s->interval_error_max = (uint64_t)err;
+        }
     }
     s->last_release_ts = now_ns;
     s->last_release_S_ns = rel->S_n;
@@ -129,8 +143,9 @@ void arc_note_release(arc_state_t *s, const arc_rel_t *rel, uint64_t now_ns) {
     /* J.5 budget: session p99 of the added delay over the budget */
     if (s->budget_ns > 0) {
         double p99 = arc_res_pctl(s->added_samples, s->added_n, 256, 0.99);
-        if (p99 > (double)s->budget_ns)
+        if (p99 > (double)s->budget_ns) {
             s->stats.budget_alerts++;
+        }
     }
 }
 
@@ -139,8 +154,9 @@ void arc_note_release(arc_state_t *s, const arc_rel_t *rel, uint64_t now_ns) {
 static uint64_t min_pred_T(const arc_state_t *s, uint64_t block_n) {
     uint64_t best = UINT64_MAX;
     for (size_t i = 0; i < s->heap_n; i++) {
-        if (s->heap[i].block_n + 1 == block_n && s->heap[i].T_n < best)
+        if (s->heap[i].block_n + 1 == block_n && s->heap[i].T_n < best) {
             best = s->heap[i].T_n;
+        }
     }
     return best;
 }
@@ -154,8 +170,9 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
      * T_n has already passed (W6.4). Entries submitted while already in
      * IMMEDIATE carry T_n == A_n, so the common path is unchanged. */
     while (s->heap_n > 0 && (s->mode == ARC_MODE_IMMEDIATE || s->heap[0].T_n <= now_ns)) {
-        if (arc_heap_pop(s, &rel) != 0)
+        if (arc_heap_pop(s, &rel) != 0) {
             break;
+        }
 
         if (s->mode >= ARC_MODE_QG) {
             int ordered =

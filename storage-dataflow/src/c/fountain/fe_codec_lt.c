@@ -65,8 +65,9 @@ size_t lt_dec_sizeof(void) {
  * back to uniform 1..K for the tiny-K regime where the distribution
  * degenerates (documented; the reference arm's lab sizes). */
 static uint32_t draw_degree(uint64_t *state, uint32_t k) {
-    if (k < 8u)
+    if (k < 8u) {
         return 1u + (uint32_t)(lt_prng_next(state) % k);
+    }
 
     const double c = 0.1, delta = 0.5;
     double R = c * log((double)k / delta) * sqrt((double)k);
@@ -80,10 +81,11 @@ static uint32_t draw_degree(uint64_t *state, uint32_t k) {
     for (uint32_t d = 1; d <= k; d++) {
         rho[d] = d == 1 ? 1.0 / (double)k : 1.0 / ((double)d * (double)(d - 1));
         tau[d] = 0.0;
-        if (d < k_r)
+        if (d < k_r) {
             tau[d] = R / ((double)d * (double)k);
-        else if (d == k_r)
+        } else if (d == k_r) {
             tau[d] = R / (double)k * log(R / delta);
+        }
         mu[d] = rho[d] + tau[d];
         z += mu[d];
     }
@@ -91,8 +93,9 @@ static uint32_t draw_degree(uint64_t *state, uint32_t k) {
     double acc = 0.0;
     for (uint32_t d = 1; d <= k; d++) {
         acc += mu[d];
-        if (u <= acc)
+        if (u <= acc) {
             return d;
+        }
     }
     return k; /* rounding tail */
 }
@@ -106,8 +109,9 @@ static void repair_neighbors(uint32_t k, uint32_t r, uint16_t *nb, uint32_t *deg
     uint8_t seen[LT_MAX_K] = {0};
     while (picked < d && picked < k) {
         uint32_t p = (uint32_t)(lt_prng_next(&state) % k);
-        if (seen[p])
+        if (seen[p]) {
             continue;
+        }
         seen[p] = 1;
         nb[picked++] = (uint16_t)p;
     }
@@ -115,13 +119,16 @@ static void repair_neighbors(uint32_t k, uint32_t r, uint16_t *nb, uint32_t *deg
 }
 
 int lt_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
-    if (mem == NULL || cfg == NULL || block == NULL)
+    if (mem == NULL || cfg == NULL || block == NULL) {
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->block_len == 0 || cfg->block_len % cfg->k != 0)
+    }
+    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->block_len == 0 || cfg->block_len % cfg->k != 0) {
         return -EINVAL;
+    }
     size_t sym_len = cfg->block_len / cfg->k;
-    if (sym_len == 0 || sym_len > LT_MAX_SYM)
+    if (sym_len == 0 || sym_len > LT_MAX_SYM) {
         return -EINVAL;
+    }
 
     lt_enc_t *e = mem;
     memset(e, 0, sizeof(*e));
@@ -133,10 +140,12 @@ int lt_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
 }
 
 int lt_dec_init(void *mem, const fd_cfg_t *cfg) {
-    if (mem == NULL || cfg == NULL)
+    if (mem == NULL || cfg == NULL) {
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->sym_len == 0 || cfg->sym_len > LT_MAX_SYM)
+    }
+    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->sym_len == 0 || cfg->sym_len > LT_MAX_SYM) {
         return -EINVAL;
+    }
     lt_dec_t *d = mem;
     memset(d, 0, sizeof(*d));
     d->k = cfg->k;
@@ -151,10 +160,12 @@ uint32_t lt_symbol_count(const void *enc) {
 
 int lt_generate(void *enc, uint32_t esi, uint8_t *out, size_t out_len) {
     lt_enc_t *e = enc;
-    if (e == NULL || out == NULL || out_len != e->sym_len)
+    if (e == NULL || out == NULL || out_len != e->sym_len) {
         return -EINVAL;
-    if (esi >= lt_symbol_count(enc))
+    }
+    if (esi >= lt_symbol_count(enc)) {
         return -EINVAL;
+    }
     if (esi < e->k) {
         memcpy(out, e->block + (size_t)esi * e->sym_len, e->sym_len);
         return 0;
@@ -180,20 +191,24 @@ void lt_dec_destroy(void *dec) {
 
 int lt_push(void *dec, uint32_t esi, const uint8_t *sym, size_t len) {
     lt_dec_t *d = dec;
-    if (d == NULL || sym == NULL || len != d->sym_len)
+    if (d == NULL || sym == NULL || len != d->sym_len) {
         return -EINVAL;
-    if (esi >= 2u * d->k)
+    }
+    if (esi >= 2u * d->k) {
         return -EINVAL;
+    }
     if (esi < d->k) {
-        if (d->have_src[esi])
+        if (d->have_src[esi]) {
             return 1;
+        }
         d->have_src[esi] = 1;
         memcpy(d->src[esi], sym, len);
         return 0;
     }
     uint32_t r = esi - d->k;
-    if (d->have_rep[r])
+    if (d->have_rep[r]) {
         return 1;
+    }
     d->have_rep[r] = 1;
     repair_neighbors(d->k, esi, d->rep_nb[r], &d->rep_deg[r]);
     memcpy(d->rep[r], sym, len);
@@ -206,8 +221,9 @@ static void peel(lt_dec_t *d) {
     while (progress) {
         progress = 0;
         for (uint32_t r = 0; r < d->k && r < LT_REPAIR_MAX; r++) {
-            if (!d->have_rep[r])
+            if (!d->have_rep[r]) {
                 continue;
+            }
             /* count unresolved neighbors */
             uint32_t unknown = 0;
             uint16_t last = 0;
@@ -238,21 +254,24 @@ static void peel(lt_dec_t *d) {
 
 bool lt_ready(const void *dec) {
     const lt_dec_t *d = dec;
-    if (d == NULL)
+    if (d == NULL) {
         return false;
+    }
     lt_dec_t *mut = (lt_dec_t *)d; /* peel mutates the recovery state */
     peel(mut);
     for (uint32_t i = 0; i < d->k; i++) {
-        if (!d->have_src[i])
+        if (!d->have_src[i]) {
             return false;
+        }
     }
     return true;
 }
 
 uint32_t lt_rank(const void *dec) {
     const lt_dec_t *d = dec;
-    if (d == NULL)
+    if (d == NULL) {
         return 0;
+    }
     uint32_t n = 0;
     for (uint32_t i = 0; i < d->k; i++) {
         n += d->have_src[i] ? 1u : 0u;
@@ -265,10 +284,12 @@ uint32_t lt_rank(const void *dec) {
 
 int lt_decode(void *dec, uint8_t *out, size_t block_len) {
     lt_dec_t *d = dec;
-    if (d == NULL || out == NULL || block_len != (size_t)d->k * d->sym_len)
+    if (d == NULL || out == NULL || block_len != (size_t)d->k * d->sym_len) {
         return -EINVAL;
-    if (!lt_ready(dec))
+    }
+    if (!lt_ready(dec)) {
         return -EINVAL; /* the ARQ-fallback condition (design 02) */
+    }
     for (uint32_t j = 0; j < d->k; j++) {
         memcpy(out + (size_t)j * d->sym_len, d->src[j], d->sym_len);
     }

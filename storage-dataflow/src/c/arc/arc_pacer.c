@@ -26,66 +26,88 @@
  * which silently switched rho/lambda to 0.5/0.05 mid-test).
  */
 static void cfg_defaults(arc_cfg_t *cfg) {
-    if (cfg->rho_u == 0.0)
+    if (cfg->rho_u == 0.0) {
         cfg->rho_u = 0.5;
-    if (cfg->rho_l == 0.0)
+    }
+    if (cfg->rho_l == 0.0) {
         cfg->rho_l = 1.5;
-    if (cfg->lambda_u == 0.0)
+    }
+    if (cfg->lambda_u == 0.0) {
         cfg->lambda_u = 0.05;
-    if (cfg->lambda_l == 0.0)
+    }
+    if (cfg->lambda_l == 0.0) {
         cfg->lambda_l = 0.03;
-    if (cfg->U == 0)
+    }
+    if (cfg->U == 0) {
         cfg->U = 100000000ull; /* 100 ms */
-    if (cfg->delta == 0)
+    }
+    if (cfg->delta == 0) {
         cfg->delta = 50000000ull; /* 50 ms */
-    if (cfg->gamma == 0)
+    }
+    if (cfg->gamma == 0) {
         cfg->gamma = 16666667ull; /* ~60 fps step */
+    }
     /* J == 0 is a VALID paper setting (neutral band off): not defaulted */
-    if (cfg->G == 0)
+    if (cfg->G == 0) {
         cfg->G = 50000000ull; /* 50 ms guard */
-    if (cfg->T_idle_ns == 0)
+    }
+    if (cfg->T_idle_ns == 0) {
         cfg->T_idle_ns = 1000000000ull;
-    if (cfg->c_U == 0.0)
+    }
+    if (cfg->c_U == 0.0) {
         cfg->c_U = 1.0;
-    if (cfg->c_delta == 0.0)
+    }
+    if (cfg->c_delta == 0.0) {
         cfg->c_delta = 1.0;
-    if (cfg->min_smooth_bytes == 0)
+    }
+    if (cfg->min_smooth_bytes == 0) {
         cfg->min_smooth_bytes = 64;
+    }
     /* budget_ns == 0 = off (valid); rtt_sm_ns == 0 = auto-U off */
     if (cfg->mode != ARC_MODE_BASE && cfg->mode != ARC_MODE_Q && cfg->mode != ARC_MODE_QG &&
-        cfg->mode != ARC_MODE_IMMEDIATE)
+        cfg->mode != ARC_MODE_IMMEDIATE) {
         cfg->mode = ARC_MODE_QG;
-    if (cfg->capacity == 0)
+    }
+    if (cfg->capacity == 0) {
         cfg->capacity = 256;
-    if (cfg->entry_max == 0)
+    }
+    if (cfg->entry_max == 0) {
         cfg->entry_max = 256;
-    if (cfg->batch_max == 0)
+    }
+    if (cfg->batch_max == 0) {
         cfg->batch_max = 64;
-    if (cfg->batch_deadline_ns == 0)
+    }
+    if (cfg->batch_deadline_ns == 0) {
         cfg->batch_deadline_ns = 2000000ull; /* 2 ms */
+    }
     /* auto_params: the caller sets it explicitly (0/1); -1 => default on */
-    if (cfg->auto_params < 0)
+    if (cfg->auto_params < 0) {
         cfg->auto_params = 1;
+    }
 }
 
 size_t arc_sizeof(const arc_cfg_t *cfg) {
-    if (cfg == NULL)
+    if (cfg == NULL) {
         return 0;
+    }
     arc_cfg_t c = *cfg;
     cfg_defaults(&c);
     if (c.capacity < 2 || (c.capacity & (c.capacity - 1)) != 0 || c.entry_max == 0 ||
-        c.entry_max > (1u << 20))
+        c.entry_max > (1u << 20)) {
         return 0;
+    }
     size_t need = sizeof(arc_state_t) + (size_t)c.capacity * (sizeof(arc_rel_t) + c.entry_max + 1);
     return (need + 63u) & ~(size_t)63;
 }
 
 int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn, void *ctx) {
-    if (p == NULL || cfg == NULL)
+    if (p == NULL || cfg == NULL) {
         return -EINVAL;
+    }
     size_t need = arc_sizeof(cfg);
-    if (need == 0)
+    if (need == 0) {
         return -EINVAL;
+    }
 
     arc_cfg_t c = *cfg;
     cfg_defaults(&c);
@@ -131,11 +153,13 @@ int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn, void *ctx) {
 }
 
 int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts) {
-    if (p == NULL || (len > 0 && entry == NULL))
+    if (p == NULL || (len > 0 && entry == NULL)) {
         return -EINVAL;
+    }
     arc_state_t *s = &p->st;
-    if (len > s->entry_max)
+    if (len > s->entry_max) {
         return -EINVAL;
+    }
 
     int how = 0;
     arc_sched_t sched = arc_arrival(s, producer_ts, (uint64_t)sdf_now_ns(), len, &how);
@@ -148,10 +172,12 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
             break;
         }
     }
-    if (slot == UINT32_MAX)
+    if (slot == UINT32_MAX) {
         return -EAGAIN;
-    if (len > 0)
+    }
+    if (len > 0) {
         memcpy(s->slab + (size_t)slot * s->entry_max, entry, len);
+    }
     s->slot_used[slot] = 1;
 
     arc_rel_t rel;
@@ -170,8 +196,9 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
     if (how == 0 && rel.T_n > rel.A_n + (uint64_t)s->delta) {
         rel.T_n = rel.A_n + (uint64_t)s->delta;
         s->stats.delta_clamps++;
-        if (rel.T_deadline < rel.T_n)
+        if (rel.T_deadline < rel.T_n) {
             rel.T_deadline = rel.T_n;
+        }
     }
 
     if (arc_heap_push(s, &rel) != 0) {
@@ -182,18 +209,21 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
 }
 
 int arc_poll(arc_pacer_t *p, uint64_t now_ns) {
-    if (p == NULL)
+    if (p == NULL) {
         return -EINVAL;
+    }
     arc_state_t *s = &p->st;
     uint64_t deadline = now_ns + s->batch_deadline_ns;
     uint32_t released = 0;
     while (released < s->batch_max) {
         int n = arc_drain(s, now_ns);
         released += (uint32_t)n;
-        if (n == 0)
+        if (n == 0) {
             break;
-        if ((uint64_t)sdf_now_ns() > deadline)
+        }
+        if ((uint64_t)sdf_now_ns() > deadline) {
             break;
+        }
     }
     return (int)released;
 }
@@ -201,8 +231,9 @@ int arc_poll(arc_pacer_t *p, uint64_t now_ns) {
 arc_stats_t arc_stats(const arc_pacer_t *p) {
     arc_stats_t out;
     memset(&out, 0, sizeof(out));
-    if (p == NULL)
+    if (p == NULL) {
         return out;
+    }
     const arc_state_t *s = &p->st;
     out.D = s->D;
     out.E = s->mode >= ARC_MODE_Q ? s->E : s->D;
@@ -224,17 +255,20 @@ arc_stats_t arc_stats(const arc_pacer_t *p) {
 }
 
 void arc_set_rtt(arc_pacer_t *p, uint64_t rtt_sm_ns) {
-    if (p == NULL)
+    if (p == NULL) {
         return;
+    }
     p->st.rtt_sm_ns = rtt_sm_ns;
 }
 
 int arc_set_mode(arc_pacer_t *p, arc_mode_t mode) {
-    if (p == NULL)
+    if (p == NULL) {
         return -EINVAL;
+    }
     if (mode != ARC_MODE_BASE && mode != ARC_MODE_Q && mode != ARC_MODE_QG &&
-        mode != ARC_MODE_IMMEDIATE)
+        mode != ARC_MODE_IMMEDIATE) {
         return -EINVAL;
+    }
     /* The mode is read by the next submit/poll on the pacer's thread;
      * callers that own the pacer (the sidecar pump) serialize the
      * flip, so no extra synchronization is needed here. */

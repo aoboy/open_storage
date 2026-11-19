@@ -34,8 +34,9 @@
 
 static uint32_t parse_u32(const sdf_config_t *cfg, const char *key, uint32_t fallback) {
     uint64_t v;
-    if (sdf_config_get_u64(cfg, key, &v) == 0)
+    if (sdf_config_get_u64(cfg, key, &v) == 0) {
         return (uint32_t)v;
+    }
     return fallback;
 }
 
@@ -53,15 +54,17 @@ static int proxy_render(void *ud, FILE *out) {
     fprintf(out, "sdf_proxy_shm_profile_version %u\n", st->shm_version_acquired);
     fprintf(out, "sdf_proxy_shm_telemetry_pushed %llu\n",
             (unsigned long long)st->shm_telemetry_pushed);
-    for (uint32_t i = 0; i < 4 && st->end_profile_b[i] != 0; i++)
+    for (uint32_t i = 0; i < 4 && st->end_profile_b[i] != 0; i++) {
         fprintf(out, "sdf_proxy_origin_dispatched{origin=\"%u\"} %llu\n", i,
                 (unsigned long long)st->dispatched[i]);
+    }
     return 0;
 }
 
 static int timeline_from_name(sdf_wm_proxy_cfg_t *pc, const char *name, uint64_t units) {
-    if (strcmp(name, "steady") == 0)
+    if (strcmp(name, "steady") == 0) {
         return 0;
+    }
     if (strcmp(name, "slow") == 0) {
         pc->steps[pc->n_steps++] = (sdf_wm_proxy_step_t){
             .at_unit = units / 4, .origin = 1, .enable = 1, .throttle_ns = 5000000};
@@ -73,9 +76,10 @@ static int timeline_from_name(sdf_wm_proxy_cfg_t *pc, const char *name, uint64_t
         return 0;
     }
     if (strcmp(name, "flapping") == 0) {
-        for (int k = 1; k <= 4; k++)
+        for (int k = 1; k <= 4; k++) {
             pc->steps[pc->n_steps++] = (sdf_wm_proxy_step_t){
                 .at_unit = units * k / 5, .origin = 3, .enable = k % 2, .throttle_ns = 0};
+        }
         return 0;
     }
     return -1;
@@ -94,26 +98,26 @@ int main(int argc, char **argv) {
     uint64_t pc_pace_ns = 0;
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-C") == 0 && i + 1 < argc)
+        if (strcmp(argv[i], "-C") == 0 && i + 1 < argc) {
             config_path = argv[++i];
-        else if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc)
+        } else if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc) {
             profile_name = argv[++i];
-        else if (strcmp(argv[i], "--units") == 0 && i + 1 < argc)
+        } else if (strcmp(argv[i], "--units") == 0 && i + 1 < argc) {
             units = strtoull(argv[++i], NULL, 10);
-        else if (strcmp(argv[i], "--unit-bytes") == 0 && i + 1 < argc)
+        } else if (strcmp(argv[i], "--unit-bytes") == 0 && i + 1 < argc) {
             unit_bytes = (uint32_t)strtoul(argv[++i], NULL, 10);
-        else if (strcmp(argv[i], "--jobs") == 0 && i + 1 < argc)
+        } else if (strcmp(argv[i], "--jobs") == 0 && i + 1 < argc) {
             jobs = (uint32_t)strtoul(argv[++i], NULL, 10);
-        else if (strcmp(argv[i], "--rollout") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--rollout") == 0 && i + 1 < argc) {
             pc_rollout_override = (uint32_t)strtoul(argv[++i], NULL, 10);
             pc_rollout_set = 1; /* 0 is a valid override (pure control) */
-        } else if (strcmp(argv[i], "--kill") == 0)
+        } else if (strcmp(argv[i], "--kill") == 0) {
             pc_kill_override = 1;
-        else if (strcmp(argv[i], "--shm") == 0 && i + 1 < argc)
+        } else if (strcmp(argv[i], "--shm") == 0 && i + 1 < argc) {
             pc_shm_name = argv[++i];
-        else if (strcmp(argv[i], "--pace-ns") == 0 && i + 1 < argc)
+        } else if (strcmp(argv[i], "--pace-ns") == 0 && i + 1 < argc) {
             pc_pace_ns = strtoull(argv[++i], NULL, 10); /* dispatch-side */
-        else {
+        } else {
             fprintf(stderr,
                     "usage: %s [-C wm.toml] [--profile steady|slow|dies|"
                     "flapping] [--units N] [--unit-bytes B] [--jobs J] "
@@ -138,8 +142,9 @@ int main(int argc, char **argv) {
     pc.profile.version = 1;
     pc.profile.m = 1024;
     pc.profile.n = 4;
-    for (uint32_t i = 0; i < 4; i++)
+    for (uint32_t i = 0; i < 4; i++) {
         pc.profile.b[i] = 256;
+    }
     pc.spray.method = WM_METHOD_SHUFFLE1;
     pc.spray.sa = 333;
     pc.spray.sb = 735;
@@ -172,18 +177,22 @@ int main(int argc, char **argv) {
             for (const char *q = fr + 1; *q && *q != ']';) {
                 char *end = NULL;
                 double v = strtod(q, &end);
-                if (end == q)
+                if (end == q) {
                     break;
-                if (nf < WM_MAX_PATHS)
+                }
+                if (nf < WM_MAX_PATHS) {
                     vals[nf++] = v;
+                }
                 q = end;
-                while (*q == ' ' || *q == ',')
+                while (*q == ' ' || *q == ',') {
                     q++;
+                }
             }
             if (nf > 0 && nf <= WM_MAX_PATHS) {
                 double sum = 0;
-                for (uint32_t i = 0; i < nf; i++)
+                for (uint32_t i = 0; i < nf; i++) {
                     sum += vals[i];
+                }
                 if (sum > 0) {
                     pc.profile.n = nf;
                     uint32_t assigned = 0;
@@ -201,10 +210,12 @@ int main(int argc, char **argv) {
     }
 
     /* CLI overrides beat the config file (ADR-0005 precedence) */
-    if (pc_rollout_set)
+    if (pc_rollout_set) {
         pc.rollout_pct = pc_rollout_override > 100 ? 100 : pc_rollout_override;
-    if (pc_kill_override)
+    }
+    if (pc_kill_override) {
         pc.kill_switch = 1;
+    }
 
     /* W6.1: the live-chain knobs (CLI > config per ADR-0005) */
     pc.shm_name = pc_shm_name;
@@ -221,16 +232,18 @@ int main(int argc, char **argv) {
             return 1;
         }
         static uint8_t blk[4096];
-        for (size_t k = 0; k < sizeof(blk); k++)
+        for (size_t k = 0; k < sizeof(blk); k++) {
             blk[k] = (uint8_t)(k * 31u + i);
+        }
         for (uint64_t off = 0; off < SDF_WM_PROXY_OBJ_BYTES; off += sizeof(blk)) {
             if (fwrite(blk, 1, sizeof(blk), f) != sizeof(blk)) {
                 fclose(f);
                 return 1;
             }
         }
-        if (fclose(f) != 0)
+        if (fclose(f) != 0) {
             return 1;
+        }
 
         memset(&pc.origins[i], 0, sizeof(pc.origins[i]));
         pc.origins[i].id = i;
@@ -248,8 +261,9 @@ int main(int argc, char **argv) {
             char key[64];
             uint64_t v = 0;
             snprintf(key, sizeof(key), "origin[%u].throttle_ns", i);
-            if (sdf_config_get_u64(&cfg, key, &v) == 0)
+            if (sdf_config_get_u64(&cfg, key, &v) == 0) {
                 pc.origins[i].throttle_ns = v;
+            }
         }
     }
 
@@ -262,13 +276,15 @@ int main(int argc, char **argv) {
     const char *mep = getenv("SDF_METRICS_ENDPOINT");
     if (mep != NULL && mep[0] != '\0') {
         ep = sdf_metrics_endpoint_start(mep, proxy_render, &st);
-        if (ep == NULL)
+        if (ep == NULL) {
             return 1;
+        }
     }
 
     CHECK0(sdf_wm_proxy_run(&pc, &st));
-    if (ep != NULL)
+    if (ep != NULL) {
         sdf_metrics_endpoint_stop(ep);
+    }
 
     printf("PROXY profile=%s units=%llu unit_bytes=%u jobs=%u wall_ms=%llu "
            "updates=%u treatment=%llu control=%llu shm_version=%u "
@@ -285,8 +301,9 @@ int main(int argc, char **argv) {
                i, (unsigned long long)st.dispatched[i], (unsigned long long)st.ok[i],
                (unsigned long long)st.failed[i],
                (unsigned long long)sdf_counter_read(&st.enolink[i]), st.end_profile_b[i]);
-        if (st.dispatched[i] == 0)
+        if (st.dispatched[i] == 0) {
             gate = 0;
+        }
     }
     if (strcmp(profile_name, "steady") == 0 && pc.rollout_pct == 100) {
         /* the discrepancy gate (design 01): |dispatched - expected| within
@@ -314,8 +331,9 @@ int main(int argc, char **argv) {
                    st.updates_applied);
         }
     }
-    for (uint32_t i = 0; i < pc.n_origins; i++)
+    for (uint32_t i = 0; i < pc.n_origins; i++) {
         unlink(paths[i]);
+    }
     sdf_config_free(&cfg);
 
     if (!gate) {

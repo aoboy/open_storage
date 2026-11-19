@@ -41,8 +41,9 @@ static int rec(void *ctx, const void *entry, size_t len, uint64_t ts) {
     (void)ctx;
     (void)len;
     (void)ts;
-    if (n_marks < CAP)
+    if (n_marks < CAP) {
         marks[n_marks++] = *(const char *)entry;
+    }
     return 0;
 }
 
@@ -63,11 +64,13 @@ int main(void) {
         cfg.T_idle_ns = 1000000000ull;
 
         size_t sz = arc_sizeof(&cfg);
-        if (sz == 0)
+        if (sz == 0) {
             continue;
+        }
         arc_pacer_t *p = malloc(sz);
-        if (p == NULL)
+        if (p == NULL) {
             continue;
+        }
         if (arc_init(p, &cfg, rec, NULL) != 0) {
             free(p);
             continue;
@@ -91,12 +94,13 @@ int main(void) {
              * anchored to the REAL receiver clock */
             uint64_t roll = rng() % 100u;
             uint64_t Sn;
-            if (roll < 80)
+            if (roll < 80) {
                 Sn = clock - (uint64_t)(rng() % 80000000ull);
-            else if (roll < 90)
+            } else if (roll < 90) {
                 Sn = clock + 30ull * 1000000000ull; /* absurd future */
-            else
+            } else {
                 Sn = (uint64_t)(rng() % 1000ull); /* ancient tiny stamp */
+            }
             int src = arc_submit(p, entry, sizeof(entry), Sn);
             if (src == 0 || src == 1) { /* queued or bypass-scheduled:
                                          * both are accepted entries */
@@ -120,16 +124,13 @@ int main(void) {
             fprintf(stderr,
                     "FUZZ FAIL it=%ld: %llu released != %u submitted "
                     "(heap %u) mode=%d G=%llu min_smooth=%llu\n",
-                    it, (unsigned long long)st.releases, submitted,
-                    st.heap_depth, (int)cfg.mode,
-                    (unsigned long long)cfg.G,
-                    (unsigned long long)cfg.min_smooth_bytes);
+                    it, (unsigned long long)st.releases, submitted, st.heap_depth, (int)cfg.mode,
+                    (unsigned long long)cfg.G, (unsigned long long)cfg.min_smooth_bytes);
             return 1;
         }
         /* the estimator stayed finite (absurd stamps refused) */
         if (!(st.D >= 0.0) || st.D > 1e18 || !(st.E >= st.D - 1e-9)) {
-            fprintf(stderr, "FUZZ FAIL: estimator diverged D=%f E=%f\n",
-                    st.D, st.E);
+            fprintf(stderr, "FUZZ FAIL: estimator diverged D=%f E=%f\n", st.D, st.E);
             return 1;
         }
         free(p);

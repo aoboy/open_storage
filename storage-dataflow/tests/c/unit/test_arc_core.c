@@ -22,12 +22,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 typedef struct {
@@ -36,26 +36,25 @@ typedef struct {
     int n;
 } release_log_t;
 
-static int release_rec(void *ctx, const void *entry, size_t len,
-                       uint64_t ts) {
+static int release_rec(void *ctx, const void *entry, size_t len, uint64_t ts) {
     (void)len;
     release_log_t *log = ctx;
-    if (log->n >= 4096)
+    if (log->n >= 4096) {
         return 0; /* the replay legs release their whole stream; the
-                     * CHECK-based legs stay far below the cap */
+                   * CHECK-based legs stay far below the cap */
+    }
     log->ts[log->n] = ts;
     log->blocks[log->n] = entry ? *(const uint8_t *)entry : 0; /* marker */
     log->n++;
     return 0;
 }
 
-static void pacer_setup(arc_pacer_t **p, arc_cfg_t *cfg, release_log_t *log,
-                        arc_mode_t mode) {
+static void pacer_setup(arc_pacer_t **p, arc_cfg_t *cfg, release_log_t *log, arc_mode_t mode) {
     memset(cfg, 0, sizeof(*cfg));
     cfg->capacity = 64;
     cfg->entry_max = 64;
     cfg->mode = mode;
-    cfg->auto_params = 0; /* goldens pin fixed params (explicit off) */
+    cfg->auto_params = 0;      /* goldens pin fixed params (explicit off) */
     cfg->min_smooth_bytes = 0; /* everything goes through scheduling */
     cfg->rho_u = 1.0;
     cfg->rho_l = 1.0;
@@ -72,8 +71,6 @@ static void pacer_setup(arc_pacer_t **p, arc_cfg_t *cfg, release_log_t *log,
     memset(log, 0, sizeof(*log));
     CHECK(arc_init(*p, cfg, release_rec, log) == 0);
 }
-
-
 
 /* ---- paper section 12.3: the linear cycle ------------------------------ */
 
@@ -153,18 +150,20 @@ static void test_golden_exponent(void) {
         arc_poll(p, UINT64_MAX / 4);
         if (n >= N - M) {
             arc_stats_t st = arc_stats(p);
-            if (st.D < d_min)
+            if (st.D < d_min) {
                 d_min = st.D;
-            if (st.D > d_max)
+            }
+            if (st.D > d_max) {
                 d_max = st.D;
+            }
         }
     }
     /* paper band: D in ~[97.9, 100.5] ms through the steady state */
     CHECK(d_min > 97500000.0);
     CHECK(d_max < 101500000.0);
     free(p);
-    printf("  golden exponent: D band [%.1f, %.1f] ms (paper ~[97.9, 100.5])\n",
-           d_min / 1e6, d_max / 1e6);
+    printf("  golden exponent: D band [%.1f, %.1f] ms (paper ~[97.9, 100.5])\n", d_min / 1e6,
+           d_max / 1e6);
 }
 
 /* ---- Q invariants + guard ------------------------------------------------ */
@@ -184,8 +183,9 @@ static void test_q_invariants(void) {
         arc_poll(p, UINT64_MAX / 4);
         arc_stats_t st = arc_stats(p);
         CHECK(st.E >= st.D || fabs(st.E - st.D) < 1e-9);
-        if (st.E > st.D)
+        if (st.E > st.D) {
             CHECK(st.E - st.D < 16666667.0 + 1e-9); /* gamma band */
+        }
     }
     free(p);
 }
@@ -293,8 +293,7 @@ static void test_qg_guard(void) {
         memset(entry, 0xA0, sizeof(entry));
         CHECK(arc_submit(p, entry, sizeof(entry), sdf_now_ns()) == 0);
         memset(entry, 0xA1, sizeof(entry));
-        CHECK(arc_submit(p, entry, sizeof(entry),
-                         sdf_now_ns() - 80000000ull) == 0);
+        CHECK(arc_submit(p, entry, sizeof(entry), sdf_now_ns() - 80000000ull) == 0);
 
         /* poll in the window (T_1, T_0): the successor is due but
          * must NOT go out before block 0 — the guard parks it */
@@ -409,8 +408,9 @@ static void test_replay_qg(void) {
     CHECK(st.guard_timeouts == 0);
     CHECK(st.added_p99_ns < 120000000.0); /* the L.6-class bound */
     CHECK(log.n == N);
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < N; i++) {
         CHECK(log.blocks[i] == (uint8_t)i); /* zero order violations */
+    }
     free(p);
     printf("  replay: QG %d frames in submit order (guard reorders the "
            "valleys), p99 added %.1f ms\n",

@@ -24,12 +24,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 static char g_name[96];
@@ -81,8 +81,9 @@ static void test_roundtrip(void) {
     CHECK(memcmp(got.b, p1.b, sizeof(p1.b)) != 0); /* really changed */
 
     /* publish the same profile repeatedly: idempotent readback */
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++) {
         CHECK(sdf_wm_shm_publish(&s, &p2) == 0);
+    }
     CHECK(sdf_wm_shm_acquire(&s, &got, &ver) == 0);
     CHECK(ver == 2 && memcmp(got.b, p2.b, sizeof(p2.b)) == 0);
 
@@ -112,13 +113,11 @@ static void test_roundtrip(void) {
     st.id = 9;
     CHECK(sdf_wm_shm_telemetry_push(&s, &st) == -EINVAL); /* bad path id */
 
-    spsc_ring_t *ring =
-        (spsc_ring_t *)((uint8_t *)s.base + SDF_SHM_OFF_TELEMETRY_RING);
+    spsc_ring_t *ring = (spsc_ring_t *)((uint8_t *)s.base + SDF_SHM_OFF_TELEMETRY_RING);
     wm_shm_telem_t slot;
     CHECK(spsc_try_pop(ring, &slot));
-    CHECK(slot.id == 2 && slot.reqs_out == 100 && slot.reqs_done == 90 &&
-          slot.reqs_failed == 10 && slot.bytes_rx == 9000 &&
-          slot.in_flight == 3 && slot.ewma_lat_ns == 1234.5 &&
+    CHECK(slot.id == 2 && slot.reqs_out == 100 && slot.reqs_done == 90 && slot.reqs_failed == 10 &&
+          slot.bytes_rx == 9000 && slot.in_flight == 3 && slot.ewma_lat_ns == 1234.5 &&
           slot.ewma_err == 0.1);
     CHECK(!spsc_try_pop(ring, &slot)); /* drained */
 
@@ -174,8 +173,9 @@ static void test_no_torn_reads(void) {
         uint32_t expect0 = 256 + (ver % 4);
         CHECK(got.b[0] == expect0);
         uint64_t sum = 0;
-        for (uint32_t k = 0; k < 4; k++)
+        for (uint32_t k = 0; k < 4; k++) {
             sum += got.b[k];
+        }
         CHECK(sum == 1024);
         accepted++;
     }

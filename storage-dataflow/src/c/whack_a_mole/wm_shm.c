@@ -75,10 +75,12 @@ static spsc_ring_t *seg_ring(const sdf_shm_t *s) {
 #define WM_SHM_TELEM_CAP 32u
 
 static int init_segment(sdf_shm_t *s, uint32_t n_paths) {
-    if (n_paths == 0 || n_paths > WM_MAX_PATHS)
+    if (n_paths == 0 || n_paths > WM_MAX_PATHS) {
         return -EINVAL;
-    if (s->size < SDF_SHM_MIN_SIZE)
+    }
+    if (s->size < SDF_SHM_MIN_SIZE) {
         return -EINVAL;
+    }
     memset(s->base, 0, SDF_SHM_MIN_SIZE);
     sdf_seqlock_init(seg_seqlock(s));
     active_store(s, 0);
@@ -91,30 +93,36 @@ static int init_segment(sdf_shm_t *s, uint32_t n_paths) {
 }
 
 static int check_segment(const sdf_shm_t *s, uint32_t n_paths) {
-    if (s == NULL || s->base == NULL || s->size < SDF_SHM_MIN_SIZE)
+    if (s == NULL || s->base == NULL || s->size < SDF_SHM_MIN_SIZE) {
         return -EINVAL;
+    }
     const wm_shm_telem_hdr_t *hdr = seg_hdr(s);
-    if (hdr->magic != WM_SHM_MAGIC || hdr->n_paths != n_paths)
+    if (hdr->magic != WM_SHM_MAGIC || hdr->n_paths != n_paths) {
         return -EINVAL;
+    }
     return 0;
 }
 
 /* magic-only validation for calls that carry no expected n (the
  * profile itself declares n) */
 static int check_magic(const sdf_shm_t *s) {
-    if (s == NULL || s->base == NULL || s->size < SDF_SHM_MIN_SIZE)
+    if (s == NULL || s->base == NULL || s->size < SDF_SHM_MIN_SIZE) {
         return -EINVAL;
-    if (seg_hdr(s)->magic != WM_SHM_MAGIC)
+    }
+    if (seg_hdr(s)->magic != WM_SHM_MAGIC) {
         return -EINVAL;
+    }
     return 0;
 }
 
 int sdf_wm_shm_create(const char *name, uint32_t n_paths, sdf_shm_t *s) {
-    if (s == NULL)
+    if (s == NULL) {
         return -EINVAL;
+    }
     int rc = sdf_shm_create(s, name, SDF_SHM_MIN_SIZE);
-    if (rc != 0)
+    if (rc != 0) {
         return rc;
+    }
     rc = init_segment(s, n_paths);
     if (rc != 0) {
         sdf_shm_close(s);
@@ -124,11 +132,13 @@ int sdf_wm_shm_create(const char *name, uint32_t n_paths, sdf_shm_t *s) {
 }
 
 int sdf_wm_shm_attach(const char *name, uint32_t n_paths, sdf_shm_t *s) {
-    if (s == NULL)
+    if (s == NULL) {
         return -EINVAL;
+    }
     int rc = sdf_shm_open(s, name, SDF_SHM_MIN_SIZE);
-    if (rc != 0)
+    if (rc != 0) {
         return rc;
+    }
     if (check_segment(s, n_paths) != 0) {
         sdf_shm_close(s);
         return -EINVAL;
@@ -137,10 +147,12 @@ int sdf_wm_shm_attach(const char *name, uint32_t n_paths, sdf_shm_t *s) {
 }
 
 int sdf_wm_shm_publish(sdf_shm_t *s, const wm_profile_t *prof) {
-    if (s == NULL || s->base == NULL || prof == NULL)
+    if (s == NULL || s->base == NULL || prof == NULL) {
         return -EINVAL;
-    if (prof->n == 0 || prof->n > WM_MAX_PATHS)
+    }
+    if (prof->n == 0 || prof->n > WM_MAX_PATHS) {
         return -EINVAL;
+    }
 
     int active = active_load(s) ? 1 : 0;
     wm_shm_profile_buf_t *dst = seg_buf(s, active ? 0 : 1); /* inactive */
@@ -149,8 +161,9 @@ int sdf_wm_shm_publish(sdf_shm_t *s, const wm_profile_t *prof) {
     au32_store(&dst->m, prof->m);
     au32_store(&dst->n, prof->n);
     au64_store(&dst->down_mask, 0); /* advisory; live mask is in the header */
-    for (uint32_t i = 0; i < WM_MAX_PATHS; i++)
+    for (uint32_t i = 0; i < WM_MAX_PATHS; i++) {
         au32_store(&dst->b[i], prof->b[i]);
+    }
 
     /* flip inside the seqlock write section: readers that overlap the
      * flip retry; readers after it see the fully written buffer */
@@ -161,10 +174,12 @@ int sdf_wm_shm_publish(sdf_shm_t *s, const wm_profile_t *prof) {
 }
 
 int sdf_wm_shm_acquire(const sdf_shm_t *s, wm_profile_t *prof, uint32_t *version) {
-    if (s == NULL || s->base == NULL || prof == NULL)
+    if (s == NULL || s->base == NULL || prof == NULL) {
         return -EINVAL;
-    if (check_magic(s) != 0)
+    }
+    if (check_magic(s) != 0) {
         return -EINVAL;
+    }
 
     for (;;) {
         uint32_t snap = sdf_seqlock_read_begin(seg_seqlock(s));
@@ -174,23 +189,29 @@ int sdf_wm_shm_acquire(const sdf_shm_t *s, wm_profile_t *prof, uint32_t *version
         prof->version = au32_load(&src->version);
         prof->m = au32_load(&src->m);
         prof->n = au32_load(&src->n);
-        for (uint32_t i = 0; i < WM_MAX_PATHS; i++)
+        for (uint32_t i = 0; i < WM_MAX_PATHS; i++) {
             prof->b[i] = au32_load(&src->b[i]);
-        if (!sdf_seqlock_read_retry(seg_seqlock(s), snap))
+        }
+        if (!sdf_seqlock_read_retry(seg_seqlock(s), snap)) {
             break; /* exactly one complete generation */
+        }
     }
-    if (version != NULL)
+    if (version != NULL) {
         *version = prof->version;
+    }
     return 0;
 }
 
 int sdf_wm_shm_telemetry_push(sdf_shm_t *s, const sdf_origin_stats_t *st) {
-    if (s == NULL || s->base == NULL || st == NULL)
+    if (s == NULL || s->base == NULL || st == NULL) {
         return -EINVAL;
-    if (check_magic(s) != 0)
+    }
+    if (check_magic(s) != 0) {
         return -EINVAL;
-    if (st->id >= seg_hdr(s)->n_paths)
+    }
+    if (st->id >= seg_hdr(s)->n_paths) {
         return -EINVAL;
+    }
 
     wm_shm_telem_t slot;
     memset(&slot, 0, sizeof(slot));
@@ -203,21 +224,24 @@ int sdf_wm_shm_telemetry_push(sdf_shm_t *s, const sdf_origin_stats_t *st) {
     slot.ewma_lat_ns = st->ewma_lat_ns;
     slot.ewma_err = st->ewma_err;
 
-    if (!spsc_try_push(seg_ring(s), &slot))
+    if (!spsc_try_push(seg_ring(s), &slot)) {
         return -EAGAIN; /* control loop is slow: telemetry is best-effort */
+    }
     return 0;
 }
 
 int sdf_wm_shm_down_mask_store(sdf_shm_t *s, uint64_t mask) {
-    if (s == NULL || s->base == NULL)
+    if (s == NULL || s->base == NULL) {
         return -EINVAL;
+    }
     atomic_store_explicit(&seg_hdr(s)->down_mask, mask, memory_order_release);
     return 0;
 }
 
 uint64_t sdf_wm_shm_down_mask_load(const sdf_shm_t *s) {
-    if (s == NULL || s->base == NULL)
+    if (s == NULL || s->base == NULL) {
         return 0;
+    }
     return atomic_load_explicit(&seg_hdr(s)->down_mask, memory_order_acquire);
 }
 

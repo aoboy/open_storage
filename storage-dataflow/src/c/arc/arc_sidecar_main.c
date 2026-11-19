@@ -64,21 +64,25 @@ static int apply_trampoline(void *ctx, const void *entry, size_t len, uint64_t r
 }
 
 int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
-    if (cfg == NULL)
+    if (cfg == NULL) {
         return -EINVAL;
-    if (mode < 0 || mode > 2)
+    }
+    if (mode < 0 || mode > 2) {
         return -EINVAL;
+    }
 
     memset(&g_sidecar, 0, sizeof(g_sidecar));
     atomic_store(&g_sidecar.mode, mode);
     g_sidecar.applied_mode = mode;
 
     size_t need = arc_sizeof(cfg);
-    if (need == 0)
+    if (need == 0) {
         return -EINVAL;
+    }
     g_sidecar.pacer = malloc(need);
-    if (g_sidecar.pacer == NULL)
+    if (g_sidecar.pacer == NULL) {
         return -ENOMEM;
+    }
 
     arc_cfg_t eff = *cfg;
     eff.mode = pacer_mode_for(mode);
@@ -114,32 +118,37 @@ int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
  * stalling recovery).
  */
 int arc_sidecar_submit(const void *entry, size_t len, uint64_t producer_ts) {
-    if (!atomic_load(&g_sidecar.running) || entry == NULL)
+    if (!atomic_load(&g_sidecar.running) || entry == NULL) {
         return -EINVAL;
-    if (len > sizeof(((sidecar_slot_t *)0)->bytes))
+    }
+    if (len > sizeof(((sidecar_slot_t *)0)->bytes)) {
         return -EINVAL;
+    }
     sidecar_slot_t slot;
     memset(&slot, 0, sizeof(slot));
     slot.producer_ts = producer_ts;
     slot.len = (uint32_t)len;
     memcpy(slot.bytes, entry, len);
-    if (!spsc_try_push(g_sidecar.in, &slot))
+    if (!spsc_try_push(g_sidecar.in, &slot)) {
         return -EAGAIN;
+    }
     return 0;
 }
 
 /* One poll iteration: drain the ring into ARC, apply a requested mode
  * flip, then ARC into apply. */
 int arc_sidecar_pump_once(void) {
-    if (!atomic_load(&g_sidecar.running))
+    if (!atomic_load(&g_sidecar.running)) {
         return -EINVAL;
+    }
     int submitted = 0;
     sidecar_slot_t slot;
     while (spsc_try_pop(g_sidecar.in, &slot)) {
         int rc = arc_submit(g_sidecar.pacer, slot.bytes, slot.len, slot.producer_ts);
-        if (rc == -EAGAIN)
+        if (rc == -EAGAIN) {
             break; /* ARC queue full: the entry stays for the next pump
                     * (it is already out of the ring — re-push it) */
+        }
         if (rc != 0 && rc != 1) {
             /* bad entry: dropped (counted as a correctness bug in
              * production; here it is an engine-input violation) */
@@ -151,23 +160,27 @@ int arc_sidecar_pump_once(void) {
     /* W6.4: the desired mode is atomic; the flip lands on the pump, so
      * the controller sees it within one poll interval. */
     int want = atomic_load(&g_sidecar.mode);
-    if (want != g_sidecar.applied_mode && arc_set_mode(g_sidecar.pacer, pacer_mode_for(want)) == 0)
+    if (want != g_sidecar.applied_mode &&
+        arc_set_mode(g_sidecar.pacer, pacer_mode_for(want)) == 0) {
         g_sidecar.applied_mode = want;
+    }
 
     int released = arc_poll(g_sidecar.pacer, sdf_now_ns());
 
     /* Killed is the oracle: deliver the whole backlog now, not one
      * batch, and not only the entries whose QG T_n has passed. */
     if (want == 2) {
-        for (int i = 0; i < 1024 && arc_stats(g_sidecar.pacer).in_flight > 0; i++)
+        for (int i = 0; i < 1024 && arc_stats(g_sidecar.pacer).in_flight > 0; i++) {
             released += arc_poll(g_sidecar.pacer, sdf_now_ns());
+        }
     }
     return submitted + released;
 }
 
 void arc_sidecar_stop(void) {
-    if (!atomic_load(&g_sidecar.running))
+    if (!atomic_load(&g_sidecar.running)) {
         return;
+    }
     arc_sidecar_serve_stop();
     /* flush before marking stopped: pump_once() refuses when !running */
     (void)arc_sidecar_pump_once();
@@ -191,10 +204,12 @@ int arc_sidecar_mode(void) {
 }
 
 int arc_sidecar_set_mode(int mode) {
-    if (!atomic_load(&g_sidecar.running))
+    if (!atomic_load(&g_sidecar.running)) {
         return -EINVAL;
-    if (mode < 0 || mode > 2)
+    }
+    if (mode < 0 || mode > 2) {
         return -EINVAL;
+    }
     atomic_store(&g_sidecar.mode, mode);
     return 0;
 }
@@ -217,10 +232,12 @@ static int sidecar_render(void *ud, FILE *out) {
 }
 
 int arc_sidecar_serve(const char *addr) {
-    if (!atomic_load(&g_sidecar.running))
+    if (!atomic_load(&g_sidecar.running)) {
         return -EINVAL; /* serve what exists: start() first */
-    if (g_sidecar_ep != NULL)
+    }
+    if (g_sidecar_ep != NULL) {
         return -EEXIST;
+    }
     g_sidecar_ep = sdf_metrics_endpoint_start(addr, sidecar_render, NULL);
     return g_sidecar_ep != NULL ? 0 : -EINVAL; /* the endpoint prints its
                                                 * own diagnostic; a stable

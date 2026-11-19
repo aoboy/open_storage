@@ -51,23 +51,28 @@ static uint32_t *pool_stack(sdf_pool_t *p) {
 }
 
 size_t sdf_pool_sizeof(uint32_t slot_size, uint32_t capacity) {
-    if (slot_size == 0 || capacity == 0)
+    if (slot_size == 0 || capacity == 0) {
         return 0;
+    }
     uint64_t need = pool_slots_off(capacity) + (uint64_t)pool_stride(slot_size) * capacity;
-    if (need > (uint64_t)SIZE_MAX)
+    if (need > (uint64_t)SIZE_MAX) {
         return 0;
+    }
     return (size_t)need;
 }
 
 int sdf_pool_init(sdf_pool_t *p, void *mem, size_t mem_size, uint32_t slot_size,
                   uint32_t capacity) {
-    if (p == NULL || mem == NULL)
+    if (p == NULL || mem == NULL) {
         return -EINVAL;
-    if (((uintptr_t)mem & 63u) != 0)
+    }
+    if (((uintptr_t)mem & 63u) != 0) {
         return -EINVAL; /* slots must land cacheline-aligned */
+    }
     size_t need = sdf_pool_sizeof(slot_size, capacity);
-    if (need == 0 || mem_size < need)
+    if (need == 0 || mem_size < need) {
         return -EINVAL;
+    }
 
     /* first-touch: deterministic slot contents, no lazy faults later */
     memset(p, 0, need);
@@ -75,31 +80,36 @@ int sdf_pool_init(sdf_pool_t *p, void *mem, size_t mem_size, uint32_t slot_size,
     p->stride = pool_stride(slot_size);
     p->capacity = capacity;
     p->free_top = capacity;
-    for (uint32_t i = 0; i < capacity; i++)
+    for (uint32_t i = 0; i < capacity; i++) {
         pool_stack(p)[i] = i;
+    }
     return 0;
 }
 
 void *sdf_pool_alloc(sdf_pool_t *p) {
-    if (p == NULL || p->free_top == 0)
+    if (p == NULL || p->free_top == 0) {
         return NULL;
+    }
     uint32_t idx = pool_stack(p)[--p->free_top];
     uint8_t *slots = (uint8_t *)p + pool_slots_off(p->capacity);
     return slots + (size_t)idx * p->stride;
 }
 
 void sdf_pool_free(sdf_pool_t *p, void *slot) {
-    if (p == NULL || slot == NULL)
+    if (p == NULL || slot == NULL) {
         return;
+    }
     uint8_t *slots = (uint8_t *)p + pool_slots_off(p->capacity);
     uint8_t *end = slots + (size_t)p->capacity * p->stride;
     uint8_t *s = slot;
-    if (s < slots || s >= end || p->free_top >= p->capacity)
+    if (s < slots || s >= end || p->free_top >= p->capacity) {
         return; /* not a live slot of this pool */
+    }
 
     size_t off = (size_t)(s - slots);
-    if (off % p->stride != 0)
+    if (off % p->stride != 0) {
         return;
+    }
     pool_stack(p)[p->free_top++] = (uint32_t)(off / p->stride);
     /* NOTE: double free is UB — it duplicates a stack entry and will
      * hand the same slot to two owners. */
@@ -110,7 +120,8 @@ uint32_t sdf_pool_capacity(const sdf_pool_t *p) {
 }
 
 uint32_t sdf_pool_in_use(const sdf_pool_t *p) {
-    if (p == NULL)
+    if (p == NULL) {
         return 0;
+    }
     return p->capacity - p->free_top;
 }

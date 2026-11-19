@@ -26,10 +26,12 @@
 #define ARC_RES 256
 
 static double clampd(double v, double lo, double hi) {
-    if (v < lo)
+    if (v < lo) {
         return lo;
-    if (v > hi)
+    }
+    if (v > hi) {
         return hi;
+    }
     return v;
 }
 
@@ -45,27 +47,32 @@ static int u64_cmp(const void *a, const void *b) {
 }
 
 static double res_pctl(const uint64_t *samples, size_t n, size_t cap, double p) {
-    if (n == 0)
+    if (n == 0) {
         return 0.0;
+    }
     uint64_t tmp[ARC_RES];
     size_t take = n < cap ? n : cap;
     memcpy(tmp, samples, take * sizeof(uint64_t));
     qsort(tmp, take, sizeof(uint64_t), u64_cmp);
-    if (p < 0.0)
+    if (p < 0.0) {
         p = 0.0;
-    if (p > 1.0)
+    }
+    if (p > 1.0) {
         p = 1.0;
+    }
     size_t idx = (size_t)((double)(take - 1) * p + 0.5);
-    if (idx >= take)
+    if (idx >= take) {
         idx = take - 1;
+    }
     return (double)tmp[idx];
 }
 
 /* ---- auto params (paper 9.2 / wam update_auto_params) ------------------ */
 
 static void auto_params(arc_state_t *a) {
-    if (!a->auto_params)
+    if (!a->auto_params) {
         return;
+    }
     /* U ~ c_U * RTT (clamped into the paper band) */
     if (a->rtt_sm_ns > 0) {
         double u = a->c_U * (double)a->rtt_sm_ns;
@@ -76,14 +83,16 @@ static void auto_params(arc_state_t *a) {
         double q95 = res_pctl(a->delta_win, a->delta_n, a->delta_cap, 0.95);
         double q50 = res_pctl(a->delta_win, a->delta_n, a->delta_cap, 0.50);
         double d = a->c_delta * (q95 - q50);
-        if (d > 1e3)
+        if (d > 1e3) {
             a->delta = clampd(d, 30e6, 100e6);
+        }
     }
     /* G ~ q95 of observed reorder gaps */
     if (a->reorder_n >= 16) {
         double g = res_pctl(a->reorder_win, a->reorder_n, a->reorder_cap, 0.95);
-        if (g > 1e6)
+        if (g > 1e6) {
             a->G = clampd(g, 20e6, 200e6);
+        }
     }
 }
 
@@ -127,8 +136,9 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len,
 
     if (!a->initialized) {
         a->D = (double)A_n - (double)S_n;
-        if (a->D < 0.0)
+        if (a->D < 0.0) {
             a->D = 0.0;
+        }
         a->E = a->D + a->gamma / 2.0;
         a->tau_last_ns = A_n;
         a->initialized = 1;
@@ -137,8 +147,9 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len,
         int64_t gap = (int64_t)(A_n - a->tau_last_ns);
         if ((double)gap >= (double)a->T_idle_ns) {
             a->D = (double)A_n - (double)S_n;
-            if (a->D < 0.0)
+            if (a->D < 0.0) {
                 a->D = 0.0;
+            }
             a->stats.idle_reanchors++;
         }
         a->tau_last_ns = A_n;
@@ -150,13 +161,15 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len,
         if (dA >= 0) {
             a->delta_win[a->delta_pos] = (uint64_t)dA;
             a->delta_pos = (a->delta_pos + 1) % a->delta_cap;
-            if (a->delta_n < a->delta_cap)
+            if (a->delta_n < a->delta_cap) {
                 a->delta_n++;
+            }
         } else {
             a->reorder_win[a->reorder_pos] = (uint64_t)(-dA);
             a->reorder_pos = (a->reorder_pos + 1) % a->reorder_cap;
-            if (a->reorder_n < a->reorder_cap)
+            if (a->reorder_n < a->reorder_cap) {
                 a->reorder_n++;
+            }
         }
     }
     a->prev_A = A_n;
@@ -168,8 +181,9 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len,
     }
 
     /* Algorithm 1: asymmetric update of D (envelope-clamped) */
-    if (a->U <= 0)
+    if (a->U <= 0) {
         a->U = 100e6;
+    }
     double X = (double)A_n - ((double)S_n + a->D);
     if (X > 0) {
         double Y = pow_rho(clampd(X, 0, a->U) / a->U, a->rho_u) * a->U;
@@ -179,22 +193,26 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len,
         a->D += a->lambda_l * Y;
     }
     double dmax = (double)A_n - (double)S_n + (double)a->delta;
-    if (a->D > dmax)
+    if (a->D > dmax) {
         a->D = dmax;
-    if (a->D < 0.0)
+    }
+    if (a->D < 0.0) {
         a->D = 0.0;
+    }
 
     /* Algorithm 2: quantized E with midpoint hysteresis */
     if (a->mode >= ARC_MODE_Q) {
-        if (a->D > a->E || a->D < a->E - a->gamma)
+        if (a->D > a->E || a->D < a->E - a->gamma) {
             a->E = a->D + a->gamma / 2.0;
+        }
     }
 
     double offset = a->mode >= ARC_MODE_Q ? a->E : a->D;
     double Tn = (double)A_n;
     double proj = (double)S_n + offset + (double)a->J;
-    if (proj > Tn)
+    if (proj > Tn) {
         Tn = proj;
+    }
 
     sched.T_n = (uint64_t)Tn;
     sched.T_deadline = sched.T_n + a->G;

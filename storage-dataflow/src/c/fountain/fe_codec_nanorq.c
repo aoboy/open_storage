@@ -54,13 +54,16 @@ size_t nrq_dec_sizeof(void) {
 }
 
 int nrq_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
-    if (mem == NULL || cfg == NULL || block == NULL)
+    if (mem == NULL || cfg == NULL || block == NULL) {
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > 56403u || cfg->block_len == 0 || cfg->block_len % cfg->k != 0)
+    }
+    if (cfg->k == 0 || cfg->k > 56403u || cfg->block_len == 0 || cfg->block_len % cfg->k != 0) {
         return -EINVAL;
+    }
     size_t sym_len = cfg->block_len / cfg->k;
-    if (sym_len == 0 || sym_len > 8192u)
+    if (sym_len == 0 || sym_len > 8192u) {
         return -EINVAL;
+    }
 
     nrq_enc_t *e = mem;
     memset(e, 0, sizeof(*e));
@@ -69,8 +72,9 @@ int nrq_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
     e->overhead = cfg->k * cfg->overhead_pct / 100u;
 
     e->io = ioctx_from_mem_ro(block, cfg->block_len);
-    if (e->io == NULL)
+    if (e->io == NULL) {
         return -EINVAL;
+    }
     e->rq = nanorq_encoder_new_ex(cfg->block_len, (uint16_t)sym_len, (uint16_t)cfg->k, 1u /* Z */,
                                   1u /* Al */);
     if (e->rq == NULL) {
@@ -91,27 +95,32 @@ int nrq_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
 
 uint32_t nrq_symbol_count(const void *enc) {
     const nrq_enc_t *e = enc;
-    if (e == NULL)
+    if (e == NULL) {
         return 0;
+    }
     return e->k + e->overhead;
 }
 
 int nrq_generate(void *enc, uint32_t esi, uint8_t *out, size_t out_len) {
     nrq_enc_t *e = enc;
-    if (e == NULL || e->rq == NULL || out == NULL || out_len != e->sym_len)
+    if (e == NULL || e->rq == NULL || out == NULL || out_len != e->sym_len) {
         return -EINVAL;
-    if (esi >= nrq_symbol_count(enc))
+    }
+    if (esi >= nrq_symbol_count(enc)) {
         return -EINVAL;
+    }
     size_t written = nanorq_encode(e->rq, out, esi, 0 /* sbn */, e->io);
-    if (written != e->sym_len)
+    if (written != e->sym_len) {
         return -EINVAL;
+    }
     return 0;
 }
 
 void nrq_enc_destroy(void *enc) {
     nrq_enc_t *e = enc;
-    if (e == NULL)
+    if (e == NULL) {
         return;
+    }
     if (e->rq != NULL) {
         nanorq_encoder_cleanup(e->rq, 0);
         nanorq_free(e->rq);
@@ -128,8 +137,9 @@ void nrq_enc_destroy(void *enc) {
  * put on the wire, so no OTI crosses the sdf ABI. */
 static int derive_oti(uint32_t k, size_t sym_len, uint64_t *common, uint32_t *scheme) {
     nanorq *rq = nanorq_encoder_new_ex((size_t)k * sym_len, (uint16_t)sym_len, (uint16_t)k, 1, 1);
-    if (rq == NULL)
+    if (rq == NULL) {
         return -EINVAL;
+    }
     *common = nanorq_oti_common(rq);
     *scheme = nanorq_oti_scheme_specific(rq);
     nanorq_free(rq);
@@ -137,11 +147,13 @@ static int derive_oti(uint32_t k, size_t sym_len, uint64_t *common, uint32_t *sc
 }
 
 int nrq_dec_init(void *mem, const fd_cfg_t *cfg) {
-    if (mem == NULL || cfg == NULL)
+    if (mem == NULL || cfg == NULL) {
         return -EINVAL;
+    }
     if (cfg->k == 0 || cfg->k > 56403u || cfg->sym_len == 0 || cfg->sym_len > 8192u ||
-        cfg->k > 512u)
+        cfg->k > 512u) {
         return -EINVAL; /* have[] cap: rank telemetry over huge K */
+    }
 
     nrq_dec_t *d = mem;
     memset(d, 0, sizeof(*d));
@@ -150,12 +162,14 @@ int nrq_dec_init(void *mem, const fd_cfg_t *cfg) {
 
     uint64_t common = 0;
     uint32_t scheme = 0;
-    if (derive_oti(cfg->k, cfg->sym_len, &common, &scheme) != 0)
+    if (derive_oti(cfg->k, cfg->sym_len, &common, &scheme) != 0) {
         return -EINVAL;
+    }
 
     d->rq = nanorq_decoder_new(common, scheme);
-    if (d->rq == NULL)
+    if (d->rq == NULL) {
         return -EINVAL;
+    }
     /* accept repair ESIs (>= K) too: nanorq's default cap is the
      * systematic range — the sdf window is sources + K repairs */
     if (!nanorq_set_max_esi(d->rq, 1u << 20)) {
@@ -183,21 +197,26 @@ int nrq_dec_init(void *mem, const fd_cfg_t *cfg) {
 
 int nrq_push(void *dec, uint32_t esi, const uint8_t *sym, size_t len) {
     nrq_dec_t *d = dec;
-    if (d == NULL || d->rq == NULL || sym == NULL || len != d->sym_len)
+    if (d == NULL || d->rq == NULL || sym == NULL || len != d->sym_len) {
         return -EINVAL;
-    if (esi >= d->k + d->k) /* sources + repair window we track */
+    }
+    if (esi >= d->k + d->k) { /* sources + repair window we track */
         return -EINVAL;
-    if (d->have[esi])
+    }
+    if (d->have[esi]) {
         return 1; /* duplicate: counted, not an error */
+    }
     uint32_t tag = nanorq_tag(0 /* sbn */, esi);
     int rc = nanorq_decoder_add_symbol(d->rq, (void *)sym, tag, d->io);
-    if (rc == NANORQ_SYM_DUP)
+    if (rc == NANORQ_SYM_DUP) {
         return 1; /* duplicate: counted, not an error */
-    if (rc == NANORQ_SYM_IGN)
+    }
+    if (rc == NANORQ_SYM_IGN) {
         return 1; /* block already complete: the symbol is redundant
                    * (nanorq short-circuits add once no gaps remain —
                    * found live: pushing repairs after a full source set
                    * must not read as an error) */
+    }
     if (rc != NANORQ_SYM_ADDED) {
         d->have[esi] = 1; /* reject counted so we never re-feed it */
         return -EINVAL;
@@ -209,10 +228,12 @@ int nrq_push(void *dec, uint32_t esi, const uint8_t *sym, size_t len) {
 
 bool nrq_ready(const void *dec) {
     nrq_dec_t *d = (nrq_dec_t *)dec; /* repair_block mutates scratch */
-    if (d == NULL || d->rq == NULL)
+    if (d == NULL || d->rq == NULL) {
         return false;
-    if (d->repaired)
+    }
+    if (d->repaired) {
         return true;
+    }
     if (nanorq_num_missing(d->rq, 0) == 0) {
         d->repaired = 1;
         return true;
@@ -231,18 +252,21 @@ uint32_t nrq_rank(const void *dec) {
 
 int nrq_decode(void *dec, uint8_t *out, size_t block_len) {
     nrq_dec_t *d = dec;
-    if (d == NULL || d->rq == NULL || out == NULL || block_len != (size_t)d->k * d->sym_len)
+    if (d == NULL || d->rq == NULL || out == NULL || block_len != (size_t)d->k * d->sym_len) {
         return -EINVAL;
-    if (!nrq_ready(dec))
+    }
+    if (!nrq_ready(dec)) {
         return -EINVAL; /* the ARQ-fallback condition (design 02) */
+    }
     memcpy(out, d->scratch, block_len);
     return 0;
 }
 
 void nrq_dec_destroy(void *dec) {
     nrq_dec_t *d = dec;
-    if (d == NULL)
+    if (d == NULL) {
         return;
+    }
     if (d->io != NULL) {
         d->io->destroy(d->io);
         d->io = NULL;

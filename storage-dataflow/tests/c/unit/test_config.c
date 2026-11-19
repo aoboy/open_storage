@@ -21,12 +21,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 #ifndef SDF_SOURCE_DIR
@@ -48,8 +48,7 @@ static char g_tmp[160];
 /* Write text to a unique temp file, load it, unlink it, return the
  * loader's rc. cfg is zeroed before each load. */
 static int load_text(const char *text, sdf_config_t *cfg) {
-    snprintf(g_tmp, sizeof(g_tmp), "/tmp/sdf-test-config-%d-%02d.toml",
-             (int)getpid(), ++g_case_no);
+    snprintf(g_tmp, sizeof(g_tmp), "/tmp/sdf-test-config-%d-%02d.toml", (int)getpid(), ++g_case_no);
     FILE *f = fopen(g_tmp, "wb");
     CHECK(f != NULL);
     CHECK(fputs(text, f) >= 0);
@@ -60,26 +59,24 @@ static int load_text(const char *text, sdf_config_t *cfg) {
     return rc;
 }
 
-static size_t count_keys_with(const sdf_config_t *cfg, const char *prefix,
-                              const char *suffix) {
+static size_t count_keys_with(const sdf_config_t *cfg, const char *prefix, const char *suffix) {
     size_t n = 0;
     size_t plen = strlen(prefix), slen = strlen(suffix);
     for (size_t i = 0; i < cfg->count; i++) {
         size_t klen = strlen(cfg->entries[i].key);
         if (klen >= plen + slen && strncmp(cfg->entries[i].key, prefix, plen) == 0 &&
-            strcmp(cfg->entries[i].key + klen - slen, suffix) == 0)
+            strcmp(cfg->entries[i].key + klen - slen, suffix) == 0) {
             n++;
+        }
     }
     return n;
 }
 
 static void test_shipped_examples(void) {
     static const char *files[] = {
-        "configs/dev/wm.toml",      "configs/dev/fluid.toml",
-        "configs/dev/arc.toml",     "configs/staging/wm.toml",
-        "configs/staging/fluid.toml", "configs/staging/arc.toml",
-        "configs/prod/wm.toml",     "configs/prod/fluid.toml",
-        "configs/prod/arc.toml",
+        "configs/dev/wm.toml",     "configs/dev/fluid.toml",     "configs/dev/arc.toml",
+        "configs/staging/wm.toml", "configs/staging/fluid.toml", "configs/staging/arc.toml",
+        "configs/prod/wm.toml",    "configs/prod/fluid.toml",    "configs/prod/arc.toml",
     };
 
     for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
@@ -237,9 +234,9 @@ static void test_rejections(void) {
     {
         char big[1024];
         int off = snprintf(big, sizeof(big), "[wm]\ninit_fracs = [");
-        for (int n = 0; n < 65; n++)
-            off += snprintf(big + off, sizeof(big) - (size_t)off, "%s1.0",
-                            n ? ", " : "");
+        for (int n = 0; n < 65; n++) {
+            off += snprintf(big + off, sizeof(big) - (size_t)off, "%s1.0", n ? ", " : "");
+        }
         snprintf(big + off, sizeof(big) - (size_t)off, "]\n");
         sdf_config_t cfg;
         CHECK(load_text(big, &cfg) == -1);
@@ -250,9 +247,10 @@ static void test_rejections(void) {
     {
         char big[4096];
         int off = 0;
-        for (int b = 0; b < 65; b++)
+        for (int b = 0; b < 65; b++) {
             off += snprintf(big + off, sizeof(big) - (size_t)off,
                             "[[origin]]\ncls = \"loopback\"\ndst = \"x\"\n");
+        }
         sdf_config_t cfg;
         CHECK(load_text(big, &cfg) == -1);
         CHECK(cfg.entries == NULL && cfg.count == 0);
@@ -264,7 +262,6 @@ int main(void) {
     test_parser_capabilities();
     test_getter_semantics();
     test_rejections();
-    printf("test_config: ok (9 shipped examples, %d rejection cases)\n",
-           g_case_no);
+    printf("test_config: ok (9 shipped examples, %d rejection cases)\n", g_case_no);
     return 0;
 }

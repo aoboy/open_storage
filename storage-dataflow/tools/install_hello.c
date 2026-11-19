@@ -7,9 +7,9 @@
  * against DESTDIR.
  */
 
+#include "sdf/arc.h"
 #include "sdf/version.h"
 #include "sdf/wm.h"
-#include "sdf/arc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,8 +35,9 @@ int main(void) {
         return 1;
     }
     unsigned counts[2] = {0, 0};
-    for (unsigned i = 0; i < 1024; i++)
+    for (unsigned i = 0; i < 1024; i++) {
         counts[wm_select(&c, i)]++;
+    }
     if (counts[0] != 512 || counts[1] != 512) {
         fprintf(stderr, "install-hello: wm select counts wrong\n");
         return 1;
@@ -72,7 +73,6 @@ int main(void) {
     }
     free(pacer);
 
-    printf("install-hello: OK (sdf %s: wm dispatch + arc release)\n",
-           SDF_VERSION_STRING);
+    printf("install-hello: OK (sdf %s: wm dispatch + arc release)\n", SDF_VERSION_STRING);
     return 0;
 }

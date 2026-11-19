@@ -19,12 +19,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 enum { K = 64, T = 32, N_ORIGINS = 3 };
@@ -34,8 +34,7 @@ static char g_path[N_ORIGINS][160];
  * LT and Nanorq arms. Feeding a Nanorq stream to the LT decoder used to
  * pass because only fd_decode's return was checked; the W6.3 byte-exact
  * gate exposed it. Encode with the exact arm/eps/blocks under test. */
-static void make_stream_files(sdf_repair_arm_t arm, double eps,
-                              uint32_t blocks) {
+static void make_stream_files(sdf_repair_arm_t arm, double eps, uint32_t blocks) {
     sdf_fluid_repair_cfg_t enc;
     memset(&enc, 0, sizeof(enc));
     enc.arm = arm;
@@ -49,8 +48,7 @@ static void make_stream_files(sdf_repair_arm_t arm, double eps,
     CHECK(stream != NULL);
     CHECK(sdf_fluid_repair_encode_stream(&enc, stream, bytes) == 0);
     for (int i = 0; i < N_ORIGINS; i++) {
-        snprintf(g_path[i], sizeof(g_path[i]), "/tmp/sdf-repair-%d-%d.bin",
-                 (int)getpid(), i);
+        snprintf(g_path[i], sizeof(g_path[i]), "/tmp/sdf-repair-%d-%d.bin", (int)getpid(), i);
         FILE *f = fopen(g_path[i], "wb");
         CHECK(f != NULL);
         CHECK(fwrite(stream, 1, bytes, f) == bytes);
@@ -59,8 +57,7 @@ static void make_stream_files(sdf_repair_arm_t arm, double eps,
     free(stream);
 }
 
-static void base_cfg(sdf_fluid_repair_cfg_t *cfg, sdf_repair_arm_t arm,
-                     double eps, double loss) {
+static void base_cfg(sdf_fluid_repair_cfg_t *cfg, sdf_repair_arm_t arm, double eps, double loss) {
     memset(cfg, 0, sizeof(*cfg));
     cfg->arm = arm;
     cfg->k = K;
@@ -88,9 +85,8 @@ static void test_control_arm(void) {
     CHECK(st.ok == 1); /* retry semantics complete under any loss */
     CHECK(st.received >= K);
     CHECK(st.arq_fallback == 0); /* control never uses the gate */
-    printf("  control: sent=%llu received=%llu wall_ms=%llu\n",
-           (unsigned long long)st.sent, (unsigned long long)st.received,
-           (unsigned long long)(st.wall_ns / 1000000ull));
+    printf("  control: sent=%llu received=%llu wall_ms=%llu\n", (unsigned long long)st.sent,
+           (unsigned long long)st.received, (unsigned long long)(st.wall_ns / 1000000ull));
 }
 
 static void test_fluid_arm_20pct_loss(void) {
@@ -105,9 +101,8 @@ static void test_fluid_arm_20pct_loss(void) {
         printf("  arm=%s: sent=%llu received=%llu rounds=%llu fallback=%d "
                "rank=%u wall_ms=%llu\n",
                arm == 1 ? "lt" : "nanorq", (unsigned long long)st.sent,
-               (unsigned long long)st.received, (unsigned long long)st.rounds,
-               st.arq_fallback, st.decode_rank,
-               (unsigned long long)(st.wall_ns / 1000000ull));
+               (unsigned long long)st.received, (unsigned long long)st.rounds, st.arq_fallback,
+               st.decode_rank, (unsigned long long)(st.wall_ns / 1000000ull));
     }
 }
 
@@ -122,8 +117,7 @@ static void test_fluid_forces_arq_fallback(void) {
     CHECK(st.ok == 1); /* NEVER an incomplete block */
     CHECK(st.arq_fallback == 1);
     printf("  forced fallback: sent=%llu received=%llu fallback=%d ok=%d\n",
-           (unsigned long long)st.sent, (unsigned long long)st.received,
-           st.arq_fallback, st.ok);
+           (unsigned long long)st.sent, (unsigned long long)st.received, st.arq_fallback, st.ok);
 }
 
 /* W6.3: a 4-block checkpoint object. Each block is its own codec
@@ -158,11 +152,9 @@ static void test_multi_block_checkpoint(void) {
     CHECK(rounds >= st.rounds); /* blocks share the coordinator rounds */
     printf("  multi-block: blocks=%u sent=%llu received=%llu rounds=%llu "
            "block_rounds=%llu,%llu,%llu,%llu ok=%d\n",
-           st.n_blocks, (unsigned long long)st.sent,
-           (unsigned long long)st.received, (unsigned long long)st.rounds,
-           (unsigned long long)st.blocks[0].rounds,
-           (unsigned long long)st.blocks[1].rounds,
-           (unsigned long long)st.blocks[2].rounds,
+           st.n_blocks, (unsigned long long)st.sent, (unsigned long long)st.received,
+           (unsigned long long)st.rounds, (unsigned long long)st.blocks[0].rounds,
+           (unsigned long long)st.blocks[1].rounds, (unsigned long long)st.blocks[2].rounds,
            (unsigned long long)st.blocks[3].rounds, st.ok);
 }
 
@@ -171,8 +163,9 @@ int main(void) {
     test_fluid_arm_20pct_loss();
     test_fluid_forces_arq_fallback();
     test_multi_block_checkpoint();
-    for (int i = 0; i < N_ORIGINS; i++)
+    for (int i = 0; i < N_ORIGINS; i++) {
         CHECK(unlink(g_path[i]) == 0);
+    }
     printf("test_fluid_repair: ok (control retry, both FLUID arms at 20%% "
            "loss, forced ARQ fallback, 4-block checkpoint byte-exact)\n");
     return 0;

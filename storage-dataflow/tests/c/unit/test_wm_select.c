@@ -103,13 +103,15 @@ int main(void) {
 static const uint32_t CANON_B[5] = {127, 400, 200, 173, 124};
 
 static void canon_profile(wm_profile_t *p) {
-    for (uint32_t i = 0; i < WM_MAX_PATHS; i++)
+    for (uint32_t i = 0; i < WM_MAX_PATHS; i++) {
         p->b[i] = 0;
+    }
     p->version = 1;
     p->m = 1024;
     p->n = 5;
-    for (uint32_t i = 0; i < 5; i++)
+    for (uint32_t i = 0; i < 5; i++) {
         p->b[i] = CANON_B[i];
+    }
 }
 
 static void test_cfg_validation(void) {
@@ -157,8 +159,7 @@ static void test_discrepancy_bounds(void) {
     static const uint32_t starts[] = {0, 1, 500, 1023};
     static const uint32_t lens[] = {1024, 10240, 102400};
 
-    for (int method = WM_METHOD_SHUFFLE1; method <= WM_METHOD_SHUFFLE2;
-         method++) {
+    for (int method = WM_METHOD_SHUFFLE1; method <= WM_METHOD_SHUFFLE2; method++) {
         wm_compile_cfg_t cfg = {.method = (uint32_t)method, .sa = 333, .sb = 735};
         assert(wm_profile_compile_cfg(&p, &c, &cfg) == 0);
         double lim_extra = method == WM_METHOD_SHUFFLE1 ? 10.0 : 20.0;
@@ -168,13 +169,13 @@ static void test_discrepancy_bounds(void) {
                 uint64_t from = starts[si];
                 uint64_t len = lens[li];
                 uint64_t counts[5] = {0, 0, 0, 0, 0};
-                for (uint64_t k = 0; k < len; k++)
+                for (uint64_t k = 0; k < len; k++) {
                     counts[wm_select(&c, from + k)]++;
+                }
                 for (uint32_t i = 0; i < 5; i++) {
                     double expect = (double)CANON_B[i] / 1024.0 * (double)len;
-                    double dev = (double)counts[i] > expect
-                                     ? (double)counts[i] - expect
-                                     : expect - (double)counts[i];
+                    double dev = (double)counts[i] > expect ? (double)counts[i] - expect
+                                                            : expect - (double)counts[i];
                     double lim = lim_extra + 0.02 * expect;
                     assert(dev <= lim);
                 }
@@ -198,16 +199,18 @@ static void test_seed_decorrelation(void) {
 
     uint32_t diffs = 0;
     for (uint32_t j = 0; j < 1024; j++) {
-        if (wm_select(&a, j) != wm_select(&b, j))
+        if (wm_select(&a, j) != wm_select(&b, j)) {
             diffs++;
+        }
     }
     assert(diffs > 0);
 
     /* equal seeds are exactly equal (deterministic compilation) */
     wm_compiled_t c2;
     assert(wm_profile_compile_cfg(&p, &c2, &ca) == 0);
-    for (uint32_t j = 0; j < 1024; j++)
+    for (uint32_t j = 0; j < 1024; j++) {
         assert(wm_select(&a, j) == wm_select(&c2, j));
+    }
 }
 
 /* wm_seed_rotate (the wam-send wrap rule): sb stays odd and both
@@ -247,14 +250,15 @@ static void test_down_mask_under_shuffle(void) {
     /* the 400 units of path 1 renormalized across 127/200/173/124 */
     (void)counts;
     wm_mark_up(&c, 1);
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++) {
         counts[i] = 0;
+    }
     for (uint32_t j = 0; j < 1024; j++) {
         uint32_t path = wm_select(&c, j);
         counts[path]++;
     }
-    assert(counts[0] == 127 && counts[1] == 400 && counts[2] == 200 &&
-           counts[3] == 173 && counts[4] == 124);
+    assert(counts[0] == 127 && counts[1] == 400 && counts[2] == 200 && counts[3] == 173 &&
+           counts[4] == 124);
 }
 
 int wm_select_adr0007_tests(void) {

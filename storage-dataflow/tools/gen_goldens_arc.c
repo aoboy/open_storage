@@ -68,8 +68,9 @@ static int emit_entry(const entry_spec_t *spec) {
     cfg.T_idle_ns = 1000000000000ull; /* no mid-drive re-anchors */
 
     size_t sz = arc_sizeof(&cfg);
-    if (sz == 0)
+    if (sz == 0) {
         return 1;
+    }
     void *p = malloc(sz);
     if (p == NULL || arc_init(p, &cfg, NULL, NULL) != 0) {
         free(p);
@@ -85,8 +86,8 @@ static int emit_entry(const entry_spec_t *spec) {
            "\"J_ns\": 0,\n"
            "     \"tolerance_ns\": 500000,\n"
            "     \"samples\": [",
-           spec->name, spec->drive_blocks, spec->sample_blocks,
-           spec->rho_u, spec->rho_l, spec->lambda_u, spec->lambda_l);
+           spec->name, spec->drive_blocks, spec->sample_blocks, spec->rho_u, spec->rho_l,
+           spec->lambda_u, spec->lambda_l);
 
     int first = 1;
     int sample_at = spec->drive_blocks - spec->sample_blocks;
@@ -102,8 +103,7 @@ static int emit_entry(const entry_spec_t *spec) {
         (void)arc_poll(p, UINT64_MAX / 4);
         if (n >= sample_at) {
             arc_stats_t st = arc_stats(p);
-            printf("%s{\"n\": %d, \"D_ns\": %.0f}", first ? "" : ", ", n,
-                   st.D);
+            printf("%s{\"n\": %d, \"D_ns\": %.0f}", first ? "" : ", ", n, st.D);
             first = 0;
         }
     }
@@ -120,10 +120,12 @@ int main(void) {
 
     printf("[\n");
     for (size_t i = 0; i < sizeof(specs) / sizeof(specs[0]); i++) {
-        if (emit_entry(&specs[i]) != 0)
+        if (emit_entry(&specs[i]) != 0) {
             return 1;
-        if (i + 1 < sizeof(specs) / sizeof(specs[0]))
+        }
+        if (i + 1 < sizeof(specs) / sizeof(specs[0])) {
             printf("    ,\n");
+        }
     }
     printf("]\n");
     return 0;

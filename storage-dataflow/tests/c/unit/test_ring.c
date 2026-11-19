@@ -17,12 +17,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 typedef struct {
@@ -41,8 +41,9 @@ static void *producer_main(void *arg) {
     slot_t s = {.magic = 0xC0FFEE123456789ull, .seq = 0};
     for (uint64_t i = 0; i < SOAK_ROUNDS; i++) {
         s.seq = i;
-        while (!spsc_try_push(g_soak, &s))
+        while (!spsc_try_push(g_soak, &s)) {
             sched_yield(); /* full: backpressure is the caller's policy */
+        }
     }
     return NULL;
 }
@@ -74,10 +75,10 @@ static void test_validation(void) {
     static _Alignas(64) uint8_t host[192u + 16u * 8u + 64u];
     spsc_ring_t *r = (spsc_ring_t *)mem;
 
-    CHECK(spsc_init(r, mem, 3, 8) == -EINVAL);  /* not pow2 */
-    CHECK(spsc_init(r, mem, 16, 0) == -EINVAL); /* no slot bytes */
+    CHECK(spsc_init(r, mem, 3, 8) == -EINVAL);                               /* not pow2 */
+    CHECK(spsc_init(r, mem, 16, 0) == -EINVAL);                              /* no slot bytes */
     CHECK(spsc_init((spsc_ring_t *)(host + 8), host + 8, 16, 8) == -EINVAL); /* misaligned */
-    CHECK(spsc_init(r, host, 16, 8) == -EINVAL); /* r must equal mem */
+    CHECK(spsc_init(r, host, 16, 8) == -EINVAL);                             /* r must equal mem */
     CHECK(spsc_init(r, mem, 16, 8) == 0);
 
     CHECK(offsetof(spsc_ring_t, slots) == 192);
@@ -122,15 +123,18 @@ static void test_batch_pop(void) {
     spsc_ring_t *r = (spsc_ring_t *)mem;
     CHECK(spsc_init(r, mem, 16, 8) == 0);
 
-    for (uint64_t i = 0; i < 16; i++)
+    for (uint64_t i = 0; i < 16; i++) {
         CHECK(spsc_try_push(r, &i));
+    }
     CHECK(spsc_batch_pop(r, out, 0) == 0);
     CHECK(spsc_batch_pop(r, out, 10) == 10);
-    for (uint64_t i = 0; i < 10; i++)
+    for (uint64_t i = 0; i < 10; i++) {
         CHECK(out[i] == i);
+    }
     CHECK(spsc_batch_pop(r, out, 100) == 6); /* only what remains */
-    for (uint64_t i = 0; i < 6; i++)
+    for (uint64_t i = 0; i < 6; i++) {
         CHECK(out[i] == 10u + i);
+    }
     CHECK(spsc_count(r) == 0);
     CHECK(spsc_batch_pop(r, out, 4) == 0);
 }

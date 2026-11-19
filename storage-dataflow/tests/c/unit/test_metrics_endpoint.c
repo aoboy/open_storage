@@ -20,12 +20,12 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 #define MEP_TEST_PORT (22100 + (getpid() % 500))
@@ -62,8 +62,9 @@ static size_t scrape(int port, const char *req, char *buf, size_t cap) {
     size_t got = 0;
     while (got + 1 < cap) {
         ssize_t n = recv(fd, buf + got, cap - 1 - got, 0);
-        if (n <= 0)
+        if (n <= 0) {
             break;
+        }
         got += (size_t)n;
     }
     buf[got] = '\0';
@@ -89,18 +90,14 @@ int main(void) {
     CHECK(sdf_metrics_endpoint_start(NULL, demo_render, &renders) == NULL);
     CHECK(sdf_metrics_endpoint_start("", demo_render, &renders) == NULL);
     CHECK(sdf_metrics_endpoint_start("noport", demo_render, &renders) == NULL);
-    CHECK(sdf_metrics_endpoint_start("127.0.0.1:0", demo_render, &renders) ==
-          NULL);
-    CHECK(sdf_metrics_endpoint_start("127.0.0.1:70000", demo_render,
-                                      &renders) == NULL);
-    CHECK(sdf_metrics_endpoint_start("127.0.0.1:abc", demo_render, &renders) ==
-          NULL);
+    CHECK(sdf_metrics_endpoint_start("127.0.0.1:0", demo_render, &renders) == NULL);
+    CHECK(sdf_metrics_endpoint_start("127.0.0.1:70000", demo_render, &renders) == NULL);
+    CHECK(sdf_metrics_endpoint_start("127.0.0.1:abc", demo_render, &renders) == NULL);
     CHECK(sdf_metrics_endpoint_start("127.0.0.1:9108", NULL, NULL) == NULL);
 
     char addr[32];
     snprintf(addr, sizeof(addr), "127.0.0.1:%d", MEP_TEST_PORT);
-    sdf_metrics_endpoint_t *ep =
-        sdf_metrics_endpoint_start(addr, demo_render, &renders);
+    sdf_metrics_endpoint_t *ep = sdf_metrics_endpoint_start(addr, demo_render, &renders);
     CHECK(ep != NULL);
     CHECK(connect_only(MEP_TEST_PORT) == 1);
 
@@ -136,8 +133,7 @@ int main(void) {
     /* a failing render answers 500 (same listener, second handle) */
     sdf_metrics_endpoint_stop(ep);
     CHECK(connect_only(MEP_TEST_PORT) == 0);
-    sdf_metrics_endpoint_t *ep2 =
-        sdf_metrics_endpoint_start(addr, fail_render, NULL);
+    sdf_metrics_endpoint_t *ep2 = sdf_metrics_endpoint_start(addr, fail_render, NULL);
     CHECK(ep2 != NULL);
     n = scrape(MEP_TEST_PORT, get, buf, sizeof(buf));
     CHECK(n > 0);

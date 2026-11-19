@@ -32,12 +32,14 @@
 /* shm_open/shm_unlink require a leading '/'; normalize once per call
  * and store the normalized name in the handle. */
 static int sdf_shm_norm_name(char *out, size_t out_sz, const char *name) {
-    if (out == NULL || name == NULL || name[0] == '\0')
+    if (out == NULL || name == NULL || name[0] == '\0') {
         return -EINVAL;
+    }
     size_t len = strlen(name);
     size_t need = (name[0] == '/') ? len : len + 1u;
-    if (need >= out_sz)
+    if (need >= out_sz) {
         return -ENAMETOOLONG;
+    }
     if (name[0] == '/') {
         memcpy(out, name, len + 1u);
     } else {
@@ -48,22 +50,26 @@ static int sdf_shm_norm_name(char *out, size_t out_sz, const char *name) {
 }
 
 int sdf_shm_create(sdf_shm_t *s, const char *name, size_t size) {
-    if (s == NULL)
+    if (s == NULL) {
         return -EINVAL;
-    if (size < SDF_SHM_MIN_SIZE)
+    }
+    if (size < SDF_SHM_MIN_SIZE) {
         return -EINVAL;
+    }
 
     memset(s, 0, sizeof(*s));
     s->fd = -1;
 
     char norm[SDF_SHM_NAME_MAX];
     int rc = sdf_shm_norm_name(norm, sizeof(norm), name);
-    if (rc != 0)
+    if (rc != 0) {
         return rc;
+    }
 
     int fd = shm_open(norm, O_CREAT | O_EXCL | O_RDWR, S_IRUSR | S_IWUSR);
-    if (fd < 0)
+    if (fd < 0) {
         return -errno; /* EEXIST surfaced to the caller on re-create */
+    }
 
     if (ftruncate(fd, (off_t)size) != 0) {
         rc = -errno;
@@ -89,22 +95,26 @@ int sdf_shm_create(sdf_shm_t *s, const char *name, size_t size) {
 }
 
 int sdf_shm_open(sdf_shm_t *s, const char *name, size_t size) {
-    if (s == NULL)
+    if (s == NULL) {
         return -EINVAL;
-    if (size < SDF_SHM_MIN_SIZE)
+    }
+    if (size < SDF_SHM_MIN_SIZE) {
         return -EINVAL;
+    }
 
     memset(s, 0, sizeof(*s));
     s->fd = -1;
 
     char norm[SDF_SHM_NAME_MAX];
     int rc = sdf_shm_norm_name(norm, sizeof(norm), name);
-    if (rc != 0)
+    if (rc != 0) {
         return rc;
+    }
 
     int fd = shm_open(norm, O_RDWR, 0);
-    if (fd < 0)
+    if (fd < 0) {
         return -errno;
+    }
 
     struct stat st;
     if (fstat(fd, &st) != 0) {
@@ -132,8 +142,9 @@ int sdf_shm_open(sdf_shm_t *s, const char *name, size_t size) {
 }
 
 void sdf_shm_close(sdf_shm_t *s) {
-    if (s == NULL || s->base == NULL)
+    if (s == NULL || s->base == NULL) {
         return;
+    }
     munmap(s->base, s->size);
     close(s->fd);
     s->base = NULL;
@@ -145,7 +156,8 @@ void sdf_shm_close(sdf_shm_t *s) {
 int sdf_shm_unlink(const char *name) {
     char norm[SDF_SHM_NAME_MAX];
     int rc = sdf_shm_norm_name(norm, sizeof(norm), name);
-    if (rc != 0)
+    if (rc != 0) {
         return rc;
+    }
     return shm_unlink(norm) == 0 ? 0 : -errno;
 }

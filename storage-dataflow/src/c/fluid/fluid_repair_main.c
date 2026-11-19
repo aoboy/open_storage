@@ -77,8 +77,9 @@ static uint32_t object_blocks(const sdf_fluid_repair_cfg_t *cfg) {
 }
 
 static uint32_t stream_symbols(const sdf_fluid_repair_cfg_t *cfg) {
-    if (cfg->arm == SDF_REPAIR_CONTROL || !(cfg->eps > 0.0))
+    if (cfg->arm == SDF_REPAIR_CONTROL || !(cfg->eps > 0.0)) {
         return cfg->k;
+    }
     /* the stream IS the budget: exactly N symbols (the eps/(1-eps)
      * percent-of-K mapping undershoots N by rounding — found live:
      * N = 72 needed 8 repairs, floor(k*ov/100) gave 7) */
@@ -88,8 +89,9 @@ static uint32_t stream_symbols(const sdf_fluid_repair_cfg_t *cfg) {
 /* overhead_pct that exposes exactly (count - k) repair symbols */
 static uint32_t stream_overhead_pct(const sdf_fluid_repair_cfg_t *cfg) {
     uint32_t count = stream_symbols(cfg);
-    if (count <= cfg->k)
+    if (count <= cfg->k) {
         return 0;
+    }
     uint64_t repairs = (uint64_t)(count - cfg->k);
     return (uint32_t)((100u * repairs + cfg->k - 1u) / cfg->k);
 }
@@ -100,36 +102,43 @@ static uint32_t stream_overhead_pct(const sdf_fluid_repair_cfg_t *cfg) {
 static void fill_expected_block(uint8_t *dst, uint32_t k, uint32_t sym_len, uint32_t block) {
     size_t block_len = (size_t)k * sym_len;
     uint64_t salt = (uint64_t)block * 0x9E3779B97F4A7C15ull;
-    for (size_t i = 0; i < block_len; i++)
+    for (size_t i = 0; i < block_len; i++) {
         dst[i] = (uint8_t)(((i * 2654435761ull) + salt) >> 24);
+    }
 }
 
 uint64_t sdf_fluid_repair_stream_bytes(const sdf_fluid_repair_cfg_t *cfg) {
-    if (cfg == NULL || cfg->k == 0 || cfg->sym_len == 0)
+    if (cfg == NULL || cfg->k == 0 || cfg->sym_len == 0) {
         return 0;
+    }
     uint32_t blocks = object_blocks(cfg);
-    if (blocks > SDF_REPAIR_MAX_BLOCKS)
+    if (blocks > SDF_REPAIR_MAX_BLOCKS) {
         return 0;
+    }
     return (uint64_t)blocks * stream_symbols(cfg) * cfg->sym_len;
 }
 
 int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg, uint8_t *buf,
                                    size_t buf_len) {
-    if (cfg == NULL || buf == NULL || cfg->k == 0 || cfg->sym_len == 0)
+    if (cfg == NULL || buf == NULL || cfg->k == 0 || cfg->sym_len == 0) {
         return -EINVAL;
+    }
     uint32_t blocks = object_blocks(cfg);
-    if (blocks > SDF_REPAIR_MAX_BLOCKS)
+    if (blocks > SDF_REPAIR_MAX_BLOCKS) {
         return -EINVAL;
+    }
     uint64_t total = sdf_fluid_repair_stream_bytes(cfg);
-    if (buf_len < total)
+    if (buf_len < total) {
         return -EINVAL;
+    }
 
     uint32_t count = stream_symbols(cfg);
     uint64_t block_bytes = (uint64_t)count * cfg->sym_len;
     size_t block_len = (size_t)cfg->k * cfg->sym_len;
     uint8_t *block = malloc(block_len);
-    if (block == NULL)
+    if (block == NULL) {
         return -ENOMEM;
+    }
 
     uint32_t codec = cfg->arm == SDF_REPAIR_NANORQ ? SDF_FOUNTAIN_NANORQ : SDF_FOUNTAIN_LT;
     uint32_t overhead_pct = cfg->arm == SDF_REPAIR_CONTROL ? 0u : stream_overhead_pct(cfg);
@@ -168,11 +177,13 @@ static int wait_quiet(sdf_origin_t *o, uint32_t n) {
         uint64_t inflight = 0;
         for (uint32_t i = 0; i < n; i++) {
             sdf_origin_stats_t st;
-            if (o->ops->stats(o, i, &st) == 0)
+            if (o->ops->stats(o, i, &st) == 0) {
                 inflight += st.in_flight;
+            }
         }
-        if (inflight == 0)
+        if (inflight == 0) {
             return 0;
+        }
         sdf_sleep_ns(200000);
     }
     return -ETIMEDOUT;
@@ -191,11 +202,13 @@ static int submit_symbol(sdf_origin_t *o, wm_compiled_t *sel, uint64_t *counter,
     int rc;
     do {
         rc = o->ops->fetch(o, &req, repair_cb, ctx);
-        if (rc == -EAGAIN)
+        if (rc == -EAGAIN) {
             sdf_sleep_ns(100000);
+        }
     } while (rc == -EAGAIN);
-    if (rc != 0)
+    if (rc != 0) {
         return -1;
+    }
     (*sent)++;
     *bytes_tx += len;
     return 0;
@@ -206,12 +219,14 @@ static int feed_symbol(void *dec, FILE *stream, uint32_t block, uint32_t esi,
                        const sdf_fluid_repair_cfg_t *cfg, uint64_t per_block_bytes,
                        uint64_t *rx_bytes) {
     uint8_t sym[8192];
-    if (cfg->sym_len > sizeof(sym))
+    if (cfg->sym_len > sizeof(sym)) {
         return -EINVAL;
+    }
     uint64_t off = (uint64_t)block * per_block_bytes + (uint64_t)esi * cfg->sym_len;
     if (fseek(stream, (long)off, SEEK_SET) != 0 ||
-        fread(sym, 1, cfg->sym_len, stream) != cfg->sym_len)
+        fread(sym, 1, cfg->sym_len, stream) != cfg->sym_len) {
         return -EIO;
+    }
     *rx_bytes += cfg->sym_len;
     (void)fd_push(dec, esi, sym, cfg->sym_len); /* duplicates counted */
     return 0;
@@ -271,8 +286,9 @@ static uint32_t rank_active(const repair_block_t *blocks, uint32_t *active, uint
             uint32_t prev = active[j - 1];
             uint32_t prev_rank = fd_rank(blocks[prev].dec);
             uint32_t prev_def = prev_rank < k ? k - prev_rank : 0;
-            if (prev_def >= key_def)
+            if (prev_def >= key_def) {
                 break;
+            }
             active[j] = prev;
             j--;
         }
@@ -284,18 +300,24 @@ static uint32_t rank_active(const repair_block_t *blocks, uint32_t *active, uint
 /* ---- the run ------------------------------------------------------------ */
 
 int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_stats_t *out) {
-    if (cfg == NULL || out == NULL)
+    if (cfg == NULL || out == NULL) {
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > 64u * 1024u || cfg->sym_len == 0 || cfg->sym_len > 8192u)
+    }
+    if (cfg->k == 0 || cfg->k > 64u * 1024u || cfg->sym_len == 0 || cfg->sym_len > 8192u) {
         return -EINVAL;
-    if (cfg->n_origins == 0 || cfg->n_origins > SDF_REPAIR_MAX_ORIGINS)
+    }
+    if (cfg->n_origins == 0 || cfg->n_origins > SDF_REPAIR_MAX_ORIGINS) {
         return -EINVAL;
-    for (uint32_t i = 0; i < cfg->n_origins; i++)
-        if (cfg->origins[i].id != i)
+    }
+    for (uint32_t i = 0; i < cfg->n_origins; i++) {
+        if (cfg->origins[i].id != i) {
             return -EINVAL;
+        }
+    }
     uint32_t nblocks = object_blocks(cfg);
-    if (nblocks > SDF_REPAIR_MAX_BLOCKS)
+    if (nblocks > SDF_REPAIR_MAX_BLOCKS) {
         return -EINVAL;
+    }
 
     memset(out, 0, sizeof(*out));
     out->n_blocks = nblocks;
@@ -324,11 +346,13 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
     /* completion ring (cb -> coordinator); sized to hold one admit
      * round so a wave can never silently drop completion events */
     uint32_t wave_cfg = cfg->wave ? cfg->wave : sdf_fluid_budget_n(cfg->k, eps);
-    if (wave_cfg == 0)
+    if (wave_cfg == 0) {
         wave_cfg = 1;
+    }
     uint32_t ring_cap = 256;
-    while (ring_cap < wave_cfg && ring_cap < 65536u)
+    while (ring_cap < wave_cfg && ring_cap < 65536u) {
         ring_cap <<= 1;
+    }
     uint32_t round_budget = wave_cfg < ring_cap ? wave_cfg : ring_cap;
 
     repair_ctx_t ctx;
@@ -343,8 +367,9 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
     int origins_open = 0;
     int rc = -EINVAL;
 
-    if (o.ops->open(&o, ocopies, cfg->n_origins) != 0)
+    if (o.ops->open(&o, ocopies, cfg->n_origins) != 0) {
         goto done;
+    }
     origins_open = 1;
 
     uint32_t codec = cfg->arm == SDF_REPAIR_NANORQ ? SDF_FOUNTAIN_NANORQ : SDF_FOUNTAIN_LT;
@@ -366,21 +391,25 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
 
     /* stream readback (all origin files hold the same stream) */
     stream = fopen(ocopies[0].dst, "rb");
-    if (stream == NULL)
+    if (stream == NULL) {
         goto done;
+    }
 
     /* equal-weight spray profile */
     memset(&prof, 0, sizeof(prof));
     prof.version = 1;
     prof.m = 1024;
     prof.n = cfg->n_origins;
-    for (uint32_t i = 0; i < cfg->n_origins; i++)
+    for (uint32_t i = 0; i < cfg->n_origins; i++) {
         prof.b[i] = 1024 / cfg->n_origins;
-    for (uint32_t i = 0; i < 1024 % cfg->n_origins; i++)
+    }
+    for (uint32_t i = 0; i < 1024 % cfg->n_origins; i++) {
         prof.b[i]++;
+    }
     wm_compile_cfg_t spray = {.method = WM_METHOD_SHUFFLE1, .sa = 333, .sb = 735};
-    if (wm_profile_compile_cfg(&prof, &sel, &spray) != 0)
+    if (wm_profile_compile_cfg(&prof, &sel, &spray) != 0) {
         goto done;
+    }
 
     uint64_t counter = 0;
     uint64_t total_rounds = 0;
@@ -388,8 +417,9 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
     if (cfg->arm == SDF_REPAIR_CONTROL) {
         /* ---- control arm: plain ARQ with retry, block by block -------- */
         uint8_t *sym = malloc(cfg->sym_len);
-        if (sym == NULL)
+        if (sym == NULL) {
             goto done;
+        }
         for (uint32_t b = 0; b < nblocks; b++) {
             repair_block_t *bl = &blocks[b];
             for (uint32_t e = 0; e < cfg->k; e++) {
@@ -397,22 +427,27 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
                 for (int attempt = 0; attempt < 64 && !landed; attempt++) {
                     uint64_t off = (uint64_t)b * per_block_bytes + (uint64_t)e * cfg->sym_len;
                     if (submit_symbol(&o, &sel, &counter, off, cfg->sym_len, &ctx, &bl->sent,
-                                      &bl->bytes_tx) != 0)
+                                      &bl->bytes_tx) != 0) {
                         continue;
+                    }
                     if (wait_quiet(&o, cfg->n_origins) == 0) {
                         repair_event_t ev;
-                        while (spsc_try_pop(ctx.ring, &ev))
-                            if (ev.landed && ev.block == b && ev.esi == e)
+                        while (spsc_try_pop(ctx.ring, &ev)) {
+                            if (ev.landed && ev.block == b && ev.esi == e) {
                                 landed = 1;
+                            }
+                        }
                     }
                 }
-                if (!landed) /* pathological loss beyond the retry cap */
+                if (!landed) { /* pathological loss beyond the retry cap */
                     break;
+                }
                 uint64_t off = (uint64_t)b * per_block_bytes + (uint64_t)e * cfg->sym_len;
                 if (fseek(stream, (long)off, SEEK_SET) != 0 ||
                     fread(sym, 1, cfg->sym_len, stream) != cfg->sym_len ||
-                    fd_push(bl->dec, e, sym, cfg->sym_len) != 0)
+                    fd_push(bl->dec, e, sym, cfg->sym_len) != 0) {
                     break;
+                }
                 bl->received++;
                 bl->bytes_rx += cfg->sym_len;
             }
@@ -423,11 +458,14 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
         for (;;) {
             uint32_t active[SDF_REPAIR_MAX_BLOCKS];
             uint32_t nactive = 0;
-            for (uint32_t b = 0; b < nblocks; b++)
-                if (block_active(&blocks[b], count))
+            for (uint32_t b = 0; b < nblocks; b++) {
+                if (block_active(&blocks[b], count)) {
                     active[nactive++] = b;
-            if (nactive == 0)
+                }
+            }
+            if (nactive == 0) {
                 break;
+            }
 
             rank_active(blocks, active, nactive, cfg->k);
             total_rounds++;
@@ -444,10 +482,12 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
                 for (uint32_t i = 0; i < nactive && admitted < round_budget; i++) {
                     uint32_t b = active[i];
                     repair_block_t *bl = &blocks[b];
-                    if (bl->next_esi >= count)
+                    if (bl->next_esi >= count) {
                         continue;
-                    if (sdf_fluid_budget_admit(&bl->budget) != 0)
+                    }
+                    if (sdf_fluid_budget_admit(&bl->budget) != 0) {
                         continue;
+                    }
                     uint64_t off =
                         (uint64_t)b * per_block_bytes + (uint64_t)bl->next_esi * cfg->sym_len;
                     if (submit_symbol(&o, &sel, &counter, off, cfg->sym_len, &ctx, &bl->sent,
@@ -459,34 +499,41 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
                     }
                 }
             }
-            for (uint32_t b = 0; b < nblocks; b++)
-                if (admitted_block[b])
+            for (uint32_t b = 0; b < nblocks; b++) {
+                if (admitted_block[b]) {
                     blocks[b].rounds++;
+                }
+            }
 
-            if (wait_quiet(&o, cfg->n_origins) != 0)
+            if (wait_quiet(&o, cfg->n_origins) != 0) {
                 break;
+            }
 
             repair_event_t ev;
             while (spsc_try_pop(ctx.ring, &ev)) {
-                if (!ev.landed || ev.block >= nblocks)
+                if (!ev.landed || ev.block >= nblocks) {
                     continue;
+                }
                 repair_block_t *bl = &blocks[ev.block];
                 if (feed_symbol(bl->dec, stream, ev.block, ev.esi, cfg, per_block_bytes,
-                                &bl->bytes_rx) == 0)
+                                &bl->bytes_rx) == 0) {
                     bl->received++;
+                }
             }
             /* Per-block gate/budget accounting: only blocks that have
              * admitted something participate (a not-yet-scheduled
              * block must not certify on a vacuous 0/0 observation). */
             for (uint32_t b = 0; b < nblocks; b++) {
                 repair_block_t *bl = &blocks[b];
-                if (bl->sent == 0)
+                if (bl->sent == 0) {
                     continue;
+                }
                 fg_observe(&bl->gate, bl->sent, bl->received);
                 sdf_fluid_budget_report(&bl->budget, bl->received);
             }
-            if (admitted == 0)
+            if (admitted == 0) {
                 break;
+            }
         }
 
         /* ---- per-block ARQ fallback: gate fired before sufficiency ----
@@ -494,26 +541,31 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
          * control arm's retry semantics — never an incomplete block. */
         for (uint32_t b = 0; b < nblocks; b++) {
             repair_block_t *bl = &blocks[b];
-            if (fd_ready(bl->dec))
+            if (fd_ready(bl->dec)) {
                 continue;
+            }
             bl->arq_fallback = 1;
             for (uint32_t e = 0; e < cfg->k; e++) {
                 int landed = 0;
                 for (int attempt = 0; attempt < 64 && !landed; attempt++) {
                     uint64_t off = (uint64_t)b * per_block_bytes + (uint64_t)e * cfg->sym_len;
                     if (submit_symbol(&o, &sel, &counter, off, cfg->sym_len, &ctx, &bl->sent,
-                                      &bl->bytes_tx) != 0)
+                                      &bl->bytes_tx) != 0) {
                         continue;
+                    }
                     if (wait_quiet(&o, cfg->n_origins) == 0) {
                         repair_event_t ev;
-                        while (spsc_try_pop(ctx.ring, &ev))
-                            if (ev.landed && ev.block == b && ev.esi == e)
+                        while (spsc_try_pop(ctx.ring, &ev)) {
+                            if (ev.landed && ev.block == b && ev.esi == e) {
                                 landed = 1;
+                            }
+                        }
                     }
                 }
                 if (landed &&
-                    feed_symbol(bl->dec, stream, b, e, cfg, per_block_bytes, &bl->bytes_rx) == 0)
+                    feed_symbol(bl->dec, stream, b, e, cfg, per_block_bytes, &bl->bytes_rx) == 0) {
                     bl->received++;
+                }
             }
         }
     }
@@ -523,8 +575,9 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
     int all_ok = 1;
     for (uint32_t b = 0; b < nblocks; b++) {
         blocks[b].ok = decode_verify(&blocks[b], cfg, b);
-        if (blocks[b].decode_rank < min_rank)
+        if (blocks[b].decode_rank < min_rank) {
             min_rank = blocks[b].decode_rank;
+        }
         all_ok = all_ok && blocks[b].ok;
     }
 
@@ -551,8 +604,9 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
     rc = 0;
 
 done:
-    if (stream != NULL)
+    if (stream != NULL) {
         fclose(stream);
+    }
     free(ctx.mem);
     for (uint32_t b = 0; b < nblocks; b++) {
         if (blocks[b].dec != NULL) {
@@ -560,8 +614,9 @@ done:
             free(blocks[b].dec);
         }
     }
-    if (origins_open)
+    if (origins_open) {
         o.ops->close(&o);
+    }
     out->wall_ns = sdf_now_ns() - t0;
     return rc;
 }

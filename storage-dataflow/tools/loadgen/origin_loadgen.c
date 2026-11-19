@@ -37,12 +37,12 @@
 #define LG_FILE_BYTES (1u << 20)
 #define LG_MAX_ORIGINS 16
 
-#define CHECK0(x)                                                             \
-    do {                                                                      \
-        if ((x) != 0) {                                                       \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK0(x)                                                                                  \
+    do {                                                                                           \
+        if ((x) != 0) {                                                                            \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 typedef enum { P_STEADY, P_SLOW, P_DIES, P_FLAPPING } profile_t;
@@ -61,7 +61,7 @@ static uint64_t g_enolink[LG_MAX_ORIGINS];
 static void usage(const char *argv0) {
     fprintf(stderr,
             "usage: %s [--profile steady|slow|dies|flapping] "
-                   "[--origins N] [--units K] [--unit-bytes B] [--m M]\n",
+            "[--origins N] [--units K] [--unit-bytes B] [--m M]\n",
             argv0);
 }
 
@@ -69,16 +69,17 @@ static int parse_args(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc) {
             i++;
-            if (strcmp(argv[i], "steady") == 0)
+            if (strcmp(argv[i], "steady") == 0) {
                 g_profile = P_STEADY;
-            else if (strcmp(argv[i], "slow") == 0)
+            } else if (strcmp(argv[i], "slow") == 0) {
                 g_profile = P_SLOW;
-            else if (strcmp(argv[i], "dies") == 0)
+            } else if (strcmp(argv[i], "dies") == 0) {
                 g_profile = P_DIES;
-            else if (strcmp(argv[i], "flapping") == 0)
+            } else if (strcmp(argv[i], "flapping") == 0) {
                 g_profile = P_FLAPPING;
-            else
+            } else {
                 return -1;
+            }
         } else if (strcmp(argv[i], "--origins") == 0 && i + 1 < argc) {
             g_n = (uint32_t)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--units") == 0 && i + 1 < argc) {
@@ -91,10 +92,10 @@ static int parse_args(int argc, char **argv) {
             return -1;
         }
     }
-    if (g_n < 1 || g_n > LG_MAX_ORIGINS || g_units == 0 ||
-        g_unit_bytes == 0 || g_unit_bytes > SDF_ORIGIN_UNIT_MAX ||
-        g_m < g_n || (g_m & (g_m - 1u)) != 0)
+    if (g_n < 1 || g_n > LG_MAX_ORIGINS || g_units == 0 || g_unit_bytes == 0 ||
+        g_unit_bytes > SDF_ORIGIN_UNIT_MAX || g_m < g_n || (g_m & (g_m - 1u)) != 0) {
         return -1;
+    }
     return 0;
 }
 
@@ -102,19 +103,20 @@ static uint8_t byte_at(uint64_t off) {
     return (uint8_t)((off * 2654435761ull) >> 24);
 }
 
-static void gen_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
-                   uint32_t len, int status) {
+static void gen_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
+                   int status) {
     (void)ud;
     uint32_t i = req->origin_id;
     if (status == 0) {
         /* light integrity check: deterministic pattern, one byte per
          * cache line of the unit */
-        for (uint32_t k = 0; k < len; k += 64)
+        for (uint32_t k = 0; k < len; k += 64) {
             if (out[k] != byte_at(req->obj_offset + k)) {
                 fprintf(stderr, "FAIL: data mismatch origin %u off %llu\n", i,
                         (unsigned long long)(req->obj_offset + k));
                 exit(1);
             }
+        }
         atomic_fetch_add(&g_ok[i], 1);
     } else {
         atomic_fetch_add(&g_failed[i], 1);
@@ -124,12 +126,14 @@ static void gen_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
 static void apply_timeline(sdf_origin_t *o, uint64_t submitted) {
     switch (g_profile) {
     case P_SLOW:
-        if (submitted == g_units / 4)
+        if (submitted == g_units / 4) {
             CHECK0(sdf_loopback_set_knob(o, 1, SDF_LB_THROTTLE_NS, 5000000));
+        }
         break;
     case P_DIES:
-        if (submitted == g_units / 2)
+        if (submitted == g_units / 2) {
             CHECK0(o->ops->set_enable(o, 2, 0));
+        }
         break;
     case P_FLAPPING:
         if ((submitted & 511ull) == 0 && submitted > 0) {
@@ -147,12 +151,14 @@ static int wait_quiet(sdf_origin_t *o) {
         uint64_t inflight = 0;
         for (uint32_t i = 0; i < g_n; i++) {
             sdf_origin_stats_t st;
-            if (o->ops->stats(o, i, &st) != 0)
+            if (o->ops->stats(o, i, &st) != 0) {
                 return -1;
+            }
             inflight += st.in_flight;
         }
-        if (inflight == 0)
+        if (inflight == 0) {
             return 0;
+        }
         sdf_sleep_ns(200000);
     }
     return -1;
@@ -168,17 +174,19 @@ int main(int argc, char **argv) {
     /* data files */
     char paths[LG_MAX_ORIGINS][160];
     for (uint32_t i = 0; i < g_n; i++) {
-        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-loadgen-%d-%u.bin",
-                 (int)getpid(), i);
+        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-loadgen-%d-%u.bin", (int)getpid(), i);
         FILE *f = fopen(paths[i], "wb");
-        if (f == NULL)
+        if (f == NULL) {
             return 1;
+        }
         for (uint64_t off = 0; off < LG_FILE_BYTES; off += 4096) {
             uint8_t blk[4096];
-            for (uint32_t k = 0; k < sizeof(blk); k++)
+            for (uint32_t k = 0; k < sizeof(blk); k++) {
                 blk[k] = byte_at(off + k);
-            if (fwrite(blk, 1, sizeof(blk), f) != sizeof(blk))
+            }
+            if (fwrite(blk, 1, sizeof(blk), f) != sizeof(blk)) {
                 return 1;
+            }
         }
         fclose(f);
     }
@@ -189,8 +197,9 @@ int main(int argc, char **argv) {
     p.version = 1;
     p.m = g_m;
     p.n = g_n;
-    for (uint32_t i = 0; i < g_n; i++)
+    for (uint32_t i = 0; i < g_n; i++) {
         p.b[i] = g_m / g_n + (i < g_m % g_n ? 1 : 0);
+    }
     wm_compiled_t c;
     if (wm_profile_compile(&p, &c) != 0) {
         fprintf(stderr, "loadgen: profile compile failed\n");
@@ -219,8 +228,7 @@ int main(int argc, char **argv) {
     uint64_t submitted = 0, eagain = 0;
     while (submitted < g_units) {
         uint32_t batch[256];
-        uint32_t take = (uint32_t)((g_units - submitted) > 256 ? 256
-                                                              : (g_units - submitted));
+        uint32_t take = (uint32_t)((g_units - submitted) > 256 ? 256 : (g_units - submitted));
         wm_select_batch(&c, submitted, batch, take);
         for (uint32_t k = 0; k < take; k++) {
             uint32_t org = batch[k];
@@ -231,8 +239,7 @@ int main(int argc, char **argv) {
             req.origin_id = org;
             req.job_id = 1;
             req.obj_offset =
-                ((uint64_t)(submitted + k) * g_unit_bytes) %
-                (LG_FILE_BYTES - g_unit_bytes);
+                ((uint64_t)(submitted + k) * g_unit_bytes) % (LG_FILE_BYTES - g_unit_bytes);
             req.len = g_unit_bytes;
 
             int rc;
@@ -244,9 +251,9 @@ int main(int argc, char **argv) {
                 }
             } while (rc == -EAGAIN);
 
-            if (rc == -ENOLINK)
+            if (rc == -ENOLINK) {
                 g_enolink[org]++;
-            else if (rc != 0) {
+            } else if (rc != 0) {
                 fprintf(stderr, "loadgen: fetch rc=%d\n", rc);
                 return 1;
             }
@@ -277,9 +284,8 @@ int main(int argc, char **argv) {
         o.ops->stats(&o, i, &st);
         printf("ORIGIN %u assigned=%llu ok=%llu failed=%llu enolink=%llu "
                "ewma_lat_ms=%.2f\n",
-               i, (unsigned long long)assign, (unsigned long long)ok,
-               (unsigned long long)fail, (unsigned long long)link,
-               st.ewma_lat_ns / 1000000.0);
+               i, (unsigned long long)assign, (unsigned long long)ok, (unsigned long long)fail,
+               (unsigned long long)link, st.ewma_lat_ns / 1000000.0);
         total_ok += ok;
         total_fail += fail;
         total_link += link;
@@ -289,8 +295,7 @@ int main(int argc, char **argv) {
             printf("GATE FAIL origin %u: ok+failed+enolink != assigned\n", i);
             gate_ok = 0;
         }
-        if (g_profile == P_STEADY &&
-            (ok != assign || fail != 0 || link != 0)) {
+        if (g_profile == P_STEADY && (ok != assign || fail != 0 || link != 0)) {
             printf("GATE FAIL origin %u: steady profile must complete every "
                    "assigned unit exactly\n",
                    i);
@@ -306,19 +311,18 @@ int main(int argc, char **argv) {
             gate_ok = 0;
         }
     }
-    if (total_ok + total_fail + total_link != g_units ||
-        total_assign != g_units) {
+    if (total_ok + total_fail + total_link != g_units || total_assign != g_units) {
         printf("GATE FAIL: total accounting mismatch\n");
         gate_ok = 0;
     }
 
     o.ops->close(&o);
-    for (uint32_t i = 0; i < g_n; i++)
+    for (uint32_t i = 0; i < g_n; i++) {
         unlink(paths[i]);
+    }
 
     if (!gate_ok) {
-        fprintf(stderr, "loadgen: GATES FAILED (profile %s)\n",
-                names[g_profile]);
+        fprintf(stderr, "loadgen: GATES FAILED (profile %s)\n", names[g_profile]);
         return 1;
     }
     printf("GATES OK\n");

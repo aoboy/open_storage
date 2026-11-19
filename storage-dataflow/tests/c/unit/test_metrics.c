@@ -16,12 +16,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 static void test_counter(void) {
@@ -69,21 +69,22 @@ static void test_histogram_buckets(void) {
     CHECK(atomic_load(&h.buckets[31]) == 2);
 
     CHECK(atomic_load(&h.count) == 8);
-    uint64_t expect_sum = 0 + 1 + 2 + 3 + 4 + 1024 + ((1ull << 31) + 5) +
-                           (1ull << 40);
+    uint64_t expect_sum = 0 + 1 + 2 + 3 + 4 + 1024 + ((1ull << 31) + 5) + (1ull << 40);
     CHECK(atomic_load(&h.sum) == expect_sum);
 
     /* total across buckets equals count */
     uint64_t total = 0;
-    for (int i = 0; i < SDF_HISTOGRAM_BUCKETS; i++)
+    for (int i = 0; i < SDF_HISTOGRAM_BUCKETS; i++) {
         total += atomic_load(&h.buckets[i]);
+    }
     CHECK(total == 8);
 
     sdf_histogram_reset(&h);
     CHECK(atomic_load(&h.count) == 0);
     CHECK(atomic_load(&h.sum) == 0);
-    for (int i = 0; i < SDF_HISTOGRAM_BUCKETS; i++)
+    for (int i = 0; i < SDF_HISTOGRAM_BUCKETS; i++) {
         CHECK(atomic_load(&h.buckets[i]) == 0);
+    }
 
     sdf_histogram_observe(NULL, 5); /* no-op, no crash */
 }
@@ -109,15 +110,16 @@ static void test_concurrent_observe(void) {
     sdf_counter_init(&g_ctr);
 
     pthread_t tids[OBS_THREADS];
-    for (int i = 0; i < OBS_THREADS; i++)
+    for (int i = 0; i < OBS_THREADS; i++) {
         CHECK(pthread_create(&tids[i], NULL, obs_main, NULL) == 0);
-    for (int i = 0; i < OBS_THREADS; i++)
+    }
+    for (int i = 0; i < OBS_THREADS; i++) {
         CHECK(pthread_join(tids[i], NULL) == 0);
+    }
 
     /* every update is counted exactly once, no lost adds */
     CHECK(atomic_load(&g_hist.count) == (uint64_t)OBS_THREADS * OBS_PER_THREAD);
-    CHECK(atomic_load(&g_hist.sum) ==
-          (uint64_t)OBS_THREADS * OBS_PER_THREAD * OBS_VALUE);
+    CHECK(atomic_load(&g_hist.sum) == (uint64_t)OBS_THREADS * OBS_PER_THREAD * OBS_VALUE);
     CHECK(atomic_load(&g_hist.buckets[2]) == /* 7 in [4,8) */
           (uint64_t)OBS_THREADS * OBS_PER_THREAD);
     CHECK(sdf_counter_read(&g_ctr) == (uint64_t)OBS_THREADS * OBS_PER_THREAD);

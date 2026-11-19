@@ -41,8 +41,9 @@ static void mep_send_all(int fd, const void *buf, size_t len) {
     const char *p = buf;
     while (len > 0) {
         ssize_t n = send(fd, p, len, MSG_NOSIGNAL);
-        if (n <= 0)
+        if (n <= 0) {
             return; /* client went away — nothing to salvage */
+        }
         p += n;
         len -= (size_t)n;
     }
@@ -55,8 +56,9 @@ static void mep_send_simple(int fd, const char *status) {
                      "version=0.0.4; charset=utf-8\r\n"
                      "Content-Length: 0\r\nConnection: close\r\n\r\n",
                      status);
-    if (n > 0)
+    if (n > 0) {
         mep_send_all(fd, hdr, (size_t)n);
+    }
 }
 
 /* one client: read the request head (GET serves, anything else 405),
@@ -67,11 +69,13 @@ static void mep_handle(sdf_metrics_endpoint_t *ep, int c) {
     int complete = 0;
     while (got < MEP_REQ_MAX) {
         struct pollfd p = {c, POLLIN, 0};
-        if (poll(&p, 1, MEP_CLIENT_MS) <= 0)
+        if (poll(&p, 1, MEP_CLIENT_MS) <= 0) {
             break;
+        }
         ssize_t n = recv(c, req + got, MEP_REQ_MAX - got, 0);
-        if (n <= 0)
+        if (n <= 0) {
             break;
+        }
         got += (size_t)n;
         req[got] = '\0';
         if (strstr(req, "\r\n\r\n") || strstr(req, "\n\n")) {
@@ -79,11 +83,13 @@ static void mep_handle(sdf_metrics_endpoint_t *ep, int c) {
             break;
         }
     }
-    if (got == 0)
+    if (got == 0) {
         return; /* nothing sent — just drop */
+    }
     if (!complete) {
-        if (got >= MEP_REQ_MAX)
+        if (got >= MEP_REQ_MAX) {
             mep_send_simple(c, "400 Bad Request");
+        }
         return; /* timeout / half request */
     }
 
@@ -96,8 +102,9 @@ static void mep_handle(sdf_metrics_endpoint_t *ep, int c) {
     char *buf = NULL;
     size_t len = 0;
     FILE *body = open_memstream(&buf, &len);
-    if (!body)
+    if (!body) {
         return;
+    }
     int rc = ep->render(ep->ud, body);
     fclose(body);
     if (rc != 0 || !buf) {
@@ -113,8 +120,9 @@ static void mep_handle(sdf_metrics_endpoint_t *ep, int c) {
                       "charset=utf-8\r\n"
                       "Content-Length: %zu\r\nConnection: close\r\n\r\n",
                       len);
-    if (hn > 0)
+    if (hn > 0) {
         mep_send_all(c, hdr, (size_t)hn);
+    }
     mep_send_all(c, buf, len);
     free(buf);
 }
@@ -124,11 +132,13 @@ static void *mep_thread(void *arg) {
     while (!atomic_load(&ep->stop)) {
         struct pollfd p = {ep->fd, POLLIN, 0};
         int pr = poll(&p, 1, MEP_POLL_MS);
-        if (pr <= 0)
+        if (pr <= 0) {
             continue; /* timeout/EINTR — re-check stop */
+        }
         int c = accept(ep->fd, NULL, NULL);
-        if (c < 0)
+        if (c < 0) {
             continue;
+        }
         mep_handle(ep, c);
         close(c);
     }
@@ -160,8 +170,9 @@ sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr, sdf_metrics
         fprintf(stderr, "sdf_metrics_endpoint: %s: bad port\n", addr);
         return NULL;
     }
-    if (host[0] == '\0')
+    if (host[0] == '\0') {
         strcpy(host, "127.0.0.1");
+    }
 
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
@@ -204,8 +215,9 @@ sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr, sdf_metrics
 }
 
 void sdf_metrics_endpoint_stop(sdf_metrics_endpoint_t *ep) {
-    if (!ep)
+    if (!ep) {
         return;
+    }
     atomic_store(&ep->stop, 1);
     pthread_join(ep->th, NULL);
     close(ep->fd);

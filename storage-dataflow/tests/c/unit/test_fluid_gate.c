@@ -15,12 +15,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 static uint64_t rng_state = 0x5EED1234ull;
@@ -62,9 +62,10 @@ static void test_never_past_allowed(void) {
         CHECK(sdf_fluid_budget_init(&b, k, e) == 0);
 
         uint64_t admitted = 0;
-        while (sdf_fluid_budget_admit(&b) == 0)
+        while (sdf_fluid_budget_admit(&b) == 0) {
             admitted++;
-        CHECK(admitted == b.n); /* stops exactly at the budget */
+        }
+        CHECK(admitted == b.n);                 /* stops exactly at the budget */
         CHECK(sdf_fluid_budget_admit(&b) == 1); /* and stays stopped */
 
         /* reports raise the allowable through losses only */
@@ -72,8 +73,9 @@ static void test_never_past_allowed(void) {
         sdf_fluid_budget_report(&b, recv);
         CHECK(sdf_fluid_budget_allowable(&b) == b.n + (b.n - recv));
         uint64_t more = 0;
-        while (sdf_fluid_budget_admit(&b) == 0)
+        while (sdf_fluid_budget_admit(&b) == 0) {
             more++;
+        }
         CHECK(more == b.n - recv);
 
         /* reordered (stale) reports never LOWER the allowable */

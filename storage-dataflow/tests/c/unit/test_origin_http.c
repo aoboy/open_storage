@@ -31,12 +31,12 @@
 #include <time.h>
 #include <unistd.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 #define OBJ_BYTES (64u * 1024u)
@@ -58,11 +58,12 @@ static const char *ci_find(const char *hay, const char *needle) {
     size_t n = strlen(needle);
     for (const char *p = hay; *p; p++) {
         size_t i = 0;
-        while (i < n && p[i] && tolower((unsigned char)p[i]) ==
-                                tolower((unsigned char)needle[i]))
+        while (i < n && p[i] && tolower((unsigned char)p[i]) == tolower((unsigned char)needle[i])) {
             i++;
-        if (i == n)
+        }
+        if (i == n) {
             return p;
+        }
     }
     return NULL;
 }
@@ -85,20 +86,23 @@ static void *conn_serve(void *argp) {
         int have_hdr = 0;
         while (!have_hdr) {
             ssize_t n = recv(c, buf + got, sizeof(buf) - 1 - got, 0);
-            if (n <= 0)
+            if (n <= 0) {
                 goto conn_done;
+            }
             got += (size_t)n;
             buf[got] = '\0';
             have_hdr = strstr(buf, "\r\n\r\n") != NULL;
         }
         char path[160] = {0};
-        if (sscanf(buf, "GET %159s HTTP/1.", path) != 1)
+        if (sscanf(buf, "GET %159s HTTP/1.", path) != 1) {
             goto conn_done;
+        }
 
         const char *rng = ci_find(buf, "range: bytes=");
         unsigned long long a = 0, b = 0;
-        if (rng != NULL)
+        if (rng != NULL) {
             sscanf(rng + 13, "%llu-%llu", &a, &b);
+        }
 
         char head[512];
         if (strcmp(path, "/obj") == 0 && rng != NULL && a <= b && b < OBJ_BYTES) {
@@ -109,13 +113,15 @@ static void *conn_serve(void *argp) {
                      "Content-Length: %llu\r\n"
                      "Connection: keep-alive\r\n\r\n",
                      a, b, (unsigned)OBJ_BYTES, len);
-            if (send(c, head, strlen(head), 0) < 0)
+            if (send(c, head, strlen(head), 0) < 0) {
                 goto conn_done;
+            }
             size_t off = 0;
             while (off < len) {
                 ssize_t n = send(c, s->obj + a + off, len - off, 0);
-                if (n <= 0)
+                if (n <= 0) {
                     goto conn_done;
+                }
                 off += (size_t)n;
             }
         } else {
@@ -135,14 +141,17 @@ conn_done:
 static void *srv_main(void *arg) {
     test_srv_t *s = arg;
     for (;;) {
-        if (atomic_load_explicit(&s->stop, memory_order_relaxed))
+        if (atomic_load_explicit(&s->stop, memory_order_relaxed)) {
             return NULL;
+        }
         struct pollfd pfd = {.fd = s->listen_fd, .events = POLLIN, 0};
-        if (poll(&pfd, 1, SRV_POLL_MS) <= 0)
+        if (poll(&pfd, 1, SRV_POLL_MS) <= 0) {
             continue;
+        }
         int c = accept(s->listen_fd, NULL, NULL);
-        if (c < 0)
+        if (c < 0) {
             continue;
+        }
         /* keep-alive parks per connection: serve each on its own
          * detached thread so concurrent origins are never starved */
         conn_arg_t *ca = malloc(sizeof(*ca));
@@ -166,25 +175,30 @@ static void *srv_main(void *arg) {
 static void *blackhole_main(void *arg) {
     test_srv_t *s = arg;
     for (;;) {
-        if (atomic_load_explicit(&s->stop, memory_order_relaxed))
+        if (atomic_load_explicit(&s->stop, memory_order_relaxed)) {
             return NULL;
+        }
         struct pollfd pfd = {.fd = s->listen_fd, .events = POLLIN, 0};
-        if (poll(&pfd, 1, SRV_POLL_MS) <= 0)
+        if (poll(&pfd, 1, SRV_POLL_MS) <= 0) {
             continue;
+        }
         int c = accept(s->listen_fd, NULL, NULL);
-        if (c < 0)
+        if (c < 0) {
             continue;
+        }
         char scratch[64];
-        while (recv(c, scratch, sizeof(scratch), 0) > 0)
+        while (recv(c, scratch, sizeof(scratch), 0) > 0) {
             ; /* park until the client gives up */
+        }
         close(c);
     }
 }
 
 static void srv_start(test_srv_t *s, void *(*entry)(void *)) {
     memset(s, 0, sizeof(*s));
-    for (size_t i = 0; i < sizeof(s->obj); i++)
+    for (size_t i = 0; i < sizeof(s->obj); i++) {
         s->obj[i] = (uint8_t)(i * 13u + 5u);
+    }
 
     s->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     CHECK(s->listen_fd >= 0);
@@ -223,16 +237,16 @@ static void reset_tally(void) {
     memset(&g_t, 0, sizeof(g_t));
 }
 
-static void cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
-               uint32_t len, int status) {
+static void cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len, int status) {
     (void)ud;
     switch (status) {
     case 0:
         atomic_fetch_add(&g_t.ok, 1);
         atomic_fetch_add(&g_t.bytes_ok, len);
         CHECK(out != NULL && len == req->len);
-        for (uint32_t i = 0; i < len; i++)
+        for (uint32_t i = 0; i < len; i++) {
             CHECK(out[i] == g_srv.obj[req->obj_offset + i]);
+        }
         break;
     case -ENOENT:
         atomic_fetch_add(&g_t.not_found, 1);
@@ -264,16 +278,19 @@ static void wait_quiet(sdf_origin_t *o, uint32_t n) {
             CHECK(o->ops->stats(o, k, &st) == 0);
             inflight += st.in_flight;
         }
-        if (inflight == 0)
+        if (inflight == 0) {
             return;
-        { struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000 }; nanosleep(&ts, NULL); }
+        }
+        {
+            struct timespec ts = {.tv_sec = 0, .tv_nsec = 1000000};
+            nanosleep(&ts, NULL);
+        }
     }
     fprintf(stderr, "FAIL: origins never went quiet\n");
     exit(1);
 }
 
-static void url_cfg(sdf_origin_cfg_t *c, uint32_t id, const char *url,
-                    uint32_t timeout_ms) {
+static void url_cfg(sdf_origin_cfg_t *c, uint32_t id, const char *url, uint32_t timeout_ms) {
     memset(c, 0, sizeof(*c));
     c->id = id;
     c->cls = SDF_ORIGIN_HTTP;
@@ -296,7 +313,7 @@ static void test_open_validation(void) {
     CHECK(o.ops->open(&o, &c, 1) == -EINVAL); /* bad port */
     url_cfg(&c, 3, "http://127.0.0.1:1/x", 0);
     CHECK(o.ops->open(&o, &c, 1) == -EINVAL); /* non-canonical id */
-    CHECK(o.impl == NULL); /* failed opens leave no state */
+    CHECK(o.impl == NULL);                    /* failed opens leave no state */
 }
 
 static void test_fetch_and_stats(void) {
@@ -311,8 +328,7 @@ static void test_fetch_and_stats(void) {
     CHECK(o.ops->open(&o, cfg, 2) == 0);
     reset_tally();
 
-    sdf_fetch_req_t req = {
-        .origin_id = 0, .job_id = 1, .obj_offset = 1024, .len = 4096};
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 1024, .len = 4096};
     CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
     req.origin_id = 1;
     req.obj_offset = OBJ_BYTES - 256;
@@ -339,8 +355,7 @@ static void test_fetch_and_stats(void) {
     /* 404 maps to -ENOENT; the connection drops and the next unit
      * reconnects and succeeds */
     char url404[192];
-    snprintf(url404, sizeof(url404), "http://127.0.0.1:%d/missing",
-             g_srv.port);
+    snprintf(url404, sizeof(url404), "http://127.0.0.1:%d/missing", g_srv.port);
     url_cfg(&cfg[0], 0, url404, 0);
     sdf_origin_t o404 = {.ops = sdf_http_ops(), .impl = NULL};
     CHECK(o404.ops->open(&o404, cfg, 1) == 0);
@@ -385,7 +400,7 @@ static void test_timeout_and_refused(void) {
     clock_gettime(CLOCK_MONOTONIC, &ts);
     uint64_t t1 = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
     CHECK(atomic_load(&g_t.timeout) == 1); /* a failed unit, not a hang */
-    CHECK(t1 - t0 < 3000000000ull); /* bounded well under 3 s */
+    CHECK(t1 - t0 < 3000000000ull);        /* bounded well under 3 s */
     o.ops->close(&o);
     srv_stop(&bh);
 

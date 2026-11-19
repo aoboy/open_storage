@@ -17,12 +17,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 #define WORDS 64u
@@ -43,8 +43,9 @@ static _Atomic uint64_t g_torn_retries;
 static void publish(uint32_t gen) {
     sdf_seqlock_write_begin(&g_pay.lock);
     atomic_store_explicit(&g_pay.gen, gen, memory_order_relaxed);
-    for (uint32_t i = 0; i < WORDS; i++)
+    for (uint32_t i = 0; i < WORDS; i++) {
         atomic_store_explicit(&g_pay.w[i], gen * WORDS + i, memory_order_relaxed);
+    }
     sdf_seqlock_write_end(&g_pay.lock);
 }
 
@@ -53,12 +54,14 @@ static void *writer_main(void *arg) {
     /* Do not start until the reader is demonstrably spinning: kills the
      * scheduling flake where the reader is descheduled for the whole
      * publishing window and the test proves nothing. */
-    while (atomic_load_explicit(&g_reader_warm, memory_order_acquire) < WARM_TARGET)
+    while (atomic_load_explicit(&g_reader_warm, memory_order_acquire) < WARM_TARGET) {
         sched_yield();
+    }
     for (uint32_t g = 1; g <= GENS; g++) {
         publish(g);
-        if ((g & 15u) == 0)
+        if ((g & 15u) == 0) {
             sched_yield(); /* keep the reader fed on any scheduling */
+        }
     }
     atomic_store_explicit(&g_writer_done, 1, memory_order_release);
     return NULL;
@@ -74,8 +77,9 @@ static void *reader_main(void *arg) {
         int consistent = 1;
         for (uint32_t i = 0; i < WORDS; i++) {
             uint32_t v = atomic_load_explicit(&g_pay.w[i], memory_order_relaxed);
-            if (v != gen * WORDS + i)
+            if (v != gen * WORDS + i) {
                 consistent = 0;
+            }
         }
         if (sdf_seqlock_read_retry(&g_pay.lock, s)) {
             atomic_fetch_add_explicit(&g_torn_retries, 1, memory_order_relaxed);
@@ -86,10 +90,12 @@ static void *reader_main(void *arg) {
             exit(1);
         }
         accepted++;
-        if (gen == 0)
+        if (gen == 0) {
             atomic_fetch_add_explicit(&g_reader_warm, 1, memory_order_relaxed);
-        if (atomic_load_explicit(&g_reader_warm, memory_order_relaxed) >= WARM_TARGET)
+        }
+        if (atomic_load_explicit(&g_reader_warm, memory_order_relaxed) >= WARM_TARGET) {
             warmed = 1;
+        }
     }
     /* The warm-up gate proves the reader was live during publishing; the
      * quantity assertions are scheduling-independent: no torn snapshot
@@ -152,11 +158,10 @@ static void test_contention(void) {
     CHECK(pthread_join(r, &rRet) == 0);
 
     uint64_t accepted = (uint64_t)(uintptr_t)rRet;
-    CHECK(accepted >= WARM_TARGET); /* reader was live and accepting */
+    CHECK(accepted >= WARM_TARGET);          /* reader was live and accepting */
     CHECK(atomic_load(&g_torn_retries) > 0); /* a read overlapped a publish */
     printf("test_seqlock: ok (%llu accepted snapshots, %llu retries)\n",
-           (unsigned long long)accepted,
-           (unsigned long long)atomic_load(&g_torn_retries));
+           (unsigned long long)accepted, (unsigned long long)atomic_load(&g_torn_retries));
 }
 
 int main(void) {

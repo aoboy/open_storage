@@ -16,12 +16,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 #define K 64u
@@ -34,10 +34,13 @@ static uint8_t byte_at(size_t off) {
 }
 
 static void enc_setup(void *emem, uint32_t overhead) {
-    for (size_t i = 0; i < sizeof(g_block); i++)
+    for (size_t i = 0; i < sizeof(g_block); i++) {
         g_block[i] = byte_at(i);
+    }
     fe_cfg_t cfg = {
-        .block_len = sizeof(g_block), .k = K, .overhead_pct = overhead,
+        .block_len = sizeof(g_block),
+        .k = K,
+        .overhead_pct = overhead,
         .codec = SDF_FOUNTAIN_NANORQ,
     };
     CHECK(fe_sizeof(&cfg) > 0);
@@ -53,14 +56,18 @@ static void dec_setup(void *dmem) {
 
 static void test_validation(void) {
     fe_cfg_t bad = {
-        .block_len = K * T, .k = K, .overhead_pct = 10,
+        .block_len = K * T,
+        .k = K,
+        .overhead_pct = 10,
         .codec = SDF_FOUNTAIN_NANORQ,
     };
     bad.block_len += 1; /* not divisible by k */
     CHECK(fe_sizeof(&bad) == 0);
 
     fe_cfg_t ok = {
-        .block_len = K * T, .k = K, .overhead_pct = 10,
+        .block_len = K * T,
+        .k = K,
+        .overhead_pct = 10,
         .codec = SDF_FOUNTAIN_NANORQ,
     };
     size_t sz = fe_sizeof(&ok);
@@ -76,10 +83,8 @@ static void test_validation(void) {
 }
 
 static void test_roundtrip(void) {
-    size_t esz = fe_sizeof(&(fe_cfg_t){.block_len = K * T,
-                                       .k = K,
-                                       .overhead_pct = 0,
-                                       .codec = SDF_FOUNTAIN_NANORQ});
+    size_t esz = fe_sizeof(
+        &(fe_cfg_t){.block_len = K * T, .k = K, .overhead_pct = 0, .codec = SDF_FOUNTAIN_NANORQ});
     size_t dsz = fd_sizeof(&(fd_cfg_t){.k = K, .sym_len = T});
     void *emem = malloc(esz);
     void *dmem = malloc(dsz);
@@ -114,10 +119,8 @@ static void test_roundtrip(void) {
 static void test_lossy_recovery(void) {
     /* 20% source loss, 30% overhead: RaptorQ recovers from any
      * K + eps distinct symbols (the design-02 repair premise) */
-    size_t esz = fe_sizeof(&(fe_cfg_t){.block_len = K * T,
-                                      .k = K,
-                                      .overhead_pct = 30,
-                                      .codec = SDF_FOUNTAIN_NANORQ});
+    size_t esz = fe_sizeof(
+        &(fe_cfg_t){.block_len = K * T, .k = K, .overhead_pct = 30, .codec = SDF_FOUNTAIN_NANORQ});
     size_t dsz = fd_sizeof(&(fd_cfg_t){.k = K, .sym_len = T});
     void *emem = malloc(esz);
     void *dmem = malloc(dsz);
@@ -153,10 +156,8 @@ static void test_lossy_recovery(void) {
 static void test_insufficient_is_the_arq_condition(void) {
     /* 40% of sources dropped, no repairs: NOT ready — the coordinator
      * must fall back to ARQ rather than ship an incomplete block */
-    size_t esz = fe_sizeof(&(fe_cfg_t){.block_len = K * T,
-                                       .k = K,
-                                       .overhead_pct = 0,
-                                       .codec = SDF_FOUNTAIN_NANORQ});
+    size_t esz = fe_sizeof(
+        &(fe_cfg_t){.block_len = K * T, .k = K, .overhead_pct = 0, .codec = SDF_FOUNTAIN_NANORQ});
     size_t dsz = fd_sizeof(&(fd_cfg_t){.k = K, .sym_len = T});
     void *emem = malloc(esz);
     void *dmem = malloc(dsz);
@@ -165,8 +166,9 @@ static void test_insufficient_is_the_arq_condition(void) {
     dec_setup(dmem);
 
     for (uint32_t esi = 0; esi < K; esi++) {
-        if (esi % 5u == 1u || esi % 5u == 2u)
+        if (esi % 5u == 1u || esi % 5u == 2u) {
             continue; /* 40% dropped */
+        }
         uint8_t sym[T];
         CHECK(fe_generate(emem, esi, sym, T) == 0);
         CHECK(fd_push(dmem, esi, sym, T) == 0);
@@ -181,23 +183,21 @@ static void test_insufficient_is_the_arq_condition(void) {
     free(dmem);
 }
 
-
 /* ---- LT arm (plan prompt W3.3) ---------------------------------------- */
 
 static void lt_run(int drop_source5, uint32_t overhead) {
-    size_t esz = fe_sizeof(&(fe_cfg_t){.block_len = K * T,
-                                      .k = K,
-                                      .overhead_pct = overhead,
-                                      .codec = SDF_FOUNTAIN_LT});
+    size_t esz = fe_sizeof(&(fe_cfg_t){
+        .block_len = K * T, .k = K, .overhead_pct = overhead, .codec = SDF_FOUNTAIN_LT});
     size_t dsz = fd_sizeof(&(fd_cfg_t){.k = K, .sym_len = T});
     void *emem = malloc(esz);
     void *dmem = malloc(dsz);
     CHECK(emem != NULL && dmem != NULL);
 
-    for (size_t i = 0; i < sizeof(g_block); i++)
+    for (size_t i = 0; i < sizeof(g_block); i++) {
         g_block[i] = byte_at(i);
-    fe_cfg_t ecfg = {.block_len = sizeof(g_block), .k = K,
-                     .overhead_pct = overhead, .codec = SDF_FOUNTAIN_LT};
+    }
+    fe_cfg_t ecfg = {
+        .block_len = sizeof(g_block), .k = K, .overhead_pct = overhead, .codec = SDF_FOUNTAIN_LT};
     CHECK(fe_init_in(emem, &ecfg, g_block) == 0);
     CHECK(fe_symbol_count(emem) >= K);
 
@@ -206,8 +206,9 @@ static void lt_run(int drop_source5, uint32_t overhead) {
 
     uint32_t count = fe_symbol_count(emem);
     for (uint32_t esi = 0; esi < count; esi++) {
-        if (drop_source5 && esi == 5)
+        if (drop_source5 && esi == 5) {
             continue; /* the single dropped source */
+        }
         uint8_t sym[T];
         CHECK(fe_generate(emem, esi, sym, T) == 0);
         CHECK(fd_push(dmem, esi, sym, T) == 0);

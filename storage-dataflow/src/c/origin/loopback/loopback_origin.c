@@ -181,11 +181,13 @@ static void *lb_worker_main(void *arg) {
         if (quit) {
             /* flush: fire everything scheduled right now so callers
              * are never left hanging (close discipline) */
-            for (uint32_t i = 0; i < d->npending; i++)
+            for (uint32_t i = 0; i < d->npending; i++) {
                 lb_fire(d, &d->pending[i]);
+            }
             d->npending = 0;
-            if (spsc_count(d->queue) == 0)
+            if (spsc_count(d->queue) == 0) {
                 return NULL;
+            }
             continue;
         }
 
@@ -204,15 +206,17 @@ static void *lb_worker_main(void *arg) {
                 d->npending--;
                 continue; /* re-examine swapped-in slot */
             }
-            if (d->pending[i].deadline_ns < next)
+            if (d->pending[i].deadline_ns < next) {
                 next = d->pending[i].deadline_ns;
+            }
             i++;
             remaining++;
         }
         if (remaining > 0) {
             uint64_t wake = next > now ? next - now : 0;
-            if (wake > 200000)
+            if (wake > 200000) {
                 wake = 200000; /* bounded sleep: quit/knobs stay live */
+            }
             sdf_sleep_ns(wake);
         }
     }
@@ -221,37 +225,44 @@ static void *lb_worker_main(void *arg) {
 /* ---- vtable ------------------------------------------------------------ */
 
 static uint32_t clamp_x100(double pct) {
-    if (!(pct > 0.0))
+    if (!(pct > 0.0)) {
         return 0;
-    if (pct > 100.0)
+    }
+    if (pct > 100.0) {
         return 10000u;
+    }
     return (uint32_t)(pct * 100.0);
 }
 
 static int lb_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) {
-    if (o == NULL || cfgs == NULL || n == 0 || n > SDF_ORIGIN_MAX)
+    if (o == NULL || cfgs == NULL || n == 0 || n > SDF_ORIGIN_MAX) {
         return -EINVAL;
+    }
 
     lb_impl_t *d = calloc(1, sizeof(*d));
-    if (d == NULL)
+    if (d == NULL) {
         return -ENOMEM;
+    }
     d->n = n;
     d->rng = 0x5EEDBEEFCAFEull; /* fixed seed: reproducible profiles */
     o->impl = d;
 
     d->origins = calloc(n, sizeof(*d->origins));
-    if (d->origins == NULL)
+    if (d->origins == NULL) {
         goto fail;
+    }
 
     uint64_t inflight = 0;
     for (uint32_t i = 0; i < n; i++) {
-        if (cfgs[i].id != i || cfgs[i].dst[0] == '\0')
+        if (cfgs[i].id != i || cfgs[i].dst[0] == '\0') {
             goto fail; /* canonical dense ids, per the header contract */
+        }
         d->origins[i].cfg = cfgs[i];
 
         int fd = open(cfgs[i].dst, O_RDONLY);
-        if (fd < 0)
+        if (fd < 0) {
             goto fail; /* dst must exist: open() fails wholesale */
+        }
         struct stat st;
         if (fstat(fd, &st) != 0 || st.st_size <= 0) {
             close(fd);
@@ -259,8 +270,9 @@ static int lb_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) {
         }
         void *map = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
         close(fd);
-        if (map == MAP_FAILED)
+        if (map == MAP_FAILED) {
             goto fail;
+        }
         d->origins[i].map = map;
         d->origins[i].map_len = (uint64_t)st.st_size;
 
@@ -275,33 +287,40 @@ static int lb_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) {
     }
 
     d->qcap = 2u;
-    while (d->qcap < inflight && d->qcap < (1u << 16))
+    while (d->qcap < inflight && d->qcap < (1u << 16)) {
         d->qcap <<= 1;
+    }
     size_t qmem = spsc_sizeof(d->qcap, (uint32_t)sizeof(lb_job_t));
-    if (qmem == 0)
+    if (qmem == 0) {
         goto fail;
+    }
     d->queue_mem = aligned_alloc(64, (qmem + 63u) & ~63u);
-    if (d->queue_mem == NULL)
+    if (d->queue_mem == NULL) {
         goto fail;
+    }
     d->queue = (spsc_ring_t *)d->queue_mem;
-    if (spsc_init(d->queue, d->queue_mem, d->qcap, (uint32_t)sizeof(lb_job_t)) != 0)
+    if (spsc_init(d->queue, d->queue_mem, d->qcap, (uint32_t)sizeof(lb_job_t)) != 0) {
         goto fail;
+    }
 
     d->pending = calloc(d->qcap, sizeof(*d->pending));
-    if (d->pending == NULL)
+    if (d->pending == NULL) {
         goto fail;
+    }
 
     d->open_t_ns = sdf_now_ns();
     atomic_store_explicit(&d->quit, 0, memory_order_relaxed);
-    if (pthread_create(&d->worker, NULL, lb_worker_main, d) != 0)
+    if (pthread_create(&d->worker, NULL, lb_worker_main, d) != 0) {
         goto fail;
+    }
     d->worker_started = 1;
     return 0;
 
 fail:
     for (uint32_t i = 0; i < n; i++) {
-        if (d->origins != NULL && d->origins[i].map != NULL)
+        if (d->origins != NULL && d->origins[i].map != NULL) {
             munmap(d->origins[i].map, d->origins[i].map_len);
+        }
     }
     free(d->pending);
     free(d->queue_mem);
@@ -312,17 +331,21 @@ fail:
 }
 
 static int lb_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_done_fn cb, void *ud) {
-    if (o == NULL || o->impl == NULL || req == NULL || cb == NULL)
+    if (o == NULL || o->impl == NULL || req == NULL || cb == NULL) {
         return -EINVAL;
+    }
     lb_impl_t *d = o->impl;
-    if (req->origin_id >= d->n)
+    if (req->origin_id >= d->n) {
         return -EINVAL;
-    if (req->len == 0 || req->len > SDF_ORIGIN_UNIT_MAX)
+    }
+    if (req->len == 0 || req->len > SDF_ORIGIN_UNIT_MAX) {
         return -EINVAL;
+    }
 
     lb_origin_t *og = &d->origins[req->origin_id];
-    if (!atomic_load_explicit(&og->enabled, memory_order_relaxed))
+    if (!atomic_load_explicit(&og->enabled, memory_order_relaxed)) {
         return -ENOLINK;
+    }
 
     lb_job_t j;
     memset(&j, 0, sizeof(j));
@@ -330,8 +353,9 @@ static int lb_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_done_
     j.cb = cb;
     j.ud = ud;
     j.submit_ns = sdf_now_ns();
-    if (!spsc_try_push(d->queue, &j))
+    if (!spsc_try_push(d->queue, &j)) {
         return -EAGAIN;
+    }
 
     atomic_fetch_add_explicit(&og->reqs_out, 1, memory_order_relaxed);
     atomic_fetch_add_explicit(&og->bytes_tx, req->len, memory_order_relaxed);
@@ -340,11 +364,13 @@ static int lb_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_done_
 }
 
 static int lb_stats(sdf_origin_t *o, uint32_t origin_id, sdf_origin_stats_t *st) {
-    if (o == NULL || o->impl == NULL || st == NULL)
+    if (o == NULL || o->impl == NULL || st == NULL) {
         return -EINVAL;
+    }
     lb_impl_t *d = o->impl;
-    if (origin_id >= d->n)
+    if (origin_id >= d->n) {
         return -EINVAL;
+    }
     lb_origin_t *og = &d->origins[origin_id];
 
     memset(st, 0, sizeof(*st));
@@ -361,17 +387,20 @@ static int lb_stats(sdf_origin_t *o, uint32_t origin_id, sdf_origin_stats_t *st)
     st->hard_down = atomic_load(&og->hard_down);
 
     uint64_t elapsed = sdf_now_ns() - d->open_t_ns;
-    if (elapsed > 0)
+    if (elapsed > 0) {
         st->goodput = (double)st->bytes_rx / ((double)elapsed / 1000000000.0);
+    }
     return 0;
 }
 
 static int lb_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
-    if (o == NULL || o->impl == NULL)
+    if (o == NULL || o->impl == NULL) {
         return -EINVAL;
+    }
     lb_impl_t *d = o->impl;
-    if (origin_id >= d->n)
+    if (origin_id >= d->n) {
         return -EINVAL;
+    }
     atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0, memory_order_relaxed);
     /* a drained origin is deterministically controller-visible: the
      * severity model reads hard_down, not warm-up latency luck
@@ -382,15 +411,19 @@ static int lb_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
 }
 
 static void lb_close(sdf_origin_t *o) {
-    if (o == NULL || o->impl == NULL)
+    if (o == NULL || o->impl == NULL) {
         return;
+    }
     lb_impl_t *d = o->impl;
     atomic_store_explicit(&d->quit, 1, memory_order_relaxed);
-    if (d->worker_started)
+    if (d->worker_started) {
         pthread_join(d->worker, NULL);
-    for (uint32_t i = 0; i < d->n; i++)
-        if (d->origins[i].map != NULL)
+    }
+    for (uint32_t i = 0; i < d->n; i++) {
+        if (d->origins[i].map != NULL) {
             munmap(d->origins[i].map, d->origins[i].map_len);
+        }
+    }
     free(d->pending);
     free(d->queue_mem);
     free(d->origins);
@@ -415,11 +448,13 @@ const sdf_origin_ops_t *sdf_loopback_ops(void) {
 
 int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id, sdf_loopback_knob_t knob,
                           uint64_t value) {
-    if (o == NULL || o->impl == NULL || o->ops != &LB_OPS)
+    if (o == NULL || o->impl == NULL || o->ops != &LB_OPS) {
         return -EINVAL;
+    }
     lb_impl_t *d = o->impl;
-    if (origin_id >= d->n)
+    if (origin_id >= d->n) {
         return -EINVAL;
+    }
     lb_origin_t *og = &d->origins[origin_id];
 
     switch (knob) {
@@ -431,8 +466,9 @@ int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id, sdf_loopback_knob
         return 0;
     case SDF_LB_LOSS_PCT_X100:
     case SDF_LB_ERR_PCT_X100:
-        if (value > 10000u)
+        if (value > 10000u) {
             return -ERANGE;
+        }
         atomic_store_explicit(knob == SDF_LB_LOSS_PCT_X100 ? &og->loss_x100 : &og->err_x100,
                               (uint32_t)value, memory_order_relaxed);
         return 0;

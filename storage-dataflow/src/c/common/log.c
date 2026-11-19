@@ -42,14 +42,16 @@ static const char *level_name(sdf_log_level_t level) {
 }
 
 void sdf_log_write(sdf_log_level_t level, const char *file, int line, const char *fmt, ...) {
-    if (level < sdf_log_get_level())
+    if (level < sdf_log_get_level()) {
         return;
+    }
 
     const char *base = file;
     if (file != NULL) {
         const char *slash = strrchr(file, '/');
-        if (slash != NULL)
+        if (slash != NULL) {
             base = slash + 1;
+        }
     }
 
     fprintf(stderr, "[sdf %s] %s:%d: ", level_name(level), base != NULL ? base : "?", line);

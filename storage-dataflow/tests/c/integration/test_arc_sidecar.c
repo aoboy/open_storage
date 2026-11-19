@@ -200,8 +200,9 @@ static void test_scrape(void) {
     size_t got = 0;
     while (got + 1 < sizeof(buf)) {
         ssize_t n = recv(fd, buf + got, sizeof(buf) - 1 - got, 0);
-        if (n <= 0)
+        if (n <= 0) {
             break;
+        }
         got += (size_t)n;
     }
     buf[got] = '\0';

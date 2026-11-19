@@ -143,31 +143,37 @@ static void timeline_apply(const sdf_wm_proxy_cfg_t *cfg, sdf_origin_t *o,
     for (uint32_t s = 0; s < cfg->n_steps && s < SDF_WM_PROXY_MAX_STEPS; s++) {
         const sdf_wm_proxy_step_t *st = &cfg->steps[s];
         if (st->at_unit > dispatched_before && st->at_unit <= dispatched_now) {
-            if (st->throttle_ns != 0)
+            if (st->throttle_ns != 0) {
                 (void)sdf_loopback_set_knob(o, st->origin, SDF_LB_THROTTLE_NS, st->throttle_ns);
+            }
             (void)o->ops->set_enable(o, st->origin, st->enable);
         }
     }
 }
 
 int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
-    if (cfg == NULL || out == NULL)
+    if (cfg == NULL || out == NULL) {
         return -EINVAL;
-    if (cfg->n_origins == 0 || cfg->n_origins > WM_MAX_PATHS)
+    }
+    if (cfg->n_origins == 0 || cfg->n_origins > WM_MAX_PATHS) {
         return -EINVAL;
+    }
     /* validated once, then frozen: every later use (including the
      * control modulo) sees the same non-zero count */
     const uint32_t n_origins = cfg->n_origins;
-    if (cfg->units == 0 || cfg->unit_bytes == 0 || cfg->unit_bytes > SDF_ORIGIN_UNIT_MAX)
+    if (cfg->units == 0 || cfg->unit_bytes == 0 || cfg->unit_bytes > SDF_ORIGIN_UNIT_MAX) {
         return -EINVAL;
-    if (cfg->profile.n != n_origins)
+    }
+    if (cfg->profile.n != n_origins) {
         return -EINVAL;
+    }
 
     memset(out, 0, sizeof(*out));
 
     sdf_origin_t o = {.ops = sdf_loopback_ops(), .impl = NULL};
-    if (o.ops->open(&o, cfg->origins, n_origins) != 0)
+    if (o.ops->open(&o, cfg->origins, n_origins) != 0) {
         return -EINVAL;
+    }
 
     proxy_cb_state_t cbst;
     memset(&cbst, 0, sizeof(cbst));
@@ -193,8 +199,9 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     int shm_on = 0;
     if (cfg->shm_name != NULL && cfg->shm_name[0] != '\0') {
         int rc = sdf_wm_shm_create(cfg->shm_name, n_origins, &shm);
-        if (rc != 0)
+        if (rc != 0) {
             rc = sdf_wm_shm_attach(cfg->shm_name, n_origins, &shm);
+        }
         if (rc != 0) {
             o.ops->close(&o);
             return rc;
@@ -214,13 +221,15 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     }
 
     uint64_t units_per_interval = cfg->control_hz > 0 ? cfg->units / cfg->control_hz : cfg->units;
-    if (units_per_interval == 0)
+    if (units_per_interval == 0) {
         units_per_interval = cfg->units;
+    }
 
     /* per-job units: job k owns the range [k*per, (k+1)*per) of units */
     uint64_t per = cfg->units / (cfg->jobs ? cfg->jobs : 1);
-    if (per == 0)
+    if (per == 0) {
         per = 1;
+    }
 
     uint64_t t0 = sdf_now_ns();
     uint64_t dispatched = 0;
@@ -241,12 +250,14 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
             out->control_ticks++;
             for (uint32_t i = 0; i < n_origins; i++) {
                 sdf_origin_stats_t st;
-                if (o.ops->stats(&o, i, &st) != 0)
+                if (o.ops->stats(&o, i, &st) != 0) {
                     continue;
+                }
                 if (shm_on) {
                     /* the live chain: telemetry to the Python loop */
-                    if (sdf_wm_shm_telemetry_push(&shm, &st) == 0)
+                    if (sdf_wm_shm_telemetry_push(&shm, &st) == 0) {
                         out->shm_telemetry_pushed++;
+                    }
                 }
                 wm_ctrl_on_stats(&ctl, i, &st);
             }
@@ -261,8 +272,9 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                     if (ver > out->shm_version_acquired && next.n == n_origins &&
                         next.m == work.m) {
                         out->shm_version_acquired = ver;
-                        if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0)
+                        if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0) {
                             work = next;
+                        }
                     }
                 }
             } else {
@@ -272,8 +284,9 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                     if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0) {
                         work = next;
                         out->updates_applied++;
-                        for (uint32_t i = 0; i < n_origins; i++)
+                        for (uint32_t i = 0; i < n_origins; i++) {
                             sdf_counter_inc(&out->shed_events[i]);
+                        }
                     }
                 }
             }
@@ -296,10 +309,12 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                  * jobs with the same profile never correlate
                  * (ADR-0007) */
                 wm_compile_cfg_t jcfg = spray;
-                for (uint64_t r = 0; r < job % 64u; r++)
+                for (uint64_t r = 0; r < job % 64u; r++) {
                     wm_seed_rotate(&jcfg, work.m);
-                if (wm_profile_compile_cfg(&work, &job_compiled, &jcfg) != 0)
+                }
+                if (wm_profile_compile_cfg(&work, &job_compiled, &jcfg) != 0) {
                     job_compiled = compiled; /* fallback: base table */
+                }
             }
             origin = wm_select(&job_compiled, job_unit);
             out->dispatch_treatment++;
@@ -320,16 +335,18 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         int rc;
         do {
             rc = o.ops->fetch(&o, &req, proxy_cb, &cbst);
-            if (rc == -EAGAIN)
+            if (rc == -EAGAIN) {
                 sdf_sleep_ns(100000);
+            }
         } while (rc == -EAGAIN);
         if (rc != 0) {
             /* -ENOLINK lands here: the drain contract keeps counts */
             sdf_counter_inc(&out->enolink[origin]);
         }
         dispatched++;
-        if (cfg->dispatch_pace_ns > 0)
+        if (cfg->dispatch_pace_ns > 0) {
             sdf_sleep_ns(cfg->dispatch_pace_ns);
+        }
         out->dispatched[origin]++;
         timeline_apply(cfg, &o, before, dispatched);
     }
@@ -339,11 +356,13 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         uint64_t inflight = 0;
         for (uint32_t i = 0; i < n_origins; i++) {
             sdf_origin_stats_t st;
-            if (o.ops->stats(&o, i, &st) == 0)
+            if (o.ops->stats(&o, i, &st) == 0) {
                 inflight += st.in_flight;
+            }
         }
-        if (inflight == 0)
+        if (inflight == 0) {
             break;
+        }
         sdf_sleep_ns(200000);
     }
     out->wall_ns = sdf_now_ns() - t0;
@@ -352,12 +371,14 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         out->failed[i] = atomic_load_explicit(&cbst.failed[i], memory_order_relaxed);
     }
     out->bytes_rx = atomic_load_explicit(&cbst.bytes_rx, memory_order_relaxed);
-    for (uint32_t i = 0; i < n_origins; i++)
+    for (uint32_t i = 0; i < n_origins; i++) {
         out->end_profile_b[i] = work.b[i];
+    }
 
-    if (shm_on)
+    if (shm_on) {
         sdf_wm_shm_close(&shm); /* close does not unlink: the harness
                                  * owns the segment lifecycle */
+    }
     o.ops->close(&o);
     return 0;
 }

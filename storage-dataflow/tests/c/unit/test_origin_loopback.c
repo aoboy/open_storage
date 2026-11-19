@@ -24,12 +24,12 @@
 #include <time.h>
 #include <unistd.h>
 
-#define CHECK(x)                                                              \
-    do {                                                                      \
-        if (!(x)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            exit(1);                                                          \
-        }                                                                     \
+#define CHECK(x)                                                                                   \
+    do {                                                                                           \
+        if (!(x)) {                                                                                \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            exit(1);                                                                               \
+        }                                                                                          \
     } while (0)
 
 #define FILE_BYTES (128u * 1024u)
@@ -59,8 +59,8 @@ static void tally_reset(void) {
     atomic_store(&g_tally.min_lat_ns, UINT64_MAX);
 }
 
-static void test_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
-                    uint32_t len, int status) {
+static void test_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
+                    int status) {
     (void)ud;
     tally_t *t = &g_tally;
 
@@ -68,8 +68,9 @@ static void test_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
         atomic_fetch_add(&t->done_ok, 1);
         atomic_fetch_add(&t->bytes_ok, len);
         CHECK(out != NULL);
-        for (uint32_t i = 0; i < len; i++)
+        for (uint32_t i = 0; i < len; i++) {
             CHECK(out[i] == g_file[req->obj_offset + i]);
+        }
     } else if (status == -EHOSTUNREACH) {
         atomic_fetch_add(&t->done_loss, 1);
         CHECK(out == NULL && len == 0);
@@ -99,8 +100,9 @@ static void wait_quiet(sdf_origin_t *o, uint32_t n) {
             CHECK(o->ops->stats(o, i, &st) == 0);
             inflight += st.in_flight;
         }
-        if (inflight == 0)
+        if (inflight == 0) {
             return;
+        }
         sdf_sleep_ns(WAIT_NS);
     }
     fprintf(stderr, "FAIL: origins never went quiet\n");
@@ -108,11 +110,11 @@ static void wait_quiet(sdf_origin_t *o, uint32_t n) {
 }
 
 static void make_files(void) {
-    for (size_t i = 0; i < sizeof(g_file); i++)
+    for (size_t i = 0; i < sizeof(g_file); i++) {
         g_file[i] = (uint8_t)(i * 7u + 3u);
+    }
     for (int k = 0; k < 2; k++) {
-        snprintf(g_path[k], sizeof(g_path[k]), "/tmp/sdf-lb-test-%d-%d.bin",
-                 (int)getpid(), k);
+        snprintf(g_path[k], sizeof(g_path[k]), "/tmp/sdf-lb-test-%d-%d.bin", (int)getpid(), k);
         FILE *f = fopen(g_path[k], "wb");
         CHECK(f != NULL);
         CHECK(fwrite(g_file, 1, sizeof(g_file), f) == sizeof(g_file));
@@ -121,8 +123,9 @@ static void make_files(void) {
 }
 
 static void rm_files(void) {
-    for (int k = 0; k < 2; k++)
+    for (int k = 0; k < 2; k++) {
         CHECK(unlink(g_path[k]) == 0);
+    }
 }
 
 static void fill_cfg(sdf_origin_cfg_t *c, uint32_t id) {
@@ -167,8 +170,7 @@ static void test_data_and_stats(void) {
     tally_reset();
 
     /* basic fetch: data correct through the zero-copy pointer */
-    sdf_fetch_req_t req = {
-        .origin_id = 0, .job_id = 1, .obj_offset = 4096, .len = 1024};
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 4096, .len = 1024};
     CHECK(o.ops->fetch(&o, &req, test_cb, NULL) == 0);
     req.origin_id = 1;
     req.obj_offset = FILE_BYTES - 64;
@@ -240,10 +242,12 @@ static void test_throttle_latency(void) {
 
     /* every unit observed at least the throttle after its submit */
     uint64_t done_at[8];
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++) {
         done_at[i] = now_ns(); /* upper bound: completion <= this read */
-    for (int i = 0; i < 8; i++)
+    }
+    for (int i = 0; i < 8; i++) {
         CHECK(done_at[i] >= submit[i] + 2800000); /* 3ms - slack */
+    }
     CHECK(atomic_load(&g_tally.done_ok) == 8);
 
     sdf_origin_stats_t st;
@@ -264,8 +268,9 @@ static void test_throttle_latency(void) {
         int rc;
         do {
             rc = o.ops->fetch(&o, &req, test_cb, NULL);
-            if (rc == -EAGAIN)
+            if (rc == -EAGAIN) {
                 sdf_sleep_ns(100000);
+            }
         } while (rc == -EAGAIN);
         CHECK(rc == 0);
     }

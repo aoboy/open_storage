@@ -77,21 +77,24 @@ typedef struct {
 } ps_t;
 
 static int fail(ps_t *s, int line, const char *msg) {
-    if (s->err && s->errsz)
+    if (s->err && s->errsz) {
         snprintf(s->err, s->errsz, "%s:%d: %s", s->path ? s->path : "?", line, msg);
+    }
     return -1;
 }
 
 static int failf(char *err, size_t errsz, const char *path, int line, const char *what,
                  const char *msg) {
-    if (err && errsz)
+    if (err && errsz) {
         snprintf(err, errsz, "%s:%d: %s: %s", path ? path : "?", line, what, msg);
+    }
     return -1;
 }
 
 static void doc_free(doc_t *d) {
-    for (size_t i = 0; i < d->n; i++)
+    for (size_t i = 0; i < d->n; i++) {
         free(d->e[i].sval);
+    }
     free(d->e);
     free(d->h);
     memset(d, 0, sizeof(*d));
@@ -101,8 +104,9 @@ static int doc_add_hdr(doc_t *d, const char *name, int arr_idx) {
     if (d->nh == d->hcap) {
         size_t nc = d->hcap ? d->hcap * 2 : 8;
         hdr_t *h = realloc(d->h, nc * sizeof(*h));
-        if (!h)
+        if (!h) {
             return -1;
+        }
         d->h = h;
         d->hcap = nc;
     }
@@ -116,8 +120,9 @@ static entry_t *doc_add_entry(doc_t *d) {
     if (d->n == d->cap) {
         size_t nc = d->cap ? d->cap * 2 : 32;
         entry_t *e = realloc(d->e, nc * sizeof(*e));
-        if (!e)
+        if (!e) {
             return NULL;
+        }
         d->e = e;
         d->cap = nc;
     }
@@ -135,14 +140,16 @@ static char peek(ps_t *s) {
 }
 
 static void skip_inline_ws(ps_t *s) {
-    while (!at_end(s) && (*s->p == ' ' || *s->p == '\t'))
+    while (!at_end(s) && (*s->p == ' ' || *s->p == '\t')) {
         s->p++;
+    }
 }
 
 static void skip_blank(ps_t *s) { /* whitespace, comments, newlines */
     for (;;) {
-        if (at_end(s))
+        if (at_end(s)) {
             return;
+        }
         if (*s->p == '\n') {
             s->p++;
             s->line++;
@@ -157,8 +164,9 @@ static void skip_blank(ps_t *s) { /* whitespace, comments, newlines */
             continue;
         }
         if (*s->p == '#') {
-            while (!at_end(s) && *s->p != '\n')
+            while (!at_end(s) && *s->p != '\n') {
                 s->p++;
+            }
             continue;
         }
         return;
@@ -172,13 +180,16 @@ static int is_key_char(char c) {
 
 static int parse_bare_key(ps_t *s, char *out, size_t osz) {
     const char *start = s->p;
-    while (!at_end(s) && is_key_char(*s->p))
+    while (!at_end(s) && is_key_char(*s->p)) {
         s->p++;
+    }
     size_t len = (size_t)(s->p - start);
-    if (len == 0)
+    if (len == 0) {
         return fail(s, s->line, "expected a key");
-    if (len >= osz)
+    }
+    if (len >= osz) {
         return fail(s, s->line, "key too long");
+    }
     memcpy(out, start, len);
     out[len] = '\0';
     return 0;
@@ -186,21 +197,25 @@ static int parse_bare_key(ps_t *s, char *out, size_t osz) {
 
 static int parse_string(ps_t *s, char **out) {
     int line = s->line;
-    if (s->p + 2 <= s->end && s->p[0] == '"' && s->p[1] == '"')
+    if (s->p + 2 <= s->end && s->p[0] == '"' && s->p[1] == '"') {
         return fail(s, line, "multi-line strings are not supported");
+    }
     s->p++; /* opening quote */
     size_t cap = 64, len = 0;
     char *buf = malloc(cap);
-    if (!buf)
+    if (!buf) {
         return fail(s, line, "oom");
+    }
     while (!at_end(s) && *s->p != '"') {
         char c = *s->p;
-        if (c == '\n')
+        if (c == '\n') {
             goto unterminated;
+        }
         if (c == '\\') {
             s->p++;
-            if (at_end(s))
+            if (at_end(s)) {
                 goto unterminated;
+            }
             switch (*s->p) {
             case '\\':
                 c = '\\';
@@ -264,26 +279,30 @@ static int parse_array(ps_t *s, entry_t *e) {
     e->n_nums = 0;
     for (;;) {
         skip_blank(s);
-        if (at_end(s))
+        if (at_end(s)) {
             return fail(s, line, "unterminated array");
+        }
         if (*s->p == ']') {
             s->p++;
             return 0;
         }
-        if (e->n_nums >= (int)(sizeof(e->nums) / sizeof(e->nums[0])))
+        if (e->n_nums >= (int)(sizeof(e->nums) / sizeof(e->nums[0]))) {
             return fail(s, s->line, "array too long (max 64)");
+        }
         entry_t tmp;
         memset(&tmp, 0, sizeof(tmp));
-        if (parse_value(s, &tmp) != 0)
+        if (parse_value(s, &tmp) != 0) {
             return -1;
+        }
         if (tmp.type != V_INT && tmp.type != V_FLOAT) {
             free(tmp.sval);
             return fail(s, line, "only numeric arrays are supported");
         }
         e->nums[e->n_nums++] = tmp.type == V_INT ? (double)tmp.ival : tmp.fval;
         skip_blank(s);
-        if (at_end(s))
+        if (at_end(s)) {
             return fail(s, line, "unterminated array");
+        }
         if (*s->p == ',') {
             s->p++;
             continue;
@@ -299,17 +318,20 @@ static int parse_array(ps_t *s, entry_t *e) {
 static int parse_value(ps_t *s, entry_t *e) {
     int line = s->line;
     e->line = line;
-    if (at_end(s))
+    if (at_end(s)) {
         return fail(s, line, "expected a value");
+    }
     char c = *s->p;
-    if (c == '\n' || c == '\r' || c == '#' || c == ';')
+    if (c == '\n' || c == '\r' || c == '#' || c == ';') {
         return fail(s, line, "expected a value");
+    }
     if (c == '"') {
         e->type = V_STR;
         return parse_string(s, &e->sval);
     }
-    if (c == '[')
+    if (c == '[') {
         return parse_array(s, e);
+    }
     if (strncmp(s->p, "true", 4) == 0 && word_boundary(s->p[4])) {
         s->p += 4;
         e->type = V_BOOL;
@@ -324,8 +346,9 @@ static int parse_value(ps_t *s, entry_t *e) {
     }
     if (c == '-' || c == '+' || (c >= '0' && c <= '9')) {
         const char *start = s->p;
-        if (c == '-' || c == '+')
+        if (c == '-' || c == '+') {
             s->p++;
+        }
         int digits = 0, dot = 0, expo = 0;
         while (!at_end(s)) {
             char d = *s->p;
@@ -338,32 +361,37 @@ static int parse_value(ps_t *s, entry_t *e) {
             } else if ((d == 'e' || d == 'E') && !expo && digits) {
                 expo = 1;
                 s->p++;
-                if (!at_end(s) && (*s->p == '+' || *s->p == '-'))
+                if (!at_end(s) && (*s->p == '+' || *s->p == '-')) {
                     s->p++;
+                }
             } else {
                 break;
             }
         }
-        if (digits == 0 || !word_boundary(peek(s)))
+        if (digits == 0 || !word_boundary(peek(s))) {
             return fail(s, line, "malformed number");
+        }
         char tmpbuf[64];
         size_t tlen = (size_t)(s->p - start);
-        if (tlen >= sizeof(tmpbuf))
+        if (tlen >= sizeof(tmpbuf)) {
             return fail(s, line, "number too long");
+        }
         memcpy(tmpbuf, start, tlen);
         tmpbuf[tlen] = '\0';
         if (dot || expo) {
             char *end = NULL;
             e->fval = strtod(tmpbuf, &end);
-            if (!end || *end != '\0')
+            if (!end || *end != '\0') {
                 return fail(s, line, "malformed float");
+            }
             e->type = V_FLOAT;
         } else {
             errno = 0;
             char *end = NULL;
             e->ival = strtoll(tmpbuf, &end, 10);
-            if (!end || *end != '\0')
+            if (!end || *end != '\0') {
                 return fail(s, line, "malformed integer");
+            }
             e->type = V_INT;
         }
         return 0;
@@ -381,28 +409,33 @@ static int parse_header(ps_t *s, doc_t *d) {
     }
     skip_inline_ws(s);
     char name[32];
-    if (parse_bare_key(s, name, sizeof(name)) != 0)
+    if (parse_bare_key(s, name, sizeof(name)) != 0) {
         return -1;
+    }
     skip_inline_ws(s);
-    if (peek(s) != ']')
+    if (peek(s) != ']') {
         return fail(s, line, "expected ']'");
+    }
     s->p++;
     if (dbl) {
-        if (peek(s) != ']')
+        if (peek(s) != ']') {
             return fail(s, line, "expected ']]'");
+        }
         s->p++;
     }
     /* uniqueness: [x] twice is an error; [[x]] indices count up */
     int idx = 0;
     for (size_t i = 0; i < d->nh; i++) {
         if (strcmp(d->h[i].name, name) == 0) {
-            if (!dbl)
+            if (!dbl) {
                 return fail(s, line, "table redefined");
+            }
             idx++;
         }
     }
-    if (doc_add_hdr(d, name, idx) != 0)
+    if (doc_add_hdr(d, name, idx) != 0) {
         return fail(s, line, "oom");
+    }
     snprintf(s->table, sizeof(s->table), "%s", name);
     s->arr_idx = idx;
     return 0;
@@ -422,32 +455,38 @@ static int toml_parse(char *buf, size_t len, const char *path, doc_t *d, char *e
 
     for (;;) {
         skip_blank(&s);
-        if (at_end(&s))
+        if (at_end(&s)) {
             return 0;
+        }
         int line = s.line;
         if (peek(&s) == '[') {
-            if (parse_header(&s, d) != 0)
+            if (parse_header(&s, d) != 0) {
                 return -1;
+            }
             /* header ends the "line": require EOL/comment/';'-less */
             skip_inline_ws(&s);
             if (!at_end(&s) && peek(&s) != '\n' && peek(&s) != '\r' && peek(&s) != '#' &&
-                peek(&s) != ';')
+                peek(&s) != ';') {
                 return fail(&s, s.line, "unexpected characters after table header");
+            }
             continue;
         }
         /* key = value */
         char key[48];
-        if (parse_bare_key(&s, key, sizeof(key)) != 0)
+        if (parse_bare_key(&s, key, sizeof(key)) != 0) {
             return -1;
+        }
         skip_inline_ws(&s);
-        if (peek(&s) != '=')
+        if (peek(&s) != '=') {
             return fail(&s, s.line, "expected '=' after key");
+        }
         s.p++;
         skip_inline_ws(&s);
         entry_t tmp;
         memset(&tmp, 0, sizeof(tmp));
-        if (parse_value(&s, &tmp) != 0)
+        if (parse_value(&s, &tmp) != 0) {
             return -1;
+        }
         /* duplicate detection */
         for (size_t i = 0; i < d->n; i++) {
             if (d->e[i].arr_idx == s.arr_idx && strcmp(d->e[i].table, s.table) == 0 &&
@@ -471,8 +510,9 @@ static int toml_parse(char *buf, size_t len, const char *path, doc_t *d, char *e
             s.p++;
             continue;
         }
-        if (!at_end(&s) && peek(&s) != '\n' && peek(&s) != '\r' && peek(&s) != '#')
+        if (!at_end(&s) && peek(&s) != '\n' && peek(&s) != '\r' && peek(&s) != '#') {
             return fail(&s, s.line, "unexpected characters after value");
+        }
     }
 }
 
@@ -590,16 +630,18 @@ static int array_table_max(const char *name, int *max_idx) {
 
 static int table_known(const char *t) {
     for (size_t i = 0; i < sizeof(SKEYS) / sizeof(SKEYS[0]); i++) {
-        if (strcmp(SKEYS[i].table, t) == 0)
+        if (strcmp(SKEYS[i].table, t) == 0) {
             return 1;
+        }
     }
     return 0;
 }
 
 static const skey_t *find_skey(const char *table, const char *key) {
     for (size_t i = 0; i < sizeof(SKEYS) / sizeof(SKEYS[0]); i++) {
-        if (strcmp(SKEYS[i].table, table) == 0 && strcmp(SKEYS[i].key, key) == 0)
+        if (strcmp(SKEYS[i].table, table) == 0 && strcmp(SKEYS[i].key, key) == 0) {
             return &SKEYS[i];
+        }
     }
     return NULL;
 }
@@ -607,8 +649,9 @@ static const skey_t *find_skey(const char *table, const char *key) {
 static const entry_t *doc_find(const doc_t *d, const char *table, int arr_idx, const char *key) {
     for (size_t i = 0; i < d->n; i++) {
         if (d->e[i].arr_idx == arr_idx && strcmp(d->e[i].table, table) == 0 &&
-            strcmp(d->e[i].key, key) == 0)
+            strcmp(d->e[i].key, key) == 0) {
             return &d->e[i];
+        }
     }
     return NULL;
 }
@@ -620,11 +663,13 @@ static int enum_ok(const char *enums, const char *val) {
     while (*k) {
         const char *sp = strchr(k, ' ');
         size_t n = sp ? (size_t)(sp - k) : strlen(k);
-        if (n == vlen && strncmp(k, val, n) == 0)
+        if (n == vlen && strncmp(k, val, n) == 0) {
             return 1;
+        }
         k += n;
-        if (*k == ' ')
+        if (*k == ' ') {
             k++;
+        }
     }
     return 0;
 }
@@ -633,8 +678,9 @@ static int schema_validate(const doc_t *d, const char *path, char *err, size_t e
     /* headers: known tables, array bounds */
     for (size_t i = 0; i < d->nh; i++) {
         const hdr_t *h = &d->h[i];
-        if (!table_known(h->name))
+        if (!table_known(h->name)) {
             return failf(err, errsz, path, 0, h->name, "unknown table");
+        }
         int max_idx = 0;
         if (array_table_max(h->name, &max_idx) && h->arr_idx >= max_idx) {
             char msg[64];
@@ -646,39 +692,48 @@ static int schema_validate(const doc_t *d, const char *path, char *err, size_t e
     /* entries: unknown keys, type mismatches, ranges, enums */
     for (size_t i = 0; i < d->n; i++) {
         const entry_t *e = &d->e[i];
-        if (!e->table[0])
+        if (!e->table[0]) {
             return failf(err, errsz, path, e->line, e->key, "key outside any table");
+        }
         const skey_t *k = find_skey(e->table, e->key);
         if (!k) {
             char what[96];
             snprintf(what, sizeof(what), "[%s] %s", e->table, e->key);
             return failf(err, errsz, path, e->line, what, "unknown key");
         }
-        if (k->kind == K_INT && e->type != V_INT)
+        if (k->kind == K_INT && e->type != V_INT) {
             return failf(err, errsz, path, e->line, e->key, "expected integer");
-        if (k->kind == K_STR && e->type != V_STR)
+        }
+        if (k->kind == K_STR && e->type != V_STR) {
             return failf(err, errsz, path, e->line, e->key, "expected string");
-        if (k->kind == K_BOOL && e->type != V_BOOL)
+        }
+        if (k->kind == K_BOOL && e->type != V_BOOL) {
             return failf(err, errsz, path, e->line, e->key, "expected boolean");
-        if (k->kind == K_ARR && e->type != V_ARR)
+        }
+        if (k->kind == K_ARR && e->type != V_ARR) {
             return failf(err, errsz, path, e->line, e->key, "expected array of numbers");
+        }
         if (k->kind == K_STR && k->enums && !enum_ok(k->enums, e->sval)) {
             char msg[128];
             snprintf(msg, sizeof(msg), "must be one of: %s", k->enums);
             return failf(err, errsz, path, e->line, e->key, msg);
         }
         if (k->kind == K_INT) {
-            if (e->ival < k->imin || e->ival > k->imax)
+            if (e->ival < k->imin || e->ival > k->imax) {
                 return failf(err, errsz, path, e->line, e->key, "out of range");
-            if ((k->flags & KF_POW2) && (e->ival <= 0 || (e->ival & (e->ival - 1)) != 0))
+            }
+            if ((k->flags & KF_POW2) && (e->ival <= 0 || (e->ival & (e->ival - 1)) != 0)) {
                 return failf(err, errsz, path, e->line, e->key, "must be a power of two");
-            if ((k->flags & KF_ODD) && (e->ival & 1) == 0)
+            }
+            if ((k->flags & KF_ODD) && (e->ival & 1) == 0) {
                 return failf(err, errsz, path, e->line, e->key, "must be odd");
+            }
         }
         if (k->kind == K_NUM) {
             double v = e->type == V_INT ? (double)e->ival : e->fval;
-            if (v < k->fmin || v > k->fmax)
+            if (v < k->fmin || v > k->fmax) {
                 return failf(err, errsz, path, e->line, e->key, "out of range");
+            }
         }
     }
 
@@ -686,30 +741,36 @@ static int schema_validate(const doc_t *d, const char *path, char *err, size_t e
     for (size_t i = 0; i < d->nh; i++) {
         const hdr_t *h = &d->h[i];
         int max_idx = 0;
-        if (!array_table_max(h->name, &max_idx))
+        if (!array_table_max(h->name, &max_idx)) {
             continue;
+        }
         for (size_t s = 0; s < sizeof(SKEYS) / sizeof(SKEYS[0]); s++) {
             const skey_t *k = &SKEYS[s];
-            if (strcmp(k->table, h->name) != 0 || !(k->flags & KF_REQ))
+            if (strcmp(k->table, h->name) != 0 || !(k->flags & KF_REQ)) {
                 continue;
-            if (!doc_find(d, h->name, h->arr_idx, k->key))
+            }
+            if (!doc_find(d, h->name, h->arr_idx, k->key)) {
                 return failf(err, errsz, path, 0, k->key, "required");
+            }
         }
     }
 
     /* [wm] init_fracs: 1..16 values in [0,1] summing to 1 ± 0.01 */
     const entry_t *fr = doc_find(d, "wm", 0, "init_fracs");
     if (fr) {
-        if (fr->n_nums < 1 || fr->n_nums > 16)
+        if (fr->n_nums < 1 || fr->n_nums > 16) {
             return failf(err, errsz, path, fr->line, "init_fracs", "need 1..16 values");
+        }
         double sum = 0;
         for (int n = 0; n < fr->n_nums; n++) {
-            if (fr->nums[n] < 0.0 || fr->nums[n] > 1.0)
+            if (fr->nums[n] < 0.0 || fr->nums[n] > 1.0) {
                 return failf(err, errsz, path, fr->line, "init_fracs", "each value in [0,1]");
+            }
             sum += fr->nums[n];
         }
-        if (sum < 0.99 || sum > 1.01)
+        if (sum < 0.99 || sum > 1.01) {
             return failf(err, errsz, path, fr->line, "init_fracs", "values must sum to 1.0");
+        }
     }
     return 0;
 }
@@ -725,8 +786,9 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path, 
         return 0;
     }
     cfg->entries = malloc(d->n * sizeof(sdf_config_entry_t));
-    if (!cfg->entries)
+    if (!cfg->entries) {
         return failf(err, errsz, path, 0, "convert", "oom");
+    }
 
     for (size_t i = 0; i < d->n; i++) {
         const entry_t *e = &d->e[i];
@@ -734,20 +796,24 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path, 
         int max_idx = 0;
         char flat[128]; /* worst case: 32 + "[nnn]" + '.' + 48 + NUL */
         int n;
-        if (array_table_max(e->table, &max_idx))
+        if (array_table_max(e->table, &max_idx)) {
             n = snprintf(flat, sizeof(flat), "%s[%d].%s", e->table, e->arr_idx, e->key);
-        else
+        } else {
             n = snprintf(flat, sizeof(flat), "%s.%s", e->table, e->key);
-        if (n < 0 || (size_t)n >= sizeof(flat))
+        }
+        if (n < 0 || (size_t)n >= sizeof(flat)) {
             return failf(err, errsz, path, e->line, e->key, "key encoding failed");
-        if ((size_t)n >= sizeof(out->key))
+        }
+        if ((size_t)n >= sizeof(out->key)) {
             return failf(err, errsz, path, e->line, e->key, "flat key too long (max 63)");
+        }
         memcpy(out->key, flat, (size_t)n + 1);
 
         switch (e->type) {
         case V_STR:
-            if (strlen(e->sval) >= sizeof(out->value))
+            if (strlen(e->sval) >= sizeof(out->value)) {
                 return failf(err, errsz, path, e->line, e->key, "string too long for flat entry");
+            }
             snprintf(out->value, sizeof(out->value), "%s", e->sval);
             break;
         case V_INT:
@@ -768,14 +834,16 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path, 
             size_t off = 0;
             out->value[off++] = '[';
             for (int n = 0; n < e->n_nums; n++) {
-                if (off + 16 >= sizeof(out->value))
+                if (off + 16 >= sizeof(out->value)) {
                     return failf(err, errsz, path, e->line, e->key,
                                  "array too long for flat entry");
+                }
                 off += (size_t)snprintf(out->value + off, sizeof(out->value) - off, "%s%g",
                                         n ? ", " : "", e->nums[n]);
             }
-            if (off + 1 >= sizeof(out->value))
+            if (off + 1 >= sizeof(out->value)) {
                 return failf(err, errsz, path, e->line, e->key, "array too long for flat entry");
+            }
             out->value[off++] = ']';
             out->value[off] = '\0';
             break;
@@ -791,8 +859,9 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path, 
 
 static int read_file(const char *path, char **buf, size_t *len, char *err, size_t errsz) {
     FILE *f = fopen(path, "rb");
-    if (!f)
+    if (!f) {
         return failf(err, errsz, path, 0, "open", "cannot open");
+    }
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);
         return failf(err, errsz, path, 0, "open", "seek failed");
@@ -822,8 +891,9 @@ static int read_file(const char *path, char **buf, size_t *len, char *err, size_
 }
 
 int sdf_config_load(sdf_config_t *cfg, const char *path) {
-    if (cfg == NULL || path == NULL)
+    if (cfg == NULL || path == NULL) {
         return -1;
+    }
     memset(cfg, 0, sizeof(*cfg));
 
     char err[256];
@@ -831,8 +901,9 @@ int sdf_config_load(sdf_config_t *cfg, const char *path) {
 
     char *buf = NULL;
     size_t len = 0;
-    if (read_file(path, &buf, &len, err, sizeof(err)) != 0)
+    if (read_file(path, &buf, &len, err, sizeof(err)) != 0) {
         goto bad;
+    }
 
     {
         doc_t doc;
@@ -868,33 +939,39 @@ bad:
 }
 
 const char *sdf_config_get(const sdf_config_t *cfg, const char *key, const char *fallback) {
-    if (cfg == NULL)
+    if (cfg == NULL) {
         return fallback;
+    }
     for (size_t i = 0; i < cfg->count; i++) {
-        if (strcmp(cfg->entries[i].key, key) == 0)
+        if (strcmp(cfg->entries[i].key, key) == 0) {
             return cfg->entries[i].value;
+        }
     }
     return fallback;
 }
 
 int sdf_config_get_u64(const sdf_config_t *cfg, const char *key, uint64_t *out) {
-    if (out == NULL)
+    if (out == NULL) {
         return -1;
+    }
     const char *v = sdf_config_get(cfg, key, NULL);
-    if (v == NULL || *v == '\0' || *v == '-')
+    if (v == NULL || *v == '\0' || *v == '-') {
         return -1; /* missing or not an unsigned integer */
+    }
     errno = 0;
     char *end = NULL;
     unsigned long long u = strtoull(v, &end, 10);
-    if (end == v || *end != '\0' || errno == ERANGE)
+    if (end == v || *end != '\0' || errno == ERANGE) {
         return -1;
+    }
     *out = (uint64_t)u;
     return 0;
 }
 
 void sdf_config_free(sdf_config_t *cfg) {
-    if (cfg == NULL)
+    if (cfg == NULL) {
         return;
+    }
     free(cfg->entries);
     cfg->entries = NULL;
     cfg->count = 0;

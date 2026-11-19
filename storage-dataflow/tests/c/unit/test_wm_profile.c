@@ -114,14 +114,16 @@ static void t2_init(wm_profile_t *p, uint32_t m, uint32_t n, const uint32_t *b) 
     p->version = 1;
     p->m = m;
     p->n = n;
-    for (uint32_t i = 0; i < n; i++)
+    for (uint32_t i = 0; i < n; i++) {
         p->b[i] = b[i];
+    }
 }
 
 static uint64_t t2_sum(const wm_profile_t *p) {
     uint64_t s = 0;
-    for (uint32_t i = 0; i < p->n; i++)
+    for (uint32_t i = 0; i < p->n; i++) {
         s += p->b[i];
+    }
     return s;
 }
 
@@ -189,8 +191,9 @@ static void test_update_embodiments(void) {
         t2_init(&p, 8, 3, b3);
         assert(wm_profile_update(&p, e, 4) == 0);
         assert(t2_sum(&p) == 8);
-        for (uint32_t i = 0; i < 3; i++)
+        for (uint32_t i = 0; i < 3; i++) {
             assert(p.b[i] > 0); /* nothing dropped to zero by rounding */
+        }
     }
     /* e[i] > b[i] is refused everywhere */
     {
@@ -211,7 +214,7 @@ static void test_update_embodiments(void) {
         assert(wm_profile_update(&p, e, 2) == -EINVAL);
         assert(wm_profile_update(&p, e, 3) == -EINVAL);
         assert(wm_profile_update(&p, e, 4) == -EINVAL); /* etot >= m */
-        assert(t2_sum(&p) == 8); /* untouched on refusal */
+        assert(t2_sum(&p) == 8);                        /* untouched on refusal */
     }
     /* unknown modes are refused (strict; wam no-ops these) */
     {
@@ -236,9 +239,11 @@ static void test_update_embodiments(void) {
                                     : 0;
                 (void)grew;
             }
-            for (uint32_t i = 0; i < 3; i++)
-                if (i != 0)
+            for (uint32_t i = 0; i < 3; i++) {
+                if (i != 0) {
                     hits[i] += p.b[i] > 0 ? 0 : 0; /* placeholder */
+                }
+            }
         }
         /* deterministic cursor: r advanced 30 mod 3 */
         assert(p.residual_r == 30 % 3);
@@ -247,8 +252,7 @@ static void test_update_embodiments(void) {
 }
 
 /* controller: severity bands, t_min rate limit, auto embodiment */
-static void t2_stats(sdf_origin_stats_t *st, double lat, double err,
-                      int hard_down) {
+static void t2_stats(sdf_origin_stats_t *st, double lat, double err, int hard_down) {
     memset(st, 0, sizeof(*st));
     st->id = 0;
     st->cls = SDF_ORIGIN_LOOPBACK;
@@ -311,8 +315,9 @@ static void test_controller(void) {
     for (uint32_t i = 0; i < 4; i++) {
         t2_stats(&st, 1000000.0, 0.0, 0);
         st.id = i;
-        if (i == 2)
+        if (i == 2) {
             st.ewma_lat_ns = 2000000.0; /* 2x median: +33 severity */
+        }
         wm_ctrl_on_stats(&ctl, i, &st);
     }
     assert(wm_ctrl_tick(&ctl, now + 10000000ull, &out) == 1);
@@ -333,8 +338,9 @@ static void test_controller(void) {
     }
     assert(wm_ctrl_tick(&ctl, now + 20000000ull, &out) == 1);
     assert(t2_sum(&out) == 1024);
-    for (uint32_t i = 0; i < 4; i++)
+    for (uint32_t i = 0; i < 4; i++) {
         assert(out.b[i] > 0); /* nobody zeroed: the fleet survives */
+    }
 
     /* bad arguments */
     assert(wm_ctrl_init(NULL, &base, &cfg, 4) == -EINVAL);

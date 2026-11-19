@@ -18,7 +18,8 @@ _Static_assert(offsetof(wm_profile_t, version) == 0, "wm_profile_t.version offse
 _Static_assert(offsetof(wm_profile_t, m) == 4, "wm_profile_t.m offset");
 _Static_assert(offsetof(wm_profile_t, n) == 8, "wm_profile_t.n offset");
 _Static_assert(offsetof(wm_profile_t, b) == 12, "wm_profile_t.b offset");
-_Static_assert(offsetof(wm_profile_t, residual_r) == 268, "wm_profile_t.residual_r offset (ADR-0007)");
+_Static_assert(offsetof(wm_profile_t, residual_r) == 268,
+               "wm_profile_t.residual_r offset (ADR-0007)");
 _Static_assert(sizeof(wm_profile_t) == 276, "wm_profile_t size");
 _Static_assert(offsetof(wm_compiled_t, down_mask) == 16, "wm_compiled_t.down_mask offset");
 _Static_assert(offsetof(wm_compiled_t, cdf) == 24, "wm_compiled_t.cdf offset");
@@ -43,8 +44,8 @@ _Static_assert(SDF_SHM_OFF_TELEMETRY_RING == 0x1000u, "SHM telemetry ring offset
 
 /* Origin driver seam (ADR-0008, plan W1.1). */
 _Static_assert(SDF_ORIGIN_MAX == WM_MAX_PATHS, "origin set matches WM paths");
-_Static_assert(SDF_ORIGIN_LOOPBACK == 0 && SDF_ORIGIN_HTTP == 1 &&
-                   SDF_ORIGIN_S3 == 2 && SDF_ORIGIN_PEER == 3,
+_Static_assert(SDF_ORIGIN_LOOPBACK == 0 && SDF_ORIGIN_HTTP == 1 && SDF_ORIGIN_S3 == 2 &&
+                   SDF_ORIGIN_PEER == 3,
                "origin class enum is the TOML cls vocabulary");
 _Static_assert(sizeof(sdf_fetch_req_t) == 32, "fetch request layout");
 _Static_assert(offsetof(sdf_fetch_req_t, origin_id) == 0, "req.origin_id offset");

@@ -27,23 +27,29 @@ static bool spsc_args_ok(uint32_t capacity, uint32_t slot_size) {
 }
 
 size_t spsc_sizeof(uint32_t capacity, uint32_t slot_size) {
-    if (!spsc_args_ok(capacity, slot_size))
+    if (!spsc_args_ok(capacity, slot_size)) {
         return 0;
+    }
     uint64_t need = (uint64_t)capacity * (uint64_t)slot_size + 192u;
-    if (need > (uint64_t)SIZE_MAX)
+    if (need > (uint64_t)SIZE_MAX) {
         return 0;
+    }
     return (size_t)need;
 }
 
 int spsc_init(spsc_ring_t *r, void *mem, uint32_t capacity, uint32_t slot_size) {
-    if (r == NULL || mem == NULL)
+    if (r == NULL || mem == NULL) {
         return -EINVAL;
-    if ((void *)r != mem)
+    }
+    if ((void *)r != mem) {
         return -EINVAL; /* the ring header is the start of the block */
-    if (((uintptr_t)mem & 63u) != 0)
+    }
+    if (((uintptr_t)mem & 63u) != 0) {
         return -EINVAL; /* 64-byte alignment is part of the contract */
-    if (spsc_sizeof(capacity, slot_size) == 0)
+    }
+    if (spsc_sizeof(capacity, slot_size) == 0) {
         return -EINVAL;
+    }
 
     /* zero header + slots: no page-fault-on-first-touch in the hot loop
      * (wam_spsc_init first-touch discipline) */
@@ -56,13 +62,15 @@ int spsc_init(spsc_ring_t *r, void *mem, uint32_t capacity, uint32_t slot_size) 
 }
 
 bool spsc_try_push(spsc_ring_t *r, const void *slot) {
-    if (r == NULL || slot == NULL || r->slot_size == 0)
+    if (r == NULL || slot == NULL || r->slot_size == 0) {
         return false;
+    }
 
     uint64_t head = atomic_load_explicit(&r->head, memory_order_relaxed);
     uint64_t tail = atomic_load_explicit(&r->tail, memory_order_acquire);
-    if (head - tail >= (uint64_t)r->mask + 1u) /* full */
+    if (head - tail >= (uint64_t)r->mask + 1u) { /* full */
         return false;
+    }
 
     memcpy(r->slots + (size_t)(head & (uint64_t)r->mask) * r->slot_size, slot, r->slot_size);
     atomic_store_explicit(&r->head, head + 1, memory_order_release);
@@ -70,13 +78,15 @@ bool spsc_try_push(spsc_ring_t *r, const void *slot) {
 }
 
 bool spsc_try_pop(spsc_ring_t *r, void *slot) {
-    if (r == NULL || slot == NULL || r->slot_size == 0)
+    if (r == NULL || slot == NULL || r->slot_size == 0) {
         return false;
+    }
 
     uint64_t head = atomic_load_explicit(&r->head, memory_order_acquire);
     uint64_t tail = atomic_load_explicit(&r->tail, memory_order_relaxed);
-    if (head == tail) /* empty */
+    if (head == tail) { /* empty */
         return false;
+    }
 
     memcpy(slot, r->slots + (size_t)(tail & (uint64_t)r->mask) * r->slot_size, r->slot_size);
     atomic_store_explicit(&r->tail, tail + 1, memory_order_release);
@@ -84,8 +94,9 @@ bool spsc_try_pop(spsc_ring_t *r, void *slot) {
 }
 
 uint32_t spsc_batch_pop(spsc_ring_t *r, void *out, uint32_t max) {
-    if (r == NULL || out == NULL || r->slot_size == 0 || max == 0)
+    if (r == NULL || out == NULL || r->slot_size == 0 || max == 0) {
         return 0;
+    }
 
     uint8_t *cur = out;
     uint32_t popped = 0;
@@ -97,8 +108,9 @@ uint32_t spsc_batch_pop(spsc_ring_t *r, void *out, uint32_t max) {
 }
 
 uint64_t spsc_count(const spsc_ring_t *r) {
-    if (r == NULL || r->slot_size == 0)
+    if (r == NULL || r->slot_size == 0) {
         return 0;
+    }
     uint64_t head = atomic_load_explicit(&r->head, memory_order_acquire);
     uint64_t tail = atomic_load_explicit(&r->tail, memory_order_acquire);
     return head - tail;

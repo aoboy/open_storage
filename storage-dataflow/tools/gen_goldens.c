@@ -59,32 +59,35 @@ static void mk_spray(wam_spray_t *s, uint32_t j, uint8_t method) {
     s->method = method;
 }
 
-static void emit_picks(const char *key, const char *requires, uint32_t sa,
-                       uint32_t sb, uint32_t from, uint32_t count,
-                       uint8_t method, const wam_profile_t *p, int comma) {
+static void emit_picks(const char *key, const char *requires, uint32_t sa, uint32_t sb,
+                       uint32_t from, uint32_t count, uint8_t method, const wam_profile_t *p,
+                       int comma) {
     wam_spray_t s;
     mk_spray(&s, from, method);
     printf("  \"%s\": {", key);
-    if (requires != NULL)
+    if (requires != NULL) {
         printf("\"requires\": \"%s\", ", requires);
-    if (sa != 0 || sb != 0)
+    }
+    if (sa != 0 || sb != 0) {
         printf("\"sa\": %u, \"sb\": %u, ", sa, sb);
+    }
     printf("\"from\": %u, \"count\": %u, \"paths\": [", from, count);
-    for (uint32_t i = 0; i < count; i++)
+    for (uint32_t i = 0; i < count; i++) {
         printf("%s%u", i ? ", " : "", wam_spray_next(&s, p));
+    }
     printf("]}%s\n", comma ? "," : "");
 }
 
-static void emit_window(uint32_t from, uint32_t len, uint8_t method,
-                        const wam_profile_t *p, int comma) {
+static void emit_window(uint32_t from, uint32_t len, uint8_t method, const wam_profile_t *p,
+                        int comma) {
     uint32_t counts[N] = {0};
     wam_spray_t s;
     mk_spray(&s, from, method);
-    for (uint32_t i = 0; i < len; i++)
+    for (uint32_t i = 0; i < len; i++) {
         counts[wam_spray_next(&s, p)]++;
-    printf("    {\"from\": %u, \"len\": %u, \"counts\": [%u, %u, %u, %u, %u]}%s\n",
-           from, len, counts[0], counts[1], counts[2], counts[3], counts[4],
-           comma ? "," : "");
+    }
+    printf("    {\"from\": %u, \"len\": %u, \"counts\": [%u, %u, %u, %u, %u]}%s\n", from, len,
+           counts[0], counts[1], counts[2], counts[3], counts[4], comma ? "," : "");
 }
 
 int main(void) {
@@ -111,9 +114,10 @@ int main(void) {
     printf("  \"theta_ell10\": [\n");
     {
         static const uint32_t js[] = {0, 1, 2, 3, 249, 512, 768, 1023};
-        for (size_t i = 0; i < sizeof(js) / sizeof(js[0]); i++)
+        for (size_t i = 0; i < sizeof(js) / sizeof(js[0]); i++) {
             printf("    [%u, %u]%s\n", js[i], wam_theta(js[i], 10),
                    i + 1 < sizeof(js) / sizeof(js[0]) ? "," : "");
+        }
     }
     printf("  ],\n");
 
@@ -123,20 +127,18 @@ int main(void) {
     {
         static const uint32_t starts[] = {0, 1, 500, 1023};
         static const uint32_t lens[] = {64, 1000, 1024, 10240};
-        for (size_t si = 0; si < sizeof(starts) / sizeof(starts[0]); si++)
-            for (size_t li = 0; li < sizeof(lens) / sizeof(lens[0]); li++)
-                emit_window(starts[si], lens[li], WAM_SPRAY_PLAIN, &p,
-                            !(si == 3 && li == 3));
+        for (size_t si = 0; si < sizeof(starts) / sizeof(starts[0]); si++) {
+            for (size_t li = 0; li < sizeof(lens) / sizeof(lens[0]); li++) {
+                emit_window(starts[si], lens[li], WAM_SPRAY_PLAIN, &p, !(si == 3 && li == 3));
+            }
+        }
     }
     printf("  ],\n");
 
     /* seed groups carry a requires tag: ADR-0007 methods land with W2.1 */
-    emit_picks("seed_shuffle1", "wm.method.shuffle1", 333, 735, 0, 64,
-               WAM_SPRAY_SHUFFLE1, &p, 1);
-    emit_picks("seed_shuffle2", "wm.method.shuffle2", 333, 735, 0, 64,
-               WAM_SPRAY_SHUFFLE2, &p, 0);
+    emit_picks("seed_shuffle1", "wm.method.shuffle1", 333, 735, 0, 64, WAM_SPRAY_SHUFFLE1, &p, 1);
+    emit_picks("seed_shuffle2", "wm.method.shuffle2", 333, 735, 0, 64, WAM_SPRAY_SHUFFLE2, &p, 0);
 
     printf("}\n");
     return 0;
 }
-
