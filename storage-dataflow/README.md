@@ -47,13 +47,14 @@ installs it, while `make ci` skips that leg cleanly when cargo is absent.
 
 | Component | State |
 |---|---|
+| Latest release | **v1.0.0 (W6.6)** — [release notes](docs/releases/v1.0.0.md), ledger-derived evidence, source tag and Debian development package |
 | Public C ABI headers | Defined |
 | CMake build | Working (libraries, 23-test suite, benches, fuzzers) |
 | Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
-| Packaging | **As-built (Wave 5/W6.4)**: install + pkg-config + find_package legs in ci; version.h single source of truth; the installed surface includes the PIC `libnanorq.a` and builds the CFFI extension from `$PREFIX` |
+| Packaging | **As-built (Wave 5/W6.4/W6.6)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested (rpm/Helm remain placeholders) |
 | Rust seam | **As-built (W6.5)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff, authoritative in CI (`--require`); no functional Rust yet |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
@@ -79,6 +80,7 @@ installs it, while `make ci` skips that leg cleanly when cargo is absent.
 - [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md) — provenance: what is imported from wack_a_mole, and the acceptance rules
 - [`docs/design/08-implementation-plan.md`](docs/design/08-implementation-plan.md) — **the executable backlog** (waves W0–W5, prompts, sizes, status ledger)
 - [`docs/design/09-origin-driver-seam.md`](docs/design/09-origin-driver-seam.md) — the `sdf_origin_ops_t` contract (origins are the paths)
+- [`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md) — v1.0.0 release notes, verification evidence and known limitations
 - [`docs/adr/`](docs/adr/) — decision records 0001–0009
 
 History and landing discipline (commit prefixes, doc-sync protocol,
