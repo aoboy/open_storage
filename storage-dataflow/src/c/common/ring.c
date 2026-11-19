@@ -64,8 +64,7 @@ bool spsc_try_push(spsc_ring_t *r, const void *slot) {
     if (head - tail >= (uint64_t)r->mask + 1u) /* full */
         return false;
 
-    memcpy(r->slots + (size_t)(head & (uint64_t)r->mask) * r->slot_size, slot,
-           r->slot_size);
+    memcpy(r->slots + (size_t)(head & (uint64_t)r->mask) * r->slot_size, slot, r->slot_size);
     atomic_store_explicit(&r->head, head + 1, memory_order_release);
     return true;
 }
@@ -79,8 +78,7 @@ bool spsc_try_pop(spsc_ring_t *r, void *slot) {
     if (head == tail) /* empty */
         return false;
 
-    memcpy(slot, r->slots + (size_t)(tail & (uint64_t)r->mask) * r->slot_size,
-           r->slot_size);
+    memcpy(slot, r->slots + (size_t)(tail & (uint64_t)r->mask) * r->slot_size, r->slot_size);
     atomic_store_explicit(&r->tail, tail + 1, memory_order_release);
     return true;
 }

@@ -68,20 +68,17 @@ void sdf_fluid_budget_report(sdf_fluid_budget_t *b, uint64_t received) {
     uint64_t sent = atomic_load_explicit(&b->sent, memory_order_relaxed);
     uint64_t lost = sent > received ? sent - received : 0;
     /* monotone max: reports may arrive out of order (wam O.2 rule) */
-    uint64_t seen = atomic_load_explicit(&b->reported_lost,
-                                         memory_order_relaxed);
+    uint64_t seen = atomic_load_explicit(&b->reported_lost, memory_order_relaxed);
     while (lost > seen &&
-           !atomic_compare_exchange_weak_explicit(&b->reported_lost, &seen,
-                                                  lost, memory_order_relaxed,
-                                                  memory_order_relaxed))
+           !atomic_compare_exchange_weak_explicit(&b->reported_lost, &seen, lost,
+                                                  memory_order_relaxed, memory_order_relaxed))
         ;
 }
 
 uint64_t sdf_fluid_budget_allowable(const sdf_fluid_budget_t *b) {
     if (b == NULL)
         return 0;
-    return (uint64_t)b->n +
-           atomic_load_explicit(&b->reported_lost, memory_order_relaxed);
+    return (uint64_t)b->n + atomic_load_explicit(&b->reported_lost, memory_order_relaxed);
 }
 
 void fg_init(fluid_gate_t *g, double eps, uint32_t budget_n) {

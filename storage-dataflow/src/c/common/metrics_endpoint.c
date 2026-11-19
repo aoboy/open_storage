@@ -135,9 +135,8 @@ static void *mep_thread(void *arg) {
     return NULL;
 }
 
-sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr,
-                                                    sdf_metrics_render_fn render,
-                                                    void *ud) {
+sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr, sdf_metrics_render_fn render,
+                                                   void *ud) {
     if (!addr || !*addr || !render) {
         fprintf(stderr, "sdf_metrics_endpoint: addr and render required\n");
         return NULL;
@@ -180,8 +179,7 @@ sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr,
         close(fd);
         return NULL;
     }
-    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0 ||
-        listen(fd, MEP_BACKLOG) < 0) {
+    if (bind(fd, (struct sockaddr *)&sa, sizeof(sa)) < 0 || listen(fd, MEP_BACKLOG) < 0) {
         perror("sdf_metrics_endpoint: bind/listen");
         close(fd);
         return NULL;

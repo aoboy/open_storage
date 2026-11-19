@@ -95,8 +95,8 @@ struct http_impl {
 /* ---- helpers ----------------------------------------------------------- */
 
 /* Parse "http://host[:port]/path" into host/port/path. */
-static int url_parse(const char *url, char *host, size_t host_sz, char *path,
-                     size_t path_sz, int *port) {
+static int url_parse(const char *url, char *host, size_t host_sz, char *path, size_t path_sz,
+                     int *port) {
     if (url == NULL || strncmp(url, "http://", 7) != 0)
         return -EINVAL;
     const char *p = url + 7;
@@ -129,8 +129,8 @@ static int url_parse(const char *url, char *host, size_t host_sz, char *path,
     return 0;
 }
 
-static void complete(http_origin_t *og, const http_job_t *j,
-                     const uint8_t *out, uint32_t len, int status) {
+static void complete(http_origin_t *og, const http_job_t *j, const uint8_t *out, uint32_t len,
+                     int status) {
     uint64_t now = sdf_now_ns();
     double lat = (double)(now - j->submit_ns);
 
@@ -142,14 +142,12 @@ static void complete(http_origin_t *og, const http_job_t *j,
         atomic_fetch_add_explicit(&og->reqs_failed, 1, memory_order_relaxed);
     }
     double lat_e = atomic_load_explicit(&og->ewma_lat_ns, memory_order_relaxed);
-    atomic_store_explicit(&og->ewma_lat_ns,
-                          lat_e + HTTP_EWMA_GAIN * (lat - lat_e),
+    atomic_store_explicit(&og->ewma_lat_ns, lat_e + HTTP_EWMA_GAIN * (lat - lat_e),
                           memory_order_relaxed);
     double err_e = atomic_load_explicit(&og->ewma_err, memory_order_relaxed);
-    atomic_store_explicit(
-        &og->ewma_err,
-        err_e + HTTP_EWMA_GAIN * ((status == 0 ? 0.0 : 1.0) - err_e),
-        memory_order_relaxed);
+    atomic_store_explicit(&og->ewma_err,
+                          err_e + HTTP_EWMA_GAIN * ((status == 0 ? 0.0 : 1.0) - err_e),
+                          memory_order_relaxed);
     j->cb(j->ud, &j->req, out, len, status);
 }
 
@@ -172,10 +170,8 @@ static int ensure_sock(http_origin_t *og) {
         freeaddrinfo(res);
         return -ECONNREFUSED;
     }
-    uint32_t tmo = og->cfg.timeout_ms ? og->cfg.timeout_ms
-                                      : HTTP_DEFAULT_TIMEOUT_MS;
-    struct timeval tv = {.tv_sec = tmo / 1000u,
-                         .tv_usec = (long)(tmo % 1000u) * 1000};
+    uint32_t tmo = og->cfg.timeout_ms ? og->cfg.timeout_ms : HTTP_DEFAULT_TIMEOUT_MS;
+    struct timeval tv = {.tv_sec = tmo / 1000u, .tv_usec = (long)(tmo % 1000u) * 1000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
@@ -217,8 +213,7 @@ static int64_t header_value(const char *hdr, const char *name) {
 /* One attempt: returns 0 / negative errno. On success *out and *out_len
  * carry the malloc'd body (caller frees). On any socket error the
  * connection drops and the next unit reconnects. */
-static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out,
-                    uint32_t *out_len) {
+static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint32_t *out_len) {
     *out = NULL;
     *out_len = 0;
 
@@ -235,8 +230,7 @@ static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out,
                         "Range: bytes=%llu-%llu\r\n"
                         "Connection: keep-alive\r\n"
                         "\r\n",
-                        og->path, og->host,
-                        (unsigned long long)j->req.obj_offset,
+                        og->path, og->host, (unsigned long long)j->req.obj_offset,
                         (unsigned long long)(j->req.obj_offset + j->req.len - 1));
     if (rlen <= 0 || (size_t)rlen >= sizeof(req))
         return -EINVAL;
@@ -379,8 +373,8 @@ static int http_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) 
         atomic_store(&og->enabled, 1);
         atomic_store(&og->hard_down, 0);
 
-        if (url_parse(cfgs[i].dst, og->host, sizeof(og->host), og->path,
-                      sizeof(og->path), &og->port) != 0)
+        if (url_parse(cfgs[i].dst, og->host, sizeof(og->host), og->path, sizeof(og->path),
+                      &og->port) != 0)
             goto fail;
 
         uint32_t per = cfgs[i].max_inflight > 0 ? cfgs[i].max_inflight : 16;
@@ -394,8 +388,7 @@ static int http_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) 
         if (og->qmem == NULL)
             goto fail;
         og->queue = (spsc_ring_t *)og->qmem;
-        if (spsc_init(og->queue, og->qmem, og->qcap,
-                      (uint32_t)sizeof(http_job_t)) != 0)
+        if (spsc_init(og->queue, og->qmem, og->qcap, (uint32_t)sizeof(http_job_t)) != 0)
             goto fail;
 
         inflight += per;
@@ -404,8 +397,7 @@ static int http_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) 
 
     d->open_t_ns = sdf_now_ns();
     for (uint32_t i = 0; i < n; i++) {
-        if (pthread_create(&d->origins[i].worker, NULL, worker_main,
-                           &d->origins[i]) != 0)
+        if (pthread_create(&d->origins[i].worker, NULL, worker_main, &d->origins[i]) != 0)
             goto fail_threads;
         d->origins[i].worker_started = 1;
     }
@@ -427,8 +419,7 @@ fail:
     return -EINVAL;
 }
 
-static int http_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req,
-                      sdf_fetch_done_fn cb, void *ud) {
+static int http_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_done_fn cb, void *ud) {
     if (o == NULL || o->impl == NULL || req == NULL || cb == NULL)
         return -EINVAL;
     http_impl_t *d = o->impl;
@@ -455,8 +446,7 @@ static int http_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req,
     return 0;
 }
 
-static int http_stats(sdf_origin_t *o, uint32_t origin_id,
-                      sdf_origin_stats_t *st) {
+static int http_stats(sdf_origin_t *o, uint32_t origin_id, sdf_origin_stats_t *st) {
     if (o == NULL || o->impl == NULL || st == NULL)
         return -EINVAL;
     http_impl_t *d = o->impl;
@@ -489,11 +479,9 @@ static int http_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
     http_impl_t *d = o->impl;
     if (origin_id >= d->n)
         return -EINVAL;
-    atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0,
-                          memory_order_relaxed);
+    atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0, memory_order_relaxed);
     /* drained == controller-visible (same semantics as loopback) */
-    atomic_store_explicit(&d->origins[origin_id].hard_down, up ? 0 : 1,
-                          memory_order_relaxed);
+    atomic_store_explicit(&d->origins[origin_id].hard_down, up ? 0 : 1, memory_order_relaxed);
     return 0;
 }
 

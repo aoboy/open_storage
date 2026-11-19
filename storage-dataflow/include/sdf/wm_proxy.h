@@ -27,9 +27,9 @@ extern "C" {
 #define SDF_WM_PROXY_MAX_STEPS 8
 
 typedef struct {
-    uint64_t at_unit;    /* apply when dispatched crosses this count */
+    uint64_t at_unit; /* apply when dispatched crosses this count */
     uint32_t origin;
-    int enable;          /* set_enable(up/down) */
+    int enable;           /* set_enable(up/down) */
     uint64_t throttle_ns; /* optional throttle knob before enable */
 } sdf_wm_proxy_step_t;
 
@@ -95,9 +95,9 @@ typedef struct {
     sdf_counter_t enolink[WM_MAX_PATHS];
     /* W6.1: the live chain's evidence */
     uint32_t shm_version_acquired; /* the last profile version seen */
-    uint64_t shm_acquires;          /* acquire attempts (one per tick) */
-    uint64_t shm_telemetry_pushed;  /* telemetry slots landed in the ring */
-    uint64_t control_ticks;         /* the heartbeat (one per interval) */
+    uint64_t shm_acquires;         /* acquire attempts (one per tick) */
+    uint64_t shm_telemetry_pushed; /* telemetry slots landed in the ring */
+    uint64_t control_ticks;        /* the heartbeat (one per interval) */
 } sdf_wm_proxy_stats_t;
 
 /*

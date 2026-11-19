@@ -135,13 +135,11 @@ static void lb_fire(lb_impl_t *d, lb_job_t *j) {
     }
 
     double lat_e = atomic_load_explicit(&og->ewma_lat_ns, memory_order_relaxed);
-    atomic_store_explicit(&og->ewma_lat_ns,
-                          lat_e + LB_EWMA_GAIN * (lat - lat_e),
+    atomic_store_explicit(&og->ewma_lat_ns, lat_e + LB_EWMA_GAIN * (lat - lat_e),
                           memory_order_relaxed);
     double err_e = atomic_load_explicit(&og->ewma_err, memory_order_relaxed);
     double err_samp = status == 0 ? 0.0 : 1.0;
-    atomic_store_explicit(&og->ewma_err,
-                          err_e + LB_EWMA_GAIN * (err_samp - err_e),
+    atomic_store_explicit(&og->ewma_err, err_e + LB_EWMA_GAIN * (err_samp - err_e),
                           memory_order_relaxed);
 
     j->cb(j->ud, &j->req, out, len, status);
@@ -158,21 +156,16 @@ static void lb_schedule(lb_impl_t *d) {
         j.status = 0;
         j.deadline_ns = now;
 
-        uint32_t loss = atomic_load_explicit(&og->loss_x100,
-                                             memory_order_relaxed);
-        uint32_t err = atomic_load_explicit(&og->err_x100,
-                                            memory_order_relaxed);
+        uint32_t loss = atomic_load_explicit(&og->loss_x100, memory_order_relaxed);
+        uint32_t err = atomic_load_explicit(&og->err_x100, memory_order_relaxed);
         if (loss > 0 && (uint32_t)(rng_next(d) % 10000u) < loss) {
             j.status = -EHOSTUNREACH; /* simulated transport loss */
         } else if (err > 0 && (uint32_t)(rng_next(d) % 10000u) < err) {
             j.status = -EIO; /* simulated origin error */
         } else {
-            uint64_t thr = atomic_load_explicit(&og->throttle_ns,
-                                                memory_order_relaxed);
-            uint64_t jit = atomic_load_explicit(&og->jitter_ns,
-                                                memory_order_relaxed);
-            j.deadline_ns = now + thr +
-                            (jit > 0 ? rng_next(d) % (jit + 1) : 0);
+            uint64_t thr = atomic_load_explicit(&og->throttle_ns, memory_order_relaxed);
+            uint64_t jit = atomic_load_explicit(&og->jitter_ns, memory_order_relaxed);
+            j.deadline_ns = now + thr + (jit > 0 ? rng_next(d) % (jit + 1) : 0);
         }
         d->pending[d->npending++] = j;
     }
@@ -264,8 +257,7 @@ static int lb_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) {
             close(fd);
             goto fail;
         }
-        void *map = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd,
-                         0);
+        void *map = mmap(NULL, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
         close(fd);
         if (map == MAP_FAILED)
             goto fail;
@@ -292,8 +284,7 @@ static int lb_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) {
     if (d->queue_mem == NULL)
         goto fail;
     d->queue = (spsc_ring_t *)d->queue_mem;
-    if (spsc_init(d->queue, d->queue_mem, d->qcap, (uint32_t)sizeof(lb_job_t)) !=
-        0)
+    if (spsc_init(d->queue, d->queue_mem, d->qcap, (uint32_t)sizeof(lb_job_t)) != 0)
         goto fail;
 
     d->pending = calloc(d->qcap, sizeof(*d->pending));
@@ -320,8 +311,7 @@ fail:
     return -EINVAL;
 }
 
-static int lb_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req,
-                    sdf_fetch_done_fn cb, void *ud) {
+static int lb_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_done_fn cb, void *ud) {
     if (o == NULL || o->impl == NULL || req == NULL || cb == NULL)
         return -EINVAL;
     lb_impl_t *d = o->impl;
@@ -372,8 +362,7 @@ static int lb_stats(sdf_origin_t *o, uint32_t origin_id, sdf_origin_stats_t *st)
 
     uint64_t elapsed = sdf_now_ns() - d->open_t_ns;
     if (elapsed > 0)
-        st->goodput =
-            (double)st->bytes_rx / ((double)elapsed / 1000000000.0);
+        st->goodput = (double)st->bytes_rx / ((double)elapsed / 1000000000.0);
     return 0;
 }
 
@@ -383,14 +372,12 @@ static int lb_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
     lb_impl_t *d = o->impl;
     if (origin_id >= d->n)
         return -EINVAL;
-    atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0,
-                          memory_order_relaxed);
+    atomic_store_explicit(&d->origins[origin_id].enabled, up ? 1 : 0, memory_order_relaxed);
     /* a drained origin is deterministically controller-visible: the
      * severity model reads hard_down, not warm-up latency luck
      * (found live: the mid-run redistribution whack was flaking on
      * whether the frozen EWMA sat above or below the healthy median) */
-    atomic_store_explicit(&d->origins[origin_id].hard_down, up ? 0 : 1,
-                          memory_order_relaxed);
+    atomic_store_explicit(&d->origins[origin_id].hard_down, up ? 0 : 1, memory_order_relaxed);
     return 0;
 }
 
@@ -426,8 +413,8 @@ const sdf_origin_ops_t *sdf_loopback_ops(void) {
 
 /* ---- harness control surface ------------------------------------------- */
 
-int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id,
-                           sdf_loopback_knob_t knob, uint64_t value) {
+int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id, sdf_loopback_knob_t knob,
+                          uint64_t value) {
     if (o == NULL || o->impl == NULL || o->ops != &LB_OPS)
         return -EINVAL;
     lb_impl_t *d = o->impl;
@@ -446,8 +433,7 @@ int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id,
     case SDF_LB_ERR_PCT_X100:
         if (value > 10000u)
             return -ERANGE;
-        atomic_store_explicit(knob == SDF_LB_LOSS_PCT_X100 ? &og->loss_x100
-                                                           : &og->err_x100,
+        atomic_store_explicit(knob == SDF_LB_LOSS_PCT_X100 ? &og->loss_x100 : &og->err_x100,
                               (uint32_t)value, memory_order_relaxed);
         return 0;
     default:

@@ -45,7 +45,7 @@ typedef struct {
 typedef struct {
     uint32_t k;
     size_t sym_len;
-    uint8_t have_src[LT_MAX_K];  /* received source bitmap */
+    uint8_t have_src[LT_MAX_K]; /* received source bitmap */
     uint8_t src[LT_MAX_K][LT_MAX_SYM];
     uint8_t have_rep[LT_REPAIR_MAX]; /* repair bitmap (index r-K) */
     uint32_t rep_deg[LT_REPAIR_MAX]; /* current unresolved degree */
@@ -99,8 +99,7 @@ static uint32_t draw_degree(uint64_t *state, uint32_t k) {
 
 /* The deterministic neighbor set for repair ESI r (shared by encoder
  * and decoder — the ESI contract). */
-static void repair_neighbors(uint32_t k, uint32_t r, uint16_t *nb,
-                              uint32_t *deg_out) {
+static void repair_neighbors(uint32_t k, uint32_t r, uint16_t *nb, uint32_t *deg_out) {
     uint64_t state = (uint64_t)r * 0x9E3779B97F4A7C15ull + 1u;
     uint32_t d = draw_degree(&state, k);
     uint32_t picked = 0;
@@ -115,13 +114,10 @@ static void repair_neighbors(uint32_t k, uint32_t r, uint16_t *nb,
     *deg_out = picked;
 }
 
-
-
 int lt_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
     if (mem == NULL || cfg == NULL || block == NULL)
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->block_len == 0 ||
-        cfg->block_len % cfg->k != 0)
+    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->block_len == 0 || cfg->block_len % cfg->k != 0)
         return -EINVAL;
     size_t sym_len = cfg->block_len / cfg->k;
     if (sym_len == 0 || sym_len > LT_MAX_SYM)
@@ -139,8 +135,7 @@ int lt_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
 int lt_dec_init(void *mem, const fd_cfg_t *cfg) {
     if (mem == NULL || cfg == NULL)
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->sym_len == 0 ||
-        cfg->sym_len > LT_MAX_SYM)
+    if (cfg->k == 0 || cfg->k > LT_MAX_K || cfg->sym_len == 0 || cfg->sym_len > LT_MAX_SYM)
         return -EINVAL;
     lt_dec_t *d = mem;
     memset(d, 0, sizeof(*d));
@@ -174,8 +169,12 @@ int lt_generate(void *enc, uint32_t esi, uint8_t *out, size_t out_len) {
     return 0;
 }
 
-void lt_enc_destroy(void *enc) { (void)enc; }
-void lt_dec_destroy(void *dec) { (void)dec; }
+void lt_enc_destroy(void *enc) {
+    (void)enc;
+}
+void lt_dec_destroy(void *dec) {
+    (void)dec;
+}
 
 int lt_push(void *dec, uint32_t esi, const uint8_t *sym, size_t len) {
     lt_dec_t *d = dec;

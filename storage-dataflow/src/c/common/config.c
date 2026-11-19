@@ -82,8 +82,8 @@ static int fail(ps_t *s, int line, const char *msg) {
     return -1;
 }
 
-static int failf(char *err, size_t errsz, const char *path, int line,
-                 const char *what, const char *msg) {
+static int failf(char *err, size_t errsz, const char *path, int line, const char *what,
+                 const char *msg) {
     if (err && errsz)
         snprintf(err, errsz, "%s:%d: %s: %s", path ? path : "?", line, what, msg);
     return -1;
@@ -127,8 +127,12 @@ static entry_t *doc_add_entry(doc_t *d) {
 
 /* ---- scanner helpers ------------------------------------------------- */
 
-static int at_end(ps_t *s) { return s->p >= s->end; }
-static char peek(ps_t *s) { return at_end(s) ? '\0' : *s->p; }
+static int at_end(ps_t *s) {
+    return s->p >= s->end;
+}
+static char peek(ps_t *s) {
+    return at_end(s) ? '\0' : *s->p;
+}
 
 static void skip_inline_ws(ps_t *s) {
     while (!at_end(s) && (*s->p == ' ' || *s->p == '\t'))
@@ -162,8 +166,8 @@ static void skip_blank(ps_t *s) { /* whitespace, comments, newlines */
 }
 
 static int is_key_char(char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') || c == '_' || c == '-';
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' ||
+           c == '-';
 }
 
 static int parse_bare_key(ps_t *s, char *out, size_t osz) {
@@ -247,8 +251,8 @@ static int parse_string(ps_t *s, char **out) {
 }
 
 static int word_boundary(char c) {
-    return c == '\0' || c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
-           c == ',' || c == ']' || c == '#' || c == ';';
+    return c == '\0' || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ',' || c == ']' ||
+           c == '#' || c == ';';
 }
 
 static int parse_value(ps_t *s, entry_t *e);
@@ -404,8 +408,7 @@ static int parse_header(ps_t *s, doc_t *d) {
     return 0;
 }
 
-static int toml_parse(char *buf, size_t len, const char *path, doc_t *d,
-                      char *err, size_t errsz) {
+static int toml_parse(char *buf, size_t len, const char *path, doc_t *d, char *err, size_t errsz) {
     ps_t s;
     memset(&s, 0, sizeof(s));
     s.p = buf;
@@ -427,8 +430,8 @@ static int toml_parse(char *buf, size_t len, const char *path, doc_t *d,
                 return -1;
             /* header ends the "line": require EOL/comment/';'-less */
             skip_inline_ws(&s);
-            if (!at_end(&s) && peek(&s) != '\n' && peek(&s) != '\r' &&
-                peek(&s) != '#' && peek(&s) != ';')
+            if (!at_end(&s) && peek(&s) != '\n' && peek(&s) != '\r' && peek(&s) != '#' &&
+                peek(&s) != ';')
                 return fail(&s, s.line, "unexpected characters after table header");
             continue;
         }
@@ -601,8 +604,7 @@ static const skey_t *find_skey(const char *table, const char *key) {
     return NULL;
 }
 
-static const entry_t *doc_find(const doc_t *d, const char *table, int arr_idx,
-                               const char *key) {
+static const entry_t *doc_find(const doc_t *d, const char *table, int arr_idx, const char *key) {
     for (size_t i = 0; i < d->n; i++) {
         if (d->e[i].arr_idx == arr_idx && strcmp(d->e[i].table, table) == 0 &&
             strcmp(d->e[i].key, key) == 0)
@@ -627,8 +629,7 @@ static int enum_ok(const char *enums, const char *val) {
     return 0;
 }
 
-static int schema_validate(const doc_t *d, const char *path, char *err,
-                           size_t errsz) {
+static int schema_validate(const doc_t *d, const char *path, char *err, size_t errsz) {
     /* headers: known tables, array bounds */
     for (size_t i = 0; i < d->nh; i++) {
         const hdr_t *h = &d->h[i];
@@ -646,8 +647,7 @@ static int schema_validate(const doc_t *d, const char *path, char *err,
     for (size_t i = 0; i < d->n; i++) {
         const entry_t *e = &d->e[i];
         if (!e->table[0])
-            return failf(err, errsz, path, e->line, e->key,
-                         "key outside any table");
+            return failf(err, errsz, path, e->line, e->key, "key outside any table");
         const skey_t *k = find_skey(e->table, e->key);
         if (!k) {
             char what[96];
@@ -661,8 +661,7 @@ static int schema_validate(const doc_t *d, const char *path, char *err,
         if (k->kind == K_BOOL && e->type != V_BOOL)
             return failf(err, errsz, path, e->line, e->key, "expected boolean");
         if (k->kind == K_ARR && e->type != V_ARR)
-            return failf(err, errsz, path, e->line, e->key,
-                         "expected array of numbers");
+            return failf(err, errsz, path, e->line, e->key, "expected array of numbers");
         if (k->kind == K_STR && k->enums && !enum_ok(k->enums, e->sval)) {
             char msg[128];
             snprintf(msg, sizeof(msg), "must be one of: %s", k->enums);
@@ -671,10 +670,8 @@ static int schema_validate(const doc_t *d, const char *path, char *err,
         if (k->kind == K_INT) {
             if (e->ival < k->imin || e->ival > k->imax)
                 return failf(err, errsz, path, e->line, e->key, "out of range");
-            if ((k->flags & KF_POW2) &&
-                (e->ival <= 0 || (e->ival & (e->ival - 1)) != 0))
-                return failf(err, errsz, path, e->line, e->key,
-                             "must be a power of two");
+            if ((k->flags & KF_POW2) && (e->ival <= 0 || (e->ival & (e->ival - 1)) != 0))
+                return failf(err, errsz, path, e->line, e->key, "must be a power of two");
             if ((k->flags & KF_ODD) && (e->ival & 1) == 0)
                 return failf(err, errsz, path, e->line, e->key, "must be odd");
         }
@@ -704,26 +701,23 @@ static int schema_validate(const doc_t *d, const char *path, char *err,
     const entry_t *fr = doc_find(d, "wm", 0, "init_fracs");
     if (fr) {
         if (fr->n_nums < 1 || fr->n_nums > 16)
-            return failf(err, errsz, path, fr->line, "init_fracs",
-                         "need 1..16 values");
+            return failf(err, errsz, path, fr->line, "init_fracs", "need 1..16 values");
         double sum = 0;
         for (int n = 0; n < fr->n_nums; n++) {
             if (fr->nums[n] < 0.0 || fr->nums[n] > 1.0)
-                return failf(err, errsz, path, fr->line, "init_fracs",
-                             "each value in [0,1]");
+                return failf(err, errsz, path, fr->line, "init_fracs", "each value in [0,1]");
             sum += fr->nums[n];
         }
         if (sum < 0.99 || sum > 1.01)
-            return failf(err, errsz, path, fr->line, "init_fracs",
-                         "values must sum to 1.0");
+            return failf(err, errsz, path, fr->line, "init_fracs", "values must sum to 1.0");
     }
     return 0;
 }
 
 /* ---- flat-entry conversion ------------------------------------------- */
 
-static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path,
-                           char *err, size_t errsz) {
+static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path, char *err,
+                           size_t errsz) {
     if (d->n == 0) {
         cfg->entries = NULL;
         cfg->count = 0;
@@ -741,27 +735,23 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path,
         char flat[128]; /* worst case: 32 + "[nnn]" + '.' + 48 + NUL */
         int n;
         if (array_table_max(e->table, &max_idx))
-            n = snprintf(flat, sizeof(flat), "%s[%d].%s", e->table, e->arr_idx,
-                         e->key);
+            n = snprintf(flat, sizeof(flat), "%s[%d].%s", e->table, e->arr_idx, e->key);
         else
             n = snprintf(flat, sizeof(flat), "%s.%s", e->table, e->key);
         if (n < 0 || (size_t)n >= sizeof(flat))
             return failf(err, errsz, path, e->line, e->key, "key encoding failed");
         if ((size_t)n >= sizeof(out->key))
-            return failf(err, errsz, path, e->line, e->key,
-                         "flat key too long (max 63)");
+            return failf(err, errsz, path, e->line, e->key, "flat key too long (max 63)");
         memcpy(out->key, flat, (size_t)n + 1);
 
         switch (e->type) {
         case V_STR:
             if (strlen(e->sval) >= sizeof(out->value))
-                return failf(err, errsz, path, e->line, e->key,
-                              "string too long for flat entry");
+                return failf(err, errsz, path, e->line, e->key, "string too long for flat entry");
             snprintf(out->value, sizeof(out->value), "%s", e->sval);
             break;
         case V_INT:
-            snprintf(out->value, sizeof(out->value), "%lld",
-                     (long long)e->ival);
+            snprintf(out->value, sizeof(out->value), "%lld", (long long)e->ival);
             break;
         case V_FLOAT:
             /* %g canonical: human-written ops decimals round-trip
@@ -770,8 +760,7 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path,
             snprintf(out->value, sizeof(out->value), "%g", e->fval);
             break;
         case V_BOOL:
-            snprintf(out->value, sizeof(out->value), "%s",
-                     e->bval ? "true" : "false");
+            snprintf(out->value, sizeof(out->value), "%s", e->bval ? "true" : "false");
             break;
         case V_ARR: {
             /* canonical "[v, v, ...]" with %g scalars; capacity-checked
@@ -782,13 +771,11 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path,
                 if (off + 16 >= sizeof(out->value))
                     return failf(err, errsz, path, e->line, e->key,
                                  "array too long for flat entry");
-                off += (size_t)snprintf(out->value + off,
-                                        sizeof(out->value) - off, "%s%g",
+                off += (size_t)snprintf(out->value + off, sizeof(out->value) - off, "%s%g",
                                         n ? ", " : "", e->nums[n]);
             }
             if (off + 1 >= sizeof(out->value))
-                return failf(err, errsz, path, e->line, e->key,
-                             "array too long for flat entry");
+                return failf(err, errsz, path, e->line, e->key, "array too long for flat entry");
             out->value[off++] = ']';
             out->value[off] = '\0';
             break;
@@ -802,8 +789,7 @@ static int entries_convert(const doc_t *d, sdf_config_t *cfg, const char *path,
 
 /* ---- public API ------------------------------------------------------- */
 
-static int read_file(const char *path, char **buf, size_t *len, char *err,
-                     size_t errsz) {
+static int read_file(const char *path, char **buf, size_t *len, char *err, size_t errsz) {
     FILE *f = fopen(path, "rb");
     if (!f)
         return failf(err, errsz, path, 0, "open", "cannot open");
@@ -814,8 +800,7 @@ static int read_file(const char *path, char **buf, size_t *len, char *err,
     long flen = ftell(f);
     if (flen < 0 || flen > 262144 || fseek(f, SEEK_SET, 0) != 0) {
         fclose(f);
-        return failf(err, errsz, path, 0, "open",
-                     "empty or oversized (max 256 KiB)");
+        return failf(err, errsz, path, 0, "open", "empty or oversized (max 256 KiB)");
     }
     char *b = malloc((size_t)flen + 1);
     if (!b) {
@@ -880,8 +865,7 @@ bad:
     return -1;
 }
 
-const char *sdf_config_get(const sdf_config_t *cfg, const char *key,
-                           const char *fallback) {
+const char *sdf_config_get(const sdf_config_t *cfg, const char *key, const char *fallback) {
     if (cfg == NULL)
         return fallback;
     for (size_t i = 0; i < cfg->count; i++) {

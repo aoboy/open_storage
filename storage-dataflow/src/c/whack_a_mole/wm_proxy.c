@@ -71,8 +71,8 @@ static uint64_t xxhash64(const void *data, size_t len) {
             v4 = xxh_round(v4, k);
             p += 8;
         } while (p + 32 <= end);
-        h64 = ((v1 << 1) | (v1 >> 63)) + ((v2 << 7) | (v2 >> 57)) +
-              ((v3 << 12) | (v3 >> 52)) + ((v4 << 18) | (v4 >> 46));
+        h64 = ((v1 << 1) | (v1 >> 63)) + ((v2 << 7) | (v2 >> 57)) + ((v3 << 12) | (v3 >> 52)) +
+              ((v4 << 18) | (v4 >> 46));
         v1 *= XXH_PRIME64_2;
         v1 = (v1 << 31) | (v1 >> 33);
         v1 *= XXH_PRIME64_1;
@@ -126,30 +126,25 @@ typedef struct {
     _Atomic uint64_t bytes_rx;
 } proxy_cb_state_t;
 
-static void proxy_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
-                     uint32_t len, int status) {
+static void proxy_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
+                     int status) {
     (void)out;
     proxy_cb_state_t *st = ud;
     if (status == 0) {
-        atomic_fetch_add_explicit(&st->ok[req->origin_id], 1,
-                                   memory_order_relaxed);
+        atomic_fetch_add_explicit(&st->ok[req->origin_id], 1, memory_order_relaxed);
         atomic_fetch_add_explicit(&st->bytes_rx, len, memory_order_relaxed);
     } else {
-        atomic_fetch_add_explicit(&st->failed[req->origin_id], 1,
-                                  memory_order_relaxed);
+        atomic_fetch_add_explicit(&st->failed[req->origin_id], 1, memory_order_relaxed);
     }
 }
 
 static void timeline_apply(const sdf_wm_proxy_cfg_t *cfg, sdf_origin_t *o,
-                            uint64_t dispatched_before,
-                            uint64_t dispatched_now) {
+                           uint64_t dispatched_before, uint64_t dispatched_now) {
     for (uint32_t s = 0; s < cfg->n_steps && s < SDF_WM_PROXY_MAX_STEPS; s++) {
         const sdf_wm_proxy_step_t *st = &cfg->steps[s];
         if (st->at_unit > dispatched_before && st->at_unit <= dispatched_now) {
             if (st->throttle_ns != 0)
-                (void)sdf_loopback_set_knob(o, st->origin,
-                                             SDF_LB_THROTTLE_NS,
-                                             st->throttle_ns);
+                (void)sdf_loopback_set_knob(o, st->origin, SDF_LB_THROTTLE_NS, st->throttle_ns);
             (void)o->ops->set_enable(o, st->origin, st->enable);
         }
     }
@@ -160,8 +155,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         return -EINVAL;
     if (cfg->n_origins == 0 || cfg->n_origins > WM_MAX_PATHS)
         return -EINVAL;
-    if (cfg->units == 0 || cfg->unit_bytes == 0 ||
-        cfg->unit_bytes > SDF_ORIGIN_UNIT_MAX)
+    if (cfg->units == 0 || cfg->unit_bytes == 0 || cfg->unit_bytes > SDF_ORIGIN_UNIT_MAX)
         return -EINVAL;
     if (cfg->profile.n != cfg->n_origins)
         return -EINVAL;
@@ -209,17 +203,14 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     wm_ctrl_cfg_t kcfg;
     wm_ctrl_cfg_default(&kcfg);
     kcfg.alpha_lo = cfg->alpha > 0.0 ? cfg->alpha : kcfg.alpha_lo;
-    kcfg.t_min_ns = cfg->control_hz > 0
-                        ? 1000000000ull / cfg->control_hz
-                        : kcfg.t_min_ns;
+    kcfg.t_min_ns = cfg->control_hz > 0 ? 1000000000ull / cfg->control_hz : kcfg.t_min_ns;
     wm_ctrl_t ctl;
     if (wm_ctrl_init(&ctl, &work, &kcfg, cfg->n_origins) != 0) {
         o.ops->close(&o);
         return -EINVAL;
     }
 
-    uint64_t units_per_interval =
-        cfg->control_hz > 0 ? cfg->units / cfg->control_hz : cfg->units;
+    uint64_t units_per_interval = cfg->control_hz > 0 ? cfg->units / cfg->control_hz : cfg->units;
     if (units_per_interval == 0)
         units_per_interval = cfg->units;
 
@@ -264,11 +255,10 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
                 uint32_t ver = 0;
                 if (sdf_wm_shm_acquire(&shm, &next, &ver) == 0) {
                     out->shm_acquires++;
-                    if (ver > out->shm_version_acquired &&
-                        next.n == cfg->n_origins && next.m == work.m) {
+                    if (ver > out->shm_version_acquired && next.n == cfg->n_origins &&
+                        next.m == work.m) {
                         out->shm_version_acquired = ver;
-                        if (wm_profile_compile_cfg(&next, &compiled,
-                                                   &spray) == 0)
+                        if (wm_profile_compile_cfg(&next, &compiled, &spray) == 0)
                             work = next;
                     }
                 }
@@ -292,8 +282,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         /* A/B assignment: deterministic bucket over the job key */
         uint64_t key[1] = {job};
         uint32_t bucket = (uint32_t)(xxhash64(key, sizeof(key)) % 100ull);
-        int treatment =
-            !cfg->kill_switch && bucket < cfg->rollout_pct;
+        int treatment = !cfg->kill_switch && bucket < cfg->rollout_pct;
 
         uint32_t origin;
         if (treatment) {
@@ -320,8 +309,8 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         memset(&req, 0, sizeof(req));
         req.origin_id = origin;
         req.job_id = job;
-        req.obj_offset = (dispatched * cfg->unit_bytes) %
-                         (SDF_WM_PROXY_OBJ_BYTES - cfg->unit_bytes);
+        req.obj_offset =
+            (dispatched * cfg->unit_bytes) % (SDF_WM_PROXY_OBJ_BYTES - cfg->unit_bytes);
         req.len = cfg->unit_bytes;
 
         uint64_t before = dispatched;
@@ -357,8 +346,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     out->wall_ns = sdf_now_ns() - t0;
     for (uint32_t i = 0; i < cfg->n_origins; i++) {
         out->ok[i] = atomic_load_explicit(&cbst.ok[i], memory_order_relaxed);
-        out->failed[i] =
-            atomic_load_explicit(&cbst.failed[i], memory_order_relaxed);
+        out->failed[i] = atomic_load_explicit(&cbst.failed[i], memory_order_relaxed);
     }
     out->bytes_rx = atomic_load_explicit(&cbst.bytes_rx, memory_order_relaxed);
     for (uint32_t i = 0; i < cfg->n_origins; i++)
@@ -366,7 +354,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
 
     if (shm_on)
         sdf_wm_shm_close(&shm); /* close does not unlink: the harness
-                                  * owns the segment lifecycle */
+                                 * owns the segment lifecycle */
     o.ops->close(&o);
     return 0;
 }

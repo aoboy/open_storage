@@ -31,8 +31,7 @@
 #define WM_SHM_ACTIVE_OFF 4
 
 static uint32_t au32_load(const uint32_t *p) {
-    return atomic_load_explicit((const _Atomic uint32_t *)p,
-                                memory_order_relaxed);
+    return atomic_load_explicit((const _Atomic uint32_t *)p, memory_order_relaxed);
 }
 
 static void au32_store(uint32_t *p, uint32_t v) {
@@ -50,9 +49,8 @@ static unsigned char active_load(const sdf_shm_t *s) {
 }
 
 static void active_store(const sdf_shm_t *s, unsigned char v) {
-    atomic_store_explicit(
-        (_Atomic unsigned char *)((uint8_t *)s->base + WM_SHM_ACTIVE_OFF), v,
-        memory_order_relaxed);
+    atomic_store_explicit((_Atomic unsigned char *)((uint8_t *)s->base + WM_SHM_ACTIVE_OFF), v,
+                          memory_order_relaxed);
 }
 
 static sdf_seqlock_t *seg_seqlock(const sdf_shm_t *s) {
@@ -61,8 +59,7 @@ static sdf_seqlock_t *seg_seqlock(const sdf_shm_t *s) {
 
 static wm_shm_profile_buf_t *seg_buf(const sdf_shm_t *s, int which) {
     return (wm_shm_profile_buf_t *)((uint8_t *)s->base +
-                                   (which == 0 ? SDF_SHM_OFF_PROFILE_A
-                                               : SDF_SHM_OFF_PROFILE_B));
+                                    (which == 0 ? SDF_SHM_OFF_PROFILE_A : SDF_SHM_OFF_PROFILE_B));
 }
 
 static wm_shm_telem_hdr_t *seg_hdr(const sdf_shm_t *s) {
@@ -89,8 +86,8 @@ static int init_segment(sdf_shm_t *s, uint32_t n_paths) {
     hdr->magic = WM_SHM_MAGIC;
     hdr->n_paths = n_paths;
     atomic_store_explicit(&hdr->down_mask, 0, memory_order_relaxed);
-    return spsc_init(seg_ring(s), (uint8_t *)s->base + SDF_SHM_OFF_TELEMETRY_RING,
-                     WM_SHM_TELEM_CAP, (uint32_t)sizeof(wm_shm_telem_t));
+    return spsc_init(seg_ring(s), (uint8_t *)s->base + SDF_SHM_OFF_TELEMETRY_RING, WM_SHM_TELEM_CAP,
+                     (uint32_t)sizeof(wm_shm_telem_t));
 }
 
 static int check_segment(const sdf_shm_t *s, uint32_t n_paths) {
@@ -163,8 +160,7 @@ int sdf_wm_shm_publish(sdf_shm_t *s, const wm_profile_t *prof) {
     return 0;
 }
 
-int sdf_wm_shm_acquire(const sdf_shm_t *s, wm_profile_t *prof,
-                       uint32_t *version) {
+int sdf_wm_shm_acquire(const sdf_shm_t *s, wm_profile_t *prof, uint32_t *version) {
     if (s == NULL || s->base == NULL || prof == NULL)
         return -EINVAL;
     if (check_magic(s) != 0)
@@ -215,8 +211,7 @@ int sdf_wm_shm_telemetry_push(sdf_shm_t *s, const sdf_origin_stats_t *st) {
 int sdf_wm_shm_down_mask_store(sdf_shm_t *s, uint64_t mask) {
     if (s == NULL || s->base == NULL)
         return -EINVAL;
-    atomic_store_explicit(&seg_hdr(s)->down_mask, mask,
-                          memory_order_release);
+    atomic_store_explicit(&seg_hdr(s)->down_mask, mask, memory_order_release);
     return 0;
 }
 

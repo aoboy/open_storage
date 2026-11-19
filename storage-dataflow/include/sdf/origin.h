@@ -38,12 +38,12 @@ extern "C" {
 typedef enum {
     SDF_ORIGIN_LOOPBACK = 0, /* harness files with degradation knobs */
     SDF_ORIGIN_HTTP = 1,     /* HTTP/1.1 Range GET reference driver */
-    SDF_ORIGIN_S3 = 2,      /* deferred (import map / design 09 §9) */
-    SDF_ORIGIN_PEER = 3     /* deferred */
+    SDF_ORIGIN_S3 = 2,       /* deferred (import map / design 09 §9) */
+    SDF_ORIGIN_PEER = 3      /* deferred */
 } sdf_origin_cls_t;
 
-#define SDF_ORIGIN_MAX 64        /* matches WM_MAX_PATHS */
-#define SDF_ORIGIN_DST_MAX 256   /* file path / URL / endpoint */
+#define SDF_ORIGIN_MAX 64              /* matches WM_MAX_PATHS */
+#define SDF_ORIGIN_DST_MAX 256         /* file path / URL / endpoint */
 #define SDF_ORIGIN_UNIT_MAX (1u << 20) /* largest single fetch (1 MiB) */
 
 /** Fetch request flags. */
@@ -51,9 +51,9 @@ typedef enum {
 
 /** One unit of work: a byte-range request of a fill/repair job. */
 typedef struct {
-    uint32_t origin_id; /* 0..n-1, matches the dispatcher's pick */
+    uint32_t origin_id;  /* 0..n-1, matches the dispatcher's pick */
     uint32_t flags;      /* SDF_FETCH_* */
-    uint64_t job_id;    /* fill or repair job */
+    uint64_t job_id;     /* fill or repair job */
     uint64_t obj_offset; /* byte range [obj_offset, obj_offset+len) */
     uint32_t len;
     uint32_t _pad;
@@ -64,17 +64,16 @@ typedef struct {
  * completion context. out/len valid only inside the callback (driver
  * owns the storage); status per the convention above.
  */
-typedef void (*sdf_fetch_done_fn)(void *ud, const sdf_fetch_req_t *req,
-                                  const uint8_t *out, uint32_t len,
-                                  int status);
+typedef void (*sdf_fetch_done_fn)(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
+                                  uint32_t len, int status);
 
 /** Per-origin configuration (the [[origin]] TOML block, ADR-0005). */
 typedef struct {
-    uint32_t id;    /* 0..n-1, dense and unique across one open() */
-    uint32_t cls;   /* sdf_origin_cls_t */
+    uint32_t id;                  /* 0..n-1, dense and unique across one open() */
+    uint32_t cls;                 /* sdf_origin_cls_t */
     char dst[SDF_ORIGIN_DST_MAX]; /* path (loopback) / URL (http) */
     /* harness + driver knobs */
-    uint64_t throttle_ns;  /* loopback: per-request artificial delay */
+    uint64_t throttle_ns;   /* loopback: per-request artificial delay */
     double loss_pct;        /* loopback: simulated transport loss 0..100 */
     double err_pct;         /* loopback: simulated origin errors 0..100 */
     uint64_t lat_jitter_ns; /* loopback: uniform jitter added to throttle */
@@ -93,19 +92,19 @@ typedef struct {
 typedef struct {
     uint32_t id;
     uint32_t cls;
-    uint64_t reqs_out;   /* accepted submits */
-    uint64_t reqs_done;  /* successful completions */
+    uint64_t reqs_out;    /* accepted submits */
+    uint64_t reqs_done;   /* successful completions */
     uint64_t reqs_failed; /* failed completions (loss/err/timeout/range) */
-    uint64_t bytes_tx;   /* request bytes accounted */
-    uint64_t bytes_rx;   /* response bytes accounted */
-    uint64_t in_flight;  /* accepted, not yet completed */
-    double ewma_lat_ns;  /* submit-to-completion EWMA (throttle included) */
-    double ewma_err;     /* failed/done EWMA over completions */
-    double goodput;      /* bytes_rx / seconds since open */
-    int hard_down;       /* unavailable for new work: driver-detected
-                           failure (conn refused, DNS) OR administratively
-                           drained via set_enable(0) — the controller's
-                           deterministic down-signal */
+    uint64_t bytes_tx;    /* request bytes accounted */
+    uint64_t bytes_rx;    /* response bytes accounted */
+    uint64_t in_flight;   /* accepted, not yet completed */
+    double ewma_lat_ns;   /* submit-to-completion EWMA (throttle included) */
+    double ewma_err;      /* failed/done EWMA over completions */
+    double goodput;       /* bytes_rx / seconds since open */
+    int hard_down;        /* unavailable for new work: driver-detected
+                            failure (conn refused, DNS) OR administratively
+                            drained via set_enable(0) — the controller's
+                            deterministic down-signal */
 } sdf_origin_stats_t;
 
 /** Driver instance: vtable + private implementation. */
@@ -126,8 +125,7 @@ typedef struct {
      * -ENOLINK when the origin is drained, -EAGAIN when the driver
      * queue is full. Never blocks.
      */
-    int (*fetch)(sdf_origin_t *o, const sdf_fetch_req_t *req,
-                 sdf_fetch_done_fn cb, void *ud);
+    int (*fetch)(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_done_fn cb, void *ud);
 
     /* Snapshot one origin's stats. Returns 0 or -EINVAL. */
     int (*stats)(sdf_origin_t *o, uint32_t origin_id, sdf_origin_stats_t *st);

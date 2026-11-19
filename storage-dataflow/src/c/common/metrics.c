@@ -74,8 +74,7 @@ void sdf_histogram_observe(sdf_histogram_t *h, uint64_t value) {
         return;
     atomic_fetch_add_explicit(&h->count, 1, memory_order_relaxed);
     atomic_fetch_add_explicit(&h->sum, value, memory_order_relaxed);
-    atomic_fetch_add_explicit(&h->buckets[hist_bucket(value)], 1,
-                              memory_order_relaxed);
+    atomic_fetch_add_explicit(&h->buckets[hist_bucket(value)], 1, memory_order_relaxed);
 }
 
 void sdf_histogram_reset(sdf_histogram_t *h) {

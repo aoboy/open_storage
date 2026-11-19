@@ -25,8 +25,8 @@ extern "C" {
 #endif
 
 typedef enum {
-    SDF_LB_THROTTLE_NS = 0, /* per-request artificial delay */
-    SDF_LB_JITTER_NS = 1,  /* uniform [0, value) added to throttle */
+    SDF_LB_THROTTLE_NS = 0,   /* per-request artificial delay */
+    SDF_LB_JITTER_NS = 1,     /* uniform [0, value) added to throttle */
     SDF_LB_LOSS_PCT_X100 = 2, /* completed with -EHOSTUNREACH */
     SDF_LB_ERR_PCT_X100 = 3   /* completed with -EIO */
 } sdf_loopback_knob_t;
@@ -35,8 +35,8 @@ typedef enum {
  * Live-reload a degradation knob. o must be a loopback driver.
  * Returns 0, -EINVAL on bad arguments, -ERANGE on out-of-band values.
  */
-int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id,
-                          sdf_loopback_knob_t knob, uint64_t value);
+int sdf_loopback_set_knob(sdf_origin_t *o, uint32_t origin_id, sdf_loopback_knob_t knob,
+                          uint64_t value);
 
 /** The loopback driver's ops table (factories/tests install it). */
 const sdf_origin_ops_t *sdf_loopback_ops(void);

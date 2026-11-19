@@ -20,8 +20,7 @@ struct fountain_dec {
 size_t fd_sizeof(const fd_cfg_t *cfg) {
     if (cfg == NULL || cfg->k == 0 || cfg->sym_len == 0)
         return 0;
-    size_t arm = nrq_dec_sizeof() > lt_dec_sizeof() ? nrq_dec_sizeof()
-                                                    : lt_dec_sizeof();
+    size_t arm = nrq_dec_sizeof() > lt_dec_sizeof() ? nrq_dec_sizeof() : lt_dec_sizeof();
     return sizeof(struct fountain_dec) + arm;
 }
 
@@ -55,23 +54,21 @@ int fd_push(fountain_dec_t *d, uint32_t esi, const uint8_t *sym, size_t len) {
     if (fd == NULL || fd->codec == 0xffff)
         return -EINVAL;
     return fd->codec == SDF_FOUNTAIN_NANORQ ? nrq_push(fd->arm, esi, sym, len)
-                                           : lt_push(fd->arm, esi, sym, len);
+                                            : lt_push(fd->arm, esi, sym, len);
 }
 
 bool fd_ready(const fountain_dec_t *d) {
     const struct fountain_dec *fd = (const struct fountain_dec *)d;
     if (fd == NULL || fd->codec == 0xffff)
         return false;
-    return fd->codec == SDF_FOUNTAIN_NANORQ ? nrq_ready(fd->arm)
-                                            : lt_ready(fd->arm);
+    return fd->codec == SDF_FOUNTAIN_NANORQ ? nrq_ready(fd->arm) : lt_ready(fd->arm);
 }
 
 uint32_t fd_rank(const fountain_dec_t *d) {
     const struct fountain_dec *fd = (const struct fountain_dec *)d;
     if (fd == NULL || fd->codec == 0xffff)
         return 0;
-    return fd->codec == SDF_FOUNTAIN_NANORQ ? nrq_rank(fd->arm)
-                                            : lt_rank(fd->arm);
+    return fd->codec == SDF_FOUNTAIN_NANORQ ? nrq_rank(fd->arm) : lt_rank(fd->arm);
 }
 
 int fd_decode(fountain_dec_t *d, uint8_t *out, size_t block_len) {
@@ -100,8 +97,7 @@ int fd_init_codec(fountain_dec_t *d, const fd_cfg_t *cfg, uint32_t codec) {
     struct fountain_dec *fd = (struct fountain_dec *)d;
     memset(fd, 0, sizeof(*fd));
     fd->codec = codec;
-    int rc = codec == SDF_FOUNTAIN_NANORQ ? nrq_dec_init(fd->arm, cfg)
-                                          : lt_dec_init(fd->arm, cfg);
+    int rc = codec == SDF_FOUNTAIN_NANORQ ? nrq_dec_init(fd->arm, cfg) : lt_dec_init(fd->arm, cfg);
     if (rc != 0) {
         fd->codec = 0xffff;
         return rc;

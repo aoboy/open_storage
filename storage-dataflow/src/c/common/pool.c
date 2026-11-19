@@ -25,7 +25,7 @@ struct sdf_pool {
     uint32_t slot_size; /* as requested */
     uint32_t stride;    /* slot_size rounded up to 8 */
     uint32_t capacity;
-    uint32_t free_top;   /* entries used on the free stack */
+    uint32_t free_top; /* entries used on the free stack */
     uint8_t _pad[SDF_POOL_HDR_BYTES - 4u * sizeof(uint32_t)];
     /* uint32_t free_stack[capacity] follows; slots follow that,
      * cacheline-aligned. */
@@ -43,8 +43,7 @@ static size_t pool_stack_off(void) {
 /* Offset of the slots region: free stack rounded up to a cacheline so
  * every slot starts 64-aligned. */
 static size_t pool_slots_off(uint32_t capacity) {
-    return (SDF_POOL_HDR_BYTES + (size_t)capacity * sizeof(uint32_t) + 63u) &
-           ~(size_t)63u;
+    return (SDF_POOL_HDR_BYTES + (size_t)capacity * sizeof(uint32_t) + 63u) & ~(size_t)63u;
 }
 
 static uint32_t *pool_stack(sdf_pool_t *p) {

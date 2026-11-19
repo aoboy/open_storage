@@ -52,8 +52,8 @@ static void cfg_defaults(arc_cfg_t *cfg) {
     if (cfg->min_smooth_bytes == 0)
         cfg->min_smooth_bytes = 64;
     /* budget_ns == 0 = off (valid); rtt_sm_ns == 0 = auto-U off */
-    if (cfg->mode != ARC_MODE_BASE && cfg->mode != ARC_MODE_Q &&
-        cfg->mode != ARC_MODE_QG && cfg->mode != ARC_MODE_IMMEDIATE)
+    if (cfg->mode != ARC_MODE_BASE && cfg->mode != ARC_MODE_Q && cfg->mode != ARC_MODE_QG &&
+        cfg->mode != ARC_MODE_IMMEDIATE)
         cfg->mode = ARC_MODE_QG;
     if (cfg->capacity == 0)
         cfg->capacity = 256;
@@ -73,16 +73,14 @@ size_t arc_sizeof(const arc_cfg_t *cfg) {
         return 0;
     arc_cfg_t c = *cfg;
     cfg_defaults(&c);
-    if (c.capacity < 2 || (c.capacity & (c.capacity - 1)) != 0 ||
-        c.entry_max == 0 || c.entry_max > (1u << 20))
+    if (c.capacity < 2 || (c.capacity & (c.capacity - 1)) != 0 || c.entry_max == 0 ||
+        c.entry_max > (1u << 20))
         return 0;
-    size_t need = sizeof(arc_state_t) +
-                  (size_t)c.capacity * (sizeof(arc_rel_t) + c.entry_max + 1);
+    size_t need = sizeof(arc_state_t) + (size_t)c.capacity * (sizeof(arc_rel_t) + c.entry_max + 1);
     return (need + 63u) & ~(size_t)63;
 }
 
-int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn,
-             void *ctx) {
+int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn, void *ctx) {
     if (p == NULL || cfg == NULL)
         return -EINVAL;
     size_t need = arc_sizeof(cfg);
@@ -132,8 +130,7 @@ int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn,
     return 0;
 }
 
-int arc_submit(arc_pacer_t *p, const void *entry, size_t len,
-               uint64_t producer_ts) {
+int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts) {
     if (p == NULL || (len > 0 && entry == NULL))
         return -EINVAL;
     arc_state_t *s = &p->st;
@@ -141,8 +138,7 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len,
         return -EINVAL;
 
     int how = 0;
-    arc_sched_t sched =
-        arc_arrival(s, producer_ts, (uint64_t)sdf_now_ns(), len, &how);
+    arc_sched_t sched = arc_arrival(s, producer_ts, (uint64_t)sdf_now_ns(), len, &how);
 
     /* find a slab slot */
     uint32_t slot = UINT32_MAX;

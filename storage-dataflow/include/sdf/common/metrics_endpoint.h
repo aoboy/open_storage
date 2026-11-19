@@ -40,9 +40,8 @@ typedef int (*sdf_metrics_render_fn)(void *ud, FILE *out);
  * timeout 2 s). Returns the open endpoint, or NULL (diagnostic on
  * stderr).
  */
-sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr,
-                                                    sdf_metrics_render_fn render,
-                                                    void *ud);
+sdf_metrics_endpoint_t *sdf_metrics_endpoint_start(const char *addr, sdf_metrics_render_fn render,
+                                                   void *ud);
 
 /*
  * Stop serving and free the handle: signal the thread, join it, close

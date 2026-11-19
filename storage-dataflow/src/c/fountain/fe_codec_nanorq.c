@@ -40,7 +40,7 @@ typedef struct {
     uint8_t *scratch; /* k * sym_len, decoder-owned */
     uint32_t k;
     size_t sym_len;
-    uint32_t pushed;  /* distinct symbols (sources + repairs) */
+    uint32_t pushed;   /* distinct symbols (sources + repairs) */
     uint8_t have[512]; /* esi bitmap, capped: rank telemetry */
     int repaired;      /* repair_block already succeeded */
 } nrq_dec_t;
@@ -56,8 +56,7 @@ size_t nrq_dec_sizeof(void) {
 int nrq_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
     if (mem == NULL || cfg == NULL || block == NULL)
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > 56403u || cfg->block_len == 0 ||
-        cfg->block_len % cfg->k != 0)
+    if (cfg->k == 0 || cfg->k > 56403u || cfg->block_len == 0 || cfg->block_len % cfg->k != 0)
         return -EINVAL;
     size_t sym_len = cfg->block_len / cfg->k;
     if (sym_len == 0 || sym_len > 8192u)
@@ -72,15 +71,14 @@ int nrq_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
     e->io = ioctx_from_mem_ro(block, cfg->block_len);
     if (e->io == NULL)
         return -EINVAL;
-    e->rq = nanorq_encoder_new_ex(cfg->block_len, (uint16_t)sym_len,
-                                  (uint16_t)cfg->k, 1u /* Z */, 1u /* Al */);
+    e->rq = nanorq_encoder_new_ex(cfg->block_len, (uint16_t)sym_len, (uint16_t)cfg->k, 1u /* Z */,
+                                  1u /* Al */);
     if (e->rq == NULL) {
         e->io->destroy(e->io);
         e->io = NULL;
         return -EINVAL;
     }
-    if (nanorq_blocks(e->rq) != 1 ||
-        nanorq_block_symbols(e->rq, 0) != cfg->k) {
+    if (nanorq_blocks(e->rq) != 1 || nanorq_block_symbols(e->rq, 0) != cfg->k) {
         nrq_enc_destroy(e);
         return -EINVAL; /* the one-block contract was violated */
     }
@@ -128,10 +126,8 @@ void nrq_enc_destroy(void *enc) {
 /* The decoder derives the OTI from (k, sym_len) with the same forced
  * Z=1/Al=1 — a throwaway encoder pins the exact values nanorq would
  * put on the wire, so no OTI crosses the sdf ABI. */
-static int derive_oti(uint32_t k, size_t sym_len, uint64_t *common,
-                      uint32_t *scheme) {
-    nanorq *rq = nanorq_encoder_new_ex((size_t)k * sym_len,
-                                      (uint16_t)sym_len, (uint16_t)k, 1, 1);
+static int derive_oti(uint32_t k, size_t sym_len, uint64_t *common, uint32_t *scheme) {
+    nanorq *rq = nanorq_encoder_new_ex((size_t)k * sym_len, (uint16_t)sym_len, (uint16_t)k, 1, 1);
     if (rq == NULL)
         return -EINVAL;
     *common = nanorq_oti_common(rq);
@@ -143,8 +139,8 @@ static int derive_oti(uint32_t k, size_t sym_len, uint64_t *common,
 int nrq_dec_init(void *mem, const fd_cfg_t *cfg) {
     if (mem == NULL || cfg == NULL)
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > 56403u || cfg->sym_len == 0 ||
-        cfg->sym_len > 8192u || cfg->k > 512u)
+    if (cfg->k == 0 || cfg->k > 56403u || cfg->sym_len == 0 || cfg->sym_len > 8192u ||
+        cfg->k > 512u)
         return -EINVAL; /* have[] cap: rank telemetry over huge K */
 
     nrq_dec_t *d = mem;
@@ -235,8 +231,7 @@ uint32_t nrq_rank(const void *dec) {
 
 int nrq_decode(void *dec, uint8_t *out, size_t block_len) {
     nrq_dec_t *d = dec;
-    if (d == NULL || d->rq == NULL || out == NULL ||
-        block_len != (size_t)d->k * d->sym_len)
+    if (d == NULL || d->rq == NULL || out == NULL || block_len != (size_t)d->k * d->sym_len)
         return -EINVAL;
     if (!nrq_ready(dec))
         return -EINVAL; /* the ARQ-fallback condition (design 02) */

@@ -42,10 +42,10 @@ typedef enum {
 
 /* Encoder configuration (one block). */
 typedef struct {
-    size_t block_len;   /* == k * sym_len exactly (caller pads) */
-    uint32_t k;         /* source symbols per block (>= 1) */
+    size_t block_len;      /* == k * sym_len exactly (caller pads) */
+    uint32_t k;            /* source symbols per block (>= 1) */
     uint32_t overhead_pct; /* repair symbols exposed, percent of K */
-    uint32_t codec;     /* sdf_fountain_codec_t (ADR-0004 arm) */
+    uint32_t codec;        /* sdf_fountain_codec_t (ADR-0004 arm) */
 } fe_cfg_t;
 
 /* Decoder configuration (one block). */
@@ -67,8 +67,8 @@ int fe_init_in(fountain_enc_t *e, const fe_cfg_t *cfg, const uint8_t *block);
 int fd_init_in(fountain_dec_t *d, const fd_cfg_t *cfg);
 
 /* v1 entry points (wrappers over the in-place forms). */
-int fe_init(fountain_enc_t *e, const uint8_t *block, size_t block_len,
-            uint32_t k, uint32_t overhead_pct);
+int fe_init(fountain_enc_t *e, const uint8_t *block, size_t block_len, uint32_t k,
+            uint32_t overhead_pct);
 int fd_init(fountain_dec_t *d, uint32_t k, size_t sym_len);
 
 /* Total symbols the encoder exposes: K systematic + overhead repair. */

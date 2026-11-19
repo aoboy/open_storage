@@ -41,13 +41,11 @@ static void build_unit_table(wm_compiled_t *c, const uint32_t *cdf) {
 int wm_profile_compile(const wm_profile_t *p, wm_compiled_t *out) {
     /* PLAIN default: seeds (0, 1) — sa=0 is the identity start, sb=1
      * is the (odd) identity stride, matching pre-ADR-0007 behavior. */
-    static const wm_compile_cfg_t plain = {
-        .method = WM_METHOD_PLAIN, .sa = 0, .sb = 1};
+    static const wm_compile_cfg_t plain = {.method = WM_METHOD_PLAIN, .sa = 0, .sb = 1};
     return wm_profile_compile_cfg(p, out, &plain);
 }
 
-int wm_profile_compile_cfg(const wm_profile_t *p, wm_compiled_t *out,
-                           const wm_compile_cfg_t *cfg) {
+int wm_profile_compile_cfg(const wm_profile_t *p, wm_compiled_t *out, const wm_compile_cfg_t *cfg) {
     if (p == NULL || out == NULL || cfg == NULL) {
         return -EINVAL;
     }
@@ -60,8 +58,7 @@ int wm_profile_compile_cfg(const wm_profile_t *p, wm_compiled_t *out,
     if (cfg->method > WM_METHOD_SHUFFLE2) {
         return -EINVAL;
     }
-    if (p->m >= 2 && (cfg->sa >= p->m || cfg->sb == 0 || cfg->sb >= p->m ||
-                      (cfg->sb & 1u) == 0)) {
+    if (p->m >= 2 && (cfg->sa >= p->m || cfg->sb == 0 || cfg->sb >= p->m || (cfg->sb & 1u) == 0)) {
         return -EINVAL; /* sb odd and both seeds < m (ADR-0007);
                          * m == 1 has no key domain to decorrelate */
     }

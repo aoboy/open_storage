@@ -155,9 +155,7 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
 
         if (s->mode >= ARC_MODE_QG) {
             int ordered =
-                s->have_last_release
-                    ? (rel.block_n <= s->last_released_n + 1)
-                    : (rel.block_n == 0);
+                s->have_last_release ? (rel.block_n <= s->last_released_n + 1) : (rel.block_n == 0);
             if (!ordered) {
                 uint64_t pred_T = min_pred_T(s, rel.block_n);
                 if (pred_T != UINT64_MAX) {
@@ -202,8 +200,8 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
          * a T_n == T_deadline from ordinary schedules is not a park) */
         if (s->stats.guard_waits > 0) {
             for (size_t i = 0; i < s->heap_n; i++) {
-                if (s->heap[i].block_n == s->last_released_n + 1 &&
-                    s->heap[i].parked && s->heap[i].T_n > now_ns) {
+                if (s->heap[i].block_n == s->last_released_n + 1 && s->heap[i].parked &&
+                    s->heap[i].T_n > now_ns) {
                     s->heap[i].T_n = now_ns;
                     s->heap[i].parked = 0;
                     heap_up(s, i);

@@ -41,25 +41,25 @@ typedef enum {
 
 typedef struct {
     sdf_repair_arm_t arm;
-    uint32_t k;        /* source symbols in the block */
-    uint32_t sym_len;  /* symbol bytes */
-    double eps;        /* slack (ignored by the control arm) */
-    double loss_pct;   /* loopback injected transport loss, 0..100 */
+    uint32_t k;       /* source symbols in the block */
+    uint32_t sym_len; /* symbol bytes */
+    double eps;       /* slack (ignored by the control arm) */
+    double loss_pct;  /* loopback injected transport loss, 0..100 */
 
     /* origins: loopback files created by the harness caller */
     sdf_origin_cfg_t origins[SDF_REPAIR_MAX_ORIGINS];
     uint32_t n_origins;
-    uint32_t wave;     /* symbols per admit wave (default 16) */
+    uint32_t wave; /* symbols per admit wave (default 16) */
 } sdf_fluid_repair_cfg_t;
 
 typedef struct {
-    uint64_t sent;      /* symbols submitted */
-    uint64_t received;  /* symbols that landed (post-loss) */
+    uint64_t sent;     /* symbols submitted */
+    uint64_t received; /* symbols that landed (post-loss) */
     uint64_t bytes_tx;
     uint64_t bytes_rx;
-    uint64_t rounds;    /* admit waves */
-    int arq_fallback;   /* 1 when the gate fired before sufficiency */
-    int ok;             /* 0 when even ARQ could not complete */
+    uint64_t rounds;  /* admit waves */
+    int arq_fallback; /* 1 when the gate fired before sufficiency */
+    int ok;           /* 0 when even ARQ could not complete */
     uint32_t decode_rank;
     uint64_t wall_ns;
 } sdf_fluid_repair_stats_t;
@@ -69,16 +69,14 @@ typedef struct {
  * data files (at least K * sym_len + repairs worth of encoded stream —
  * see sdf_fluid_repair_stream_bytes). Returns 0 and fills out.
  */
-int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
-                         sdf_fluid_repair_stats_t *out);
+int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_stats_t *out);
 
 /* Bytes the origin files must hold for the arm's symbol stream. */
 uint64_t sdf_fluid_repair_stream_bytes(const sdf_fluid_repair_cfg_t *cfg);
 
 /* Encode the symbol stream into buf (stream_bytes) — the harness
  * writes it to the origin files before the run. Returns 0 or -EINVAL. */
-int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg,
-                                  uint8_t *buf, size_t buf_len);
+int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg, uint8_t *buf, size_t buf_len);
 
 #ifdef __cplusplus
 }

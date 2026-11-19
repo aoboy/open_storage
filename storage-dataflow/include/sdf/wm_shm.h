@@ -80,8 +80,7 @@ int sdf_wm_shm_publish(sdf_shm_t *s, const wm_profile_t *prof);
 
 /* Reader: snapshot the active profile under the read seqlock.
  * Returns 0 (prof/version filled) or -EINVAL. Never torn. */
-int sdf_wm_shm_acquire(const sdf_shm_t *s, wm_profile_t *prof,
-                        uint32_t *version);
+int sdf_wm_shm_acquire(const sdf_shm_t *s, wm_profile_t *prof, uint32_t *version);
 
 /* C data plane -> control loop. Returns 0, -EAGAIN when the ring is
  * full (caller drops or slows; telemetry is best-effort). */

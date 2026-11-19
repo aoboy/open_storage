@@ -24,24 +24,22 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CHECK0(x)                                                             \
-    do {                                                                      \
-        if ((x) != 0) {                                                       \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);       \
-            return 1;                                                         \
-        }                                                                     \
+#define CHECK0(x)                                                                                  \
+    do {                                                                                           \
+        if ((x) != 0) {                                                                            \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #x);                           \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
-static uint32_t parse_u32(const sdf_config_t *cfg, const char *key,
-                          uint32_t fallback) {
+static uint32_t parse_u32(const sdf_config_t *cfg, const char *key, uint32_t fallback) {
     uint64_t v;
     if (sdf_config_get_u64(cfg, key, &v) == 0)
         return (uint32_t)v;
     return fallback;
 }
 
-static double parse_d(const sdf_config_t *cfg, const char *key,
-                      double fallback) {
+static double parse_d(const sdf_config_t *cfg, const char *key, double fallback) {
     const char *s = sdf_config_get(cfg, key, NULL);
     return s ? atof(s) : fallback;
 }
@@ -51,10 +49,8 @@ static int proxy_render(void *ud, FILE *out) {
     const sdf_wm_proxy_stats_t *st = ud;
     fprintf(out, "sdf_proxy_units_total %llu\n",
             (unsigned long long)(st->dispatch_treatment + st->dispatch_control));
-    fprintf(out, "sdf_proxy_control_heartbeat_ticks %llu\n",
-            (unsigned long long)st->control_ticks);
-    fprintf(out, "sdf_proxy_shm_profile_version %u\n",
-            st->shm_version_acquired);
+    fprintf(out, "sdf_proxy_control_heartbeat_ticks %llu\n", (unsigned long long)st->control_ticks);
+    fprintf(out, "sdf_proxy_shm_profile_version %u\n", st->shm_version_acquired);
     fprintf(out, "sdf_proxy_shm_telemetry_pushed %llu\n",
             (unsigned long long)st->shm_telemetry_pushed);
     for (uint32_t i = 0; i < 4 && st->end_profile_b[i] != 0; i++)
@@ -63,8 +59,7 @@ static int proxy_render(void *ud, FILE *out) {
     return 0;
 }
 
-static int timeline_from_name(sdf_wm_proxy_cfg_t *pc, const char *name,
-                              uint64_t units) {
+static int timeline_from_name(sdf_wm_proxy_cfg_t *pc, const char *name, uint64_t units) {
     if (strcmp(name, "steady") == 0)
         return 0;
     if (strcmp(name, "slow") == 0) {
@@ -73,8 +68,8 @@ static int timeline_from_name(sdf_wm_proxy_cfg_t *pc, const char *name,
         return 0;
     }
     if (strcmp(name, "dies") == 0) {
-        pc->steps[pc->n_steps++] = (sdf_wm_proxy_step_t){
-            .at_unit = units / 2, .origin = 2, .enable = 0, .throttle_ns = 0};
+        pc->steps[pc->n_steps++] =
+            (sdf_wm_proxy_step_t){.at_unit = units / 2, .origin = 2, .enable = 0, .throttle_ns = 0};
         return 0;
     }
     if (strcmp(name, "flapping") == 0) {
@@ -112,8 +107,7 @@ int main(int argc, char **argv) {
         else if (strcmp(argv[i], "--rollout") == 0 && i + 1 < argc) {
             pc_rollout_override = (uint32_t)strtoul(argv[++i], NULL, 10);
             pc_rollout_set = 1; /* 0 is a valid override (pure control) */
-        }
-        else if (strcmp(argv[i], "--kill") == 0)
+        } else if (strcmp(argv[i], "--kill") == 0)
             pc_kill_override = 1;
         else if (strcmp(argv[i], "--shm") == 0 && i + 1 < argc)
             pc_shm_name = argv[++i];
@@ -160,13 +154,11 @@ int main(int argc, char **argv) {
         pc.alpha = parse_d(&cfg, "wm.alpha", pc.alpha);
         pc.beta = parse_d(&cfg, "wm.beta", pc.beta);
         pc.rollout_pct = parse_u32(&cfg, "wm.rollout_pct", pc.rollout_pct);
-        pc.kill_switch =
-            strcmp(sdf_config_get(&cfg, "wm.kill_switch", "false"), "true") == 0;
+        pc.kill_switch = strcmp(sdf_config_get(&cfg, "wm.kill_switch", "false"), "true") == 0;
         {
             const char *method = sdf_config_get(&cfg, "wm.method", "shuffle1");
-            pc.spray.method = (uint32_t)(strcmp(method, "plain") == 0
-                                             ? WM_METHOD_PLAIN
-                                             : WM_METHOD_SHUFFLE1);
+            pc.spray.method =
+                (uint32_t)(strcmp(method, "plain") == 0 ? WM_METHOD_PLAIN : WM_METHOD_SHUFFLE1);
         }
         pc.spray.sa = parse_u32(&cfg, "wm.sa", pc.spray.sa);
         pc.spray.sb = parse_u32(&cfg, "wm.sb", pc.spray.sb);
@@ -196,12 +188,10 @@ int main(int argc, char **argv) {
                     pc.profile.n = nf;
                     uint32_t assigned = 0;
                     for (uint32_t i = 0; i < nf; i++) {
-                        pc.profile.b[i] =
-                            (uint32_t)(vals[i] / sum * pc.profile.m);
+                        pc.profile.b[i] = (uint32_t)(vals[i] / sum * pc.profile.m);
                         assigned += pc.profile.b[i];
                     }
-                    for (uint32_t i = 0; assigned < pc.profile.m;
-                         i = (i + 1) % nf) {
+                    for (uint32_t i = 0; assigned < pc.profile.m; i = (i + 1) % nf) {
                         pc.profile.b[i]++;
                         assigned++;
                     }
@@ -224,8 +214,7 @@ int main(int argc, char **argv) {
     char paths[SDF_ORIGIN_MAX][160];
     pc.n_origins = pc.profile.n;
     for (uint32_t i = 0; i < pc.n_origins; i++) {
-        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-wm-proxy-%d-%u.bin",
-                 (int)getpid(), i);
+        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-wm-proxy-%d-%u.bin", (int)getpid(), i);
         FILE *f = fopen(paths[i], "wb");
         if (f == NULL) {
             fprintf(stderr, "FAIL: cannot create %s\n", paths[i]);
@@ -286,18 +275,16 @@ int main(int argc, char **argv) {
            "telemetry=%llu ticks=%llu\n",
            profile_name, (unsigned long long)pc.units, pc.unit_bytes, pc.jobs,
            (unsigned long long)(st.wall_ns / 1000000ull), st.updates_applied,
-           (unsigned long long)st.dispatch_treatment,
-           (unsigned long long)st.dispatch_control, st.shm_version_acquired,
-           (unsigned long long)st.shm_telemetry_pushed,
+           (unsigned long long)st.dispatch_treatment, (unsigned long long)st.dispatch_control,
+           st.shm_version_acquired, (unsigned long long)st.shm_telemetry_pushed,
            (unsigned long long)st.control_ticks);
     int gate = 1;
     for (uint32_t i = 0; i < pc.n_origins; i++) {
         printf("ORIGIN %u dispatched=%llu ok=%llu failed=%llu enolink=%llu "
                "end_b=%d\n",
-               i, (unsigned long long)st.dispatched[i],
-               (unsigned long long)st.ok[i], (unsigned long long)st.failed[i],
-               (unsigned long long)sdf_counter_read(&st.enolink[i]),
-               st.end_profile_b[i]);
+               i, (unsigned long long)st.dispatched[i], (unsigned long long)st.ok[i],
+               (unsigned long long)st.failed[i],
+               (unsigned long long)sdf_counter_read(&st.enolink[i]), st.end_profile_b[i]);
         if (st.dispatched[i] == 0)
             gate = 0;
     }
@@ -311,15 +298,12 @@ int main(int argc, char **argv) {
          * latency noise crossed theta and the "steady" gate flaked). */
         if (st.updates_applied == 0 && st.shm_version_acquired == 0) {
             for (uint32_t i = 0; i < pc.n_origins; i++) {
-                double expect =
-                    (double)pc.profile.b[i] / pc.profile.m * (double)pc.units;
-                double dev = (double)st.dispatched[i] > expect
-                                 ? (double)st.dispatched[i] - expect
-                                 : expect - (double)st.dispatched[i];
+                double expect = (double)pc.profile.b[i] / pc.profile.m * (double)pc.units;
+                double dev = (double)st.dispatched[i] > expect ? (double)st.dispatched[i] - expect
+                                                               : expect - (double)st.dispatched[i];
                 double lim = 10.0 + 0.02 * expect;
                 if (dev > lim) {
-                    printf("GATE FAIL origin %u dev=%.1f lim=%.1f\n", i, dev,
-                           lim);
+                    printf("GATE FAIL origin %u dev=%.1f lim=%.1f\n", i, dev, lim);
                     gate = 0;
                 }
             }

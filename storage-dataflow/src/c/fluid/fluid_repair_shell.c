@@ -32,8 +32,7 @@ int main(int argc, char **argv) {
             const char *a = argv[++i];
             cfg.arm = strcmp(a, "control") == 0
                           ? SDF_REPAIR_CONTROL
-                          : (strcmp(a, "nanorq") == 0 ? SDF_REPAIR_NANORQ
-                                                      : SDF_REPAIR_LT);
+                          : (strcmp(a, "nanorq") == 0 ? SDF_REPAIR_NANORQ : SDF_REPAIR_LT);
         } else if (strcmp(argv[i], "--eps") == 0 && i + 1 < argc) {
             cfg.eps = atof(argv[++i]);
         } else if (strcmp(argv[i], "--loss") == 0 && i + 1 < argc) {
@@ -64,8 +63,7 @@ int main(int argc, char **argv) {
     if (sdf_fluid_repair_encode_stream(&cfg, stream, bytes) != 0)
         return 1;
     for (uint32_t i = 0; i < cfg.n_origins; i++) {
-        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-fluid-repair-%d-%u.bin",
-                 (int)getpid(), i);
+        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-fluid-repair-%d-%u.bin", (int)getpid(), i);
         FILE *f = fopen(paths[i], "wb");
         if (f == NULL)
             return 1;
@@ -98,9 +96,8 @@ int main(int argc, char **argv) {
            "overhead=%.2f wall_ms=%llu\n",
            arm, cfg.eps, cfg.loss_pct, cfg.k, (unsigned long long)st.sent,
            (unsigned long long)st.received, (unsigned long long)st.bytes_tx,
-           (unsigned long long)st.rounds, st.arq_fallback, st.decode_rank,
-           st.ok, cfg.k > 0 ? (double)st.bytes_tx / (double)(cfg.k * cfg.sym_len)
-                            : 0.0,
+           (unsigned long long)st.rounds, st.arq_fallback, st.decode_rank, st.ok,
+           cfg.k > 0 ? (double)st.bytes_tx / (double)(cfg.k * cfg.sym_len) : 0.0,
            (unsigned long long)(st.wall_ns / 1000000ull));
     return st.ok == 1 ? 0 : 1;
 }

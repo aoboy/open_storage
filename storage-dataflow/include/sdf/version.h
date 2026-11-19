@@ -15,10 +15,8 @@
 
 #define SDF_VERSION_STRING "0.2.0"
 
-#define SDF_VERSION_AT_LEAST(maj, min, pat)                                   \
-    ((maj) < SDF_VERSION_MAJOR ||                                             \
-     ((maj) == SDF_VERSION_MAJOR && (min) < SDF_VERSION_MINOR) ||            \
-     ((maj) == SDF_VERSION_MAJOR && (min) == SDF_VERSION_MINOR &&             \
-      (pat) <= SDF_VERSION_PATCH))
+#define SDF_VERSION_AT_LEAST(maj, min, pat)                                                        \
+    ((maj) < SDF_VERSION_MAJOR || ((maj) == SDF_VERSION_MAJOR && (min) < SDF_VERSION_MINOR) ||     \
+     ((maj) == SDF_VERSION_MAJOR && (min) == SDF_VERSION_MINOR && (pat) <= SDF_VERSION_PATCH))
 
 #endif /* SDF_VERSION_H */

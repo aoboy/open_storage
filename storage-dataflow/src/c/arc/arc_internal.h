@@ -50,8 +50,8 @@ typedef struct {
     /* windows + bookkeeping */
     uint64_t delta_win[64];
     uint64_t reorder_win[64];
-    size_t delta_cap;   /* == 64 (the window size; kept for parity with
-                         * the wam state shape) */
+    size_t delta_cap; /* == 64 (the window size; kept for parity with
+                       * the wam state shape) */
     size_t reorder_cap;
     size_t delta_pos, delta_n;
     size_t reorder_pos, reorder_n;
@@ -86,7 +86,7 @@ typedef struct {
     uint32_t capacity;
     uint32_t batch_max;
     uint64_t batch_deadline_ns;
-    arc_rel_t *heap;   /* capacity entries */
+    arc_rel_t *heap; /* capacity entries */
     size_t heap_n;
     uint8_t *slab;      /* capacity * entry_max */
     uint8_t *slot_used; /* capacity flags */
@@ -109,14 +109,12 @@ typedef struct {
     uint32_t len;
 } arc_sched_t;
 
-arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n,
-                        size_t len, int *scheduled_now);
+arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len, int *scheduled_now);
 
 /* arc_heap.c: the release queue. */
 int arc_heap_push(arc_state_t *a, const arc_rel_t *rel);
 int arc_heap_pop(arc_state_t *a, arc_rel_t *out);
-void arc_note_release(arc_state_t *a, const arc_rel_t *rel,
-                      uint64_t now_ns);
+void arc_note_release(arc_state_t *a, const arc_rel_t *rel, uint64_t now_ns);
 int arc_drain(arc_state_t *s, uint64_t now_ns);
 
 /* percentile helper shared with tests */

@@ -77,8 +77,8 @@ void wm_ctrl_cfg_default(wm_ctrl_cfg_t *cfg) {
     cfg->embodiment = 0;        /* auto: 1 when single hot path, else 2 */
 }
 
-int wm_ctrl_init(wm_ctrl_t *ctl, const wm_profile_t *base,
-                 const wm_ctrl_cfg_t *cfg, uint32_t n_paths) {
+int wm_ctrl_init(wm_ctrl_t *ctl, const wm_profile_t *base, const wm_ctrl_cfg_t *cfg,
+                 uint32_t n_paths) {
     if (ctl == NULL || base == NULL || cfg == NULL)
         return -EINVAL;
     if (n_paths == 0 || n_paths > WM_MAX_PATHS || base->n != n_paths)
@@ -94,8 +94,7 @@ int wm_ctrl_init(wm_ctrl_t *ctl, const wm_profile_t *base,
     return 0;
 }
 
-void wm_ctrl_on_stats(wm_ctrl_t *ctl, uint32_t path,
-                      const sdf_origin_stats_t *st) {
+void wm_ctrl_on_stats(wm_ctrl_t *ctl, uint32_t path, const sdf_origin_stats_t *st) {
     if (ctl == NULL || st == NULL || path >= ctl->n_paths)
         return;
     ctl->last[path] = *st;

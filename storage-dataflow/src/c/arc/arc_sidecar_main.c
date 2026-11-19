@@ -46,8 +46,7 @@ typedef struct {
 
 static sidecar_t g_sidecar;
 
-static int apply_trampoline(void *ctx, const void *entry, size_t len,
-                            uint64_t release_ts) {
+static int apply_trampoline(void *ctx, const void *entry, size_t len, uint64_t release_ts) {
     (void)ctx;
     (void)entry;
     (void)len;
@@ -81,8 +80,7 @@ int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
         return -EINVAL;
     }
 
-    size_t qsz = spsc_sizeof(cfg->capacity ? cfg->capacity : 64,
-                             (uint32_t)sizeof(sidecar_slot_t));
+    size_t qsz = spsc_sizeof(cfg->capacity ? cfg->capacity : 64, (uint32_t)sizeof(sidecar_slot_t));
     if (qsz == 0) {
         free(g_sidecar.pacer);
         return -EINVAL;
@@ -93,8 +91,7 @@ int arc_sidecar_start(const arc_cfg_t *cfg, int mode) {
         return -ENOMEM;
     }
     g_sidecar.in = (spsc_ring_t *)g_sidecar.in_mem;
-    if (spsc_init(g_sidecar.in, g_sidecar.in_mem,
-                  cfg->capacity ? cfg->capacity : 64,
+    if (spsc_init(g_sidecar.in, g_sidecar.in_mem, cfg->capacity ? cfg->capacity : 64,
                   (uint32_t)sizeof(sidecar_slot_t)) != 0) {
         free(g_sidecar.in_mem);
         free(g_sidecar.pacer);
@@ -131,8 +128,7 @@ int arc_sidecar_pump_once(void) {
     int submitted = 0;
     sidecar_slot_t slot;
     while (spsc_try_pop(g_sidecar.in, &slot)) {
-        int rc = arc_submit(g_sidecar.pacer, slot.bytes, slot.len,
-                            slot.producer_ts);
+        int rc = arc_submit(g_sidecar.pacer, slot.bytes, slot.len, slot.producer_ts);
         if (rc == -EAGAIN)
             break; /* ARC queue full: the entry stays for the next pump
                     * (it is already out of the ring — re-push it) */
@@ -165,8 +161,12 @@ arc_stats_t arc_sidecar_stats(void) {
     return arc_stats(g_sidecar.pacer);
 }
 
-uint64_t arc_sidecar_applied(void) { return g_sidecar.applied; }
-int arc_sidecar_mode(void) { return g_sidecar.mode; }
+uint64_t arc_sidecar_applied(void) {
+    return g_sidecar.applied;
+}
+int arc_sidecar_mode(void) {
+    return g_sidecar.mode;
+}
 
 /* ---- W6.1: the live scrape over the sidecar's own dump -------------- */
 
@@ -175,14 +175,12 @@ static sdf_metrics_endpoint_t *g_sidecar_ep;
 static int sidecar_render(void *ud, FILE *out) {
     (void)ud;
     arc_stats_t st = arc_sidecar_stats();
-    fprintf(out, "sdf_arc_releases_total %llu\n",
-            (unsigned long long)st.releases);
+    fprintf(out, "sdf_arc_releases_total %llu\n", (unsigned long long)st.releases);
     fprintf(out, "sdf_arc_mode %d\n", arc_sidecar_mode());
     fprintf(out, "sdf_arc_D_ns %.0f\n", st.D);
     fprintf(out, "sdf_arc_E_ns %.0f\n", st.E);
     fprintf(out, "sdf_arc_heap_depth %u\n", st.heap_depth);
-    fprintf(out, "sdf_arc_guard_waits_total %llu\n",
-            (unsigned long long)st.guard_waits);
+    fprintf(out, "sdf_arc_guard_waits_total %llu\n", (unsigned long long)st.guard_waits);
     fprintf(out, "sdf_arc_added_latency_p99_ns %.0f\n", st.added_p99_ns);
     return 0;
 }

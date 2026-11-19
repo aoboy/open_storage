@@ -46,9 +46,9 @@ int sdf_fluid_efficiency_ok(uint32_t k, uint32_t n, double eps);
 int sdf_fluid_cost_ok(uint32_t k, uint32_t n, double eps);
 
 typedef struct {
-    uint32_t k;      /* source symbols in the block */
-    uint32_t n;      /* budget ceil(K/(1-eps)); == k when eps == 0 */
-    _Atomic uint64_t sent;       /* frames admitted (single blaster) */
+    uint32_t k;                     /* source symbols in the block */
+    uint32_t n;                     /* budget ceil(K/(1-eps)); == k when eps == 0 */
+    _Atomic uint64_t sent;          /* frames admitted (single blaster) */
     _Atomic uint64_t reported_lost; /* cumulative reported losses
                                         (monotone max of seen) */
 } sdf_fluid_budget_t;
@@ -76,8 +76,8 @@ uint64_t sdf_fluid_budget_allowable(const sdf_fluid_budget_t *b);
 
 typedef struct {
     double eps;
-    uint64_t budget_n;  /* the chain's L_0 denominator */
-    uint32_t round;     /* count reports folded */
+    uint64_t budget_n;   /* the chain's L_0 denominator */
+    uint32_t round;      /* count reports folded */
     uint32_t sent_round; /* wave telemetry (metrics only) */
     uint32_t recv_round;
     double loss_prod;   /* == cumulative_lost / N exactly (section 4.3) */

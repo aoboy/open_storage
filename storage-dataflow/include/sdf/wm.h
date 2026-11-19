@@ -58,15 +58,15 @@ typedef struct {
     uint32_t cdf[WM_MAX_PATHS];
     uint32_t perm[WM_MAX_UNITS];
     uint32_t unit_to_path[WM_MAX_UNITS];
-    uint32_t method; /* wm_method_t */
-    uint32_t sa;     /* shuffle seed a, in [0, m) */
-    uint32_t sb;     /* shuffle seed b, odd, in [1, m) */
+    uint32_t method;                    /* wm_method_t */
+    uint32_t sa;                        /* shuffle seed a, in [0, m) */
+    uint32_t sb;                        /* shuffle seed b, odd, in [1, m) */
     uint32_t path_of_key[WM_MAX_UNITS]; /* key -> path LUT (shuffles) */
 } wm_compiled_t;
 
 /* Spray key methods ([WAM] section 4, ADR-0007). */
 typedef enum {
-    WM_METHOD_PLAIN = 0,     /* key = theta(counter) */
+    WM_METHOD_PLAIN = 0,    /* key = theta(counter) */
     WM_METHOD_SHUFFLE1 = 1, /* key = theta((sa + counter*sb) mod m) */
     WM_METHOD_SHUFFLE2 = 2, /* key = (sa + sb*theta(counter)) mod m */
 } wm_method_t;
@@ -87,8 +87,7 @@ int wm_profile_compile(const wm_profile_t *p, wm_compiled_t *out);
  * validated (sb odd, both seeds < m) and carried in the compiled form.
  * wm_profile_compile() is the PLAIN default (sa=0, sb=1).
  */
-int wm_profile_compile_cfg(const wm_profile_t *p, wm_compiled_t *out,
-                           const wm_compile_cfg_t *cfg);
+int wm_profile_compile_cfg(const wm_profile_t *p, wm_compiled_t *out, const wm_compile_cfg_t *cfg);
 
 /*
  * Deterministic seed rotation for wrap (the wam-send rule): caller
@@ -128,8 +127,8 @@ typedef struct {
     uint32_t theta_hi; /* severity threshold, high band */
     uint32_t theta_lo; /* severity threshold, low band */
     uint64_t t_min_ns; /* rate limit between applied updates */
-    int embodiment;   /* 0 = auto: mode 1 when exactly one path whacked,
-                         else mode 2 (the wam plan G.2 rule) */
+    int embodiment;    /* 0 = auto: mode 1 when exactly one path whacked,
+                          else mode 2 (the wam plan G.2 rule) */
 } wm_ctrl_cfg_t;
 
 /*
@@ -153,10 +152,9 @@ typedef struct {
 } wm_ctrl_t;
 
 void wm_ctrl_cfg_default(wm_ctrl_cfg_t *cfg);
-int wm_ctrl_init(wm_ctrl_t *ctl, const wm_profile_t *base,
-                 const wm_ctrl_cfg_t *cfg, uint32_t n_paths);
-void wm_ctrl_on_stats(wm_ctrl_t *ctl, uint32_t path,
-                      const sdf_origin_stats_t *st);
+int wm_ctrl_init(wm_ctrl_t *ctl, const wm_profile_t *base, const wm_ctrl_cfg_t *cfg,
+                 uint32_t n_paths);
+void wm_ctrl_on_stats(wm_ctrl_t *ctl, uint32_t path, const sdf_origin_stats_t *st);
 /* Returns 1 when an update was applied (rate limit + thresholds), 0
  * when not; *out always carries the current working profile. */
 int wm_ctrl_tick(wm_ctrl_t *ctl, uint64_t now_ns, wm_profile_t *out);

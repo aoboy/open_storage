@@ -42,8 +42,8 @@ typedef struct {
     uint8_t *mem;
 } repair_ctx_t;
 
-static void repair_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out,
-                      uint32_t len, int status) {
+static void repair_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
+                      int status) {
     (void)out;
     (void)len;
     repair_ctx_t *ctx = ud;
@@ -78,10 +78,9 @@ uint64_t sdf_fluid_repair_stream_bytes(const sdf_fluid_repair_cfg_t *cfg) {
     return (uint64_t)stream_symbols(cfg) * cfg->sym_len;
 }
 
-int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg,
-                                   uint8_t *buf, size_t buf_len) {
-    if (cfg == NULL || buf == NULL ||
-        buf_len < sdf_fluid_repair_stream_bytes(cfg))
+int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg, uint8_t *buf,
+                                   size_t buf_len) {
+    if (cfg == NULL || buf == NULL || buf_len < sdf_fluid_repair_stream_bytes(cfg))
         return -EINVAL;
 
     size_t block_len = (size_t)cfg->k * cfg->sym_len;
@@ -91,14 +90,13 @@ int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg,
     for (size_t i = 0; i < block_len; i++)
         block[i] = (uint8_t)((i * 2654435761ull) >> 24);
 
-    uint32_t codec = cfg->arm == SDF_REPAIR_NANORQ ? SDF_FOUNTAIN_NANORQ
-                                                   : SDF_FOUNTAIN_LT;
-    uint32_t overhead_pct = cfg->arm == SDF_REPAIR_CONTROL
-                                ? 0u
-                                : stream_overhead_pct(cfg);
+    uint32_t codec = cfg->arm == SDF_REPAIR_NANORQ ? SDF_FOUNTAIN_NANORQ : SDF_FOUNTAIN_LT;
+    uint32_t overhead_pct = cfg->arm == SDF_REPAIR_CONTROL ? 0u : stream_overhead_pct(cfg);
     fe_cfg_t ecfg = {
-        .block_len = block_len, .k = cfg->k,
-        .overhead_pct = overhead_pct, .codec = codec,
+        .block_len = block_len,
+        .k = cfg->k,
+        .overhead_pct = overhead_pct,
+        .codec = codec,
     };
     size_t esz = fe_sizeof(&ecfg);
     void *enc = esz ? malloc(esz) : NULL;
@@ -109,8 +107,8 @@ int sdf_fluid_repair_encode_stream(const sdf_fluid_repair_cfg_t *cfg,
     }
     int rc = 0;
     for (uint32_t esi = 0; esi < stream_symbols(cfg) && rc == 0; esi++)
-        rc = fe_generate(enc, esi, buf + (size_t)esi * cfg->sym_len,
-                        cfg->sym_len) == 0 ? 0 : -EINVAL;
+        rc = fe_generate(enc, esi, buf + (size_t)esi * cfg->sym_len, cfg->sym_len) == 0 ? 0
+                                                                                        : -EINVAL;
     fe_destroy(enc);
     free(enc);
     free(block);
@@ -135,8 +133,8 @@ static int wait_quiet(sdf_origin_t *o, uint32_t n) {
 }
 
 /* Feed one landed ESI to the decoder from the stream file. */
-static int feed_symbol(void *dec, FILE *stream, uint32_t esi,
-                       const sdf_fluid_repair_cfg_t *cfg, uint64_t *rx_bytes) {
+static int feed_symbol(void *dec, FILE *stream, uint32_t esi, const sdf_fluid_repair_cfg_t *cfg,
+                       uint64_t *rx_bytes) {
     uint8_t sym[8192];
     if (cfg->sym_len > sizeof(sym))
         return -EINVAL;
@@ -150,12 +148,10 @@ static int feed_symbol(void *dec, FILE *stream, uint32_t esi,
 
 /* ---- the run ------------------------------------------------------------ */
 
-int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
-                         sdf_fluid_repair_stats_t *out) {
+int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_stats_t *out) {
     if (cfg == NULL || out == NULL)
         return -EINVAL;
-    if (cfg->k == 0 || cfg->k > 64u * 1024u || cfg->sym_len == 0 ||
-        cfg->sym_len > 8192u)
+    if (cfg->k == 0 || cfg->k > 64u * 1024u || cfg->sym_len == 0 || cfg->sym_len > 8192u)
         return -EINVAL;
     if (cfg->n_origins == 0 || cfg->n_origins > SDF_REPAIR_MAX_ORIGINS)
         return -EINVAL;
@@ -180,8 +176,7 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
         return -EINVAL;
 
     /* decoder */
-    uint32_t codec = cfg->arm == SDF_REPAIR_NANORQ ? SDF_FOUNTAIN_NANORQ
-                                                   : SDF_FOUNTAIN_LT;
+    uint32_t codec = cfg->arm == SDF_REPAIR_NANORQ ? SDF_FOUNTAIN_NANORQ : SDF_FOUNTAIN_LT;
     fd_cfg_t dcfg = {.k = cfg->k, .sym_len = cfg->sym_len};
     size_t dsz = fd_sizeof(&dcfg);
     void *dec = dsz ? malloc(dsz) : NULL;
@@ -225,8 +220,7 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
         prof.b[i] = 1024 / cfg->n_origins;
     for (uint32_t i = 0; i < 1024 % cfg->n_origins; i++)
         prof.b[i]++;
-    wm_compile_cfg_t spray = {.method = WM_METHOD_SHUFFLE1,
-                              .sa = 333, .sb = 735};
+    wm_compile_cfg_t spray = {.method = WM_METHOD_SHUFFLE1, .sa = 333, .sb = 735};
     wm_compiled_t sel;
     if (wm_profile_compile_cfg(&prof, &sel, &spray) != 0) {
         fclose(stream);
@@ -299,8 +293,7 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
              * cumulative-loss quotient is always within slack at the
              * start, and the fallback ends up doing the real work */
             uint32_t wave = cfg->wave ? cfg->wave : budget.n;
-            while (admitted < wave && esi < count &&
-                   sdf_fluid_budget_admit(&budget) == 0) {
+            while (admitted < wave && esi < count && sdf_fluid_budget_admit(&budget) == 0) {
                 sdf_fetch_req_t req;
                 memset(&req, 0, sizeof(req));
                 req.origin_id = wm_select(&sel, counter++);
@@ -326,8 +319,7 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
 
             repair_event_t ev;
             while (spsc_try_pop(ctx.ring, &ev)) {
-                if (ev.landed &&
-                    feed_symbol(dec, stream, ev.esi, cfg, &out->bytes_rx) == 0)
+                if (ev.landed && feed_symbol(dec, stream, ev.esi, cfg, &out->bytes_rx) == 0)
                     out->received++;
             }
             fg_observe(&gate, out->sent, out->received);
@@ -364,8 +356,7 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg,
                                 landed = 1;
                     }
                 }
-                if (landed &&
-                    feed_symbol(dec, stream, e, cfg, &out->bytes_rx) == 0)
+                if (landed && feed_symbol(dec, stream, e, cfg, &out->bytes_rx) == 0)
                     out->received++;
             }
         }

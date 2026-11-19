@@ -44,8 +44,7 @@ static int u64_cmp(const void *a, const void *b) {
     return x < y ? -1 : (x > y ? 1 : 0);
 }
 
-static double res_pctl(const uint64_t *samples, size_t n, size_t cap,
-                       double p) {
+static double res_pctl(const uint64_t *samples, size_t n, size_t cap, double p) {
     if (n == 0)
         return 0.0;
     uint64_t tmp[ARC_RES];
@@ -90,8 +89,8 @@ static void auto_params(arc_state_t *a) {
 
 /* ---- the arrival path (Algorithm 1 + 2, from wam wam_arc_on_recovered) - */
 
-arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n,
-                         size_t len, int *scheduled_now) {
+arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len,
+                        int *scheduled_now) {
     arc_sched_t sched;
     memset(&sched, 0, sizeof(sched));
     sched.block_n = a->next_block++;
@@ -176,9 +175,7 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n,
         double Y = pow_rho(clampd(X, 0, a->U) / a->U, a->rho_u) * a->U;
         a->D += a->lambda_u * Y;
     } else if (X <= -(double)a->J) {
-        double Y = -pow_rho(clampd(fabs(X + (double)a->J), 0, a->U) / a->U,
-                            a->rho_l) *
-                   a->U;
+        double Y = -pow_rho(clampd(fabs(X + (double)a->J), 0, a->U) / a->U, a->rho_l) * a->U;
         a->D += a->lambda_l * Y;
     }
     double dmax = (double)A_n - (double)S_n + (double)a->delta;

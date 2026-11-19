@@ -42,26 +42,26 @@ typedef enum {
 
 /* Paper parameter set ([ARC] section 9 defaults). All times in ns. */
 typedef struct {
-    uint32_t capacity;      /* release-queue slots (power of two >= 2) */
-    uint32_t entry_max;    /* slab slot bytes; larger submits -EINVAL */
+    uint32_t capacity;  /* release-queue slots (power of two >= 2) */
+    uint32_t entry_max; /* slab slot bytes; larger submits -EINVAL */
     arc_mode_t mode;
-    double rho_u;     /* update exponent, late arrivals (0.3..0.7) */
-    double rho_l;     /* update exponent, early arrivals (1.0..2.0) */
-    double lambda_u;  /* update gain, late (0.01..1.0) */
-    double lambda_l;  /* update gain, early (0.01..0.10) */
-    uint64_t U;       /* update clip window (50..200 ms) */
-    uint64_t delta;   /* envelope clamp (30..100 ms) */
-    uint64_t gamma;   /* ARC-Q step (8..20 ms) */
-    uint64_t J;       /* neutral band (0..5 ms) */
-    uint64_t G;       /* QG guard (20..200 ms) */
-    uint64_t T_idle_ns; /* idle re-anchor threshold (0.5..2 s) */
-    int auto_params;  /* U from RTT, delta from delta-window quantiles,
-                         G from reorder quantiles (paper 9.2) */
-    double c_U;       /* auto U multiplier (0.5..2.0) */
-    double c_delta;   /* auto delta multiplier */
-    uint64_t rtt_sm_ns; /* smoothed RTT for auto-U (0 = auto off) */
+    double rho_u;              /* update exponent, late arrivals (0.3..0.7) */
+    double rho_l;              /* update exponent, early arrivals (1.0..2.0) */
+    double lambda_u;           /* update gain, late (0.01..1.0) */
+    double lambda_l;           /* update gain, early (0.01..0.10) */
+    uint64_t U;                /* update clip window (50..200 ms) */
+    uint64_t delta;            /* envelope clamp (30..100 ms) */
+    uint64_t gamma;            /* ARC-Q step (8..20 ms) */
+    uint64_t J;                /* neutral band (0..5 ms) */
+    uint64_t G;                /* QG guard (20..200 ms) */
+    uint64_t T_idle_ns;        /* idle re-anchor threshold (0.5..2 s) */
+    int auto_params;           /* U from RTT, delta from delta-window quantiles,
+                                  G from reorder quantiles (paper 9.2) */
+    double c_U;                /* auto U multiplier (0.5..2.0) */
+    double c_delta;            /* auto delta multiplier */
+    uint64_t rtt_sm_ns;        /* smoothed RTT for auto-U (0 = auto off) */
     uint64_t min_smooth_bytes; /* smaller entries bypass (release at A_n) */
-    uint64_t budget_ns;  /* p99 added-delay alert bound (0 = off) */
+    uint64_t budget_ns;        /* p99 added-delay alert bound (0 = off) */
     /* apply-side drain knobs (the sidecar's poll loop bound) */
     uint32_t batch_max;
     uint64_t batch_deadline_ns;
@@ -69,21 +69,20 @@ typedef struct {
 
 /* Apply callback: entry bytes are slab-owned and valid only inside the
  * call; release_ts is the ARC release time (T_n at drain). */
-typedef int (*arc_apply_fn)(void *ctx, const void *entry, size_t len,
-                            uint64_t release_ts);
+typedef int (*arc_apply_fn)(void *ctx, const void *entry, size_t len, uint64_t release_ts);
 
 /* Stats snapshot (per design 03 §Metrics; the reservoir percentiles
  * are exact while count <= the internal window). */
 typedef struct {
-    double D;      /* current offset (ns) */
-    double E;      /* quantized offset (BASE: == D) */
+    double D; /* current offset (ns) */
+    double E; /* quantized offset (BASE: == D) */
     uint64_t releases;
     uint64_t in_flight;
     uint32_t heap_depth;
     uint64_t idle_reanchors;
     uint64_t guard_waits;
     uint64_t guard_timeouts;
-    uint64_t s_n_rejects; /* absurd-stamp blocks scheduled from A_n */
+    uint64_t s_n_rejects;  /* absurd-stamp blocks scheduled from A_n */
     uint64_t delta_clamps; /* schedules clamped to A_n + delta */
     uint64_t budget_alerts;
     uint64_t added_count;
@@ -97,8 +96,7 @@ typedef struct arc_pacer arc_pacer_t;
 size_t arc_sizeof(const arc_cfg_t *cfg);
 
 /* In-place init over exactly arc_sizeof(cfg) bytes. 0 or -EINVAL. */
-int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn,
-             void *ctx);
+int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn, void *ctx);
 
 /*
  * Submit one recovered entry. producer_ts IS the sender's stamp S_n
@@ -108,8 +106,7 @@ int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn,
  * (released at the next poll), -EAGAIN when the queue is full, -EINVAL
  * on bad arguments.
  */
-int arc_submit(arc_pacer_t *p, const void *entry, size_t len,
-               uint64_t producer_ts);
+int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts);
 
 /*
  * Release every entry whose T_n <= now (in queue order under QG —
