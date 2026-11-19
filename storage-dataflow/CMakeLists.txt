@@ -58,13 +58,15 @@ target_link_libraries(sdf_fluid PUBLIC sdf_common sdf_fountain sdf_wm
 target_link_libraries(sdf_fluid PUBLIC sdf_fountain sdf_common)
 target_include_directories(sdf_fluid PUBLIC include)
 
-# --- ARC pacer ---------------------------------------------------------------
+# --- ARC pacer (plan W4, ADR-0006) -----------------------------------------
 add_library(sdf_arc STATIC
     src/c/arc/arc_heap.c
     src/c/arc/arc_offset.c
     src/c/arc/arc_pacer.c
+    src/c/arc/arc_sidecar_main.c
 )
-target_link_libraries(sdf_arc PUBLIC sdf_common)
+target_link_libraries(sdf_arc PUBLIC sdf_common m)
+target_link_libraries(sdf_arc PUBLIC sdf_common m)
 target_include_directories(sdf_arc PUBLIC include)
 
 # --- Apps (plan W2.5: the P1 proxy shell) ---------------------------------
