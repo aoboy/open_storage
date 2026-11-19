@@ -69,6 +69,52 @@ _Static_assert(sizeof(fe_cfg_t) == 24, "fe_cfg_t size");
 _Static_assert(offsetof(fd_cfg_t, sym_len) == 8, "fd_cfg_t.sym_len offset");
 _Static_assert(sizeof(fd_cfg_t) == 16, "fd_cfg_t size");
 
+/* ARC shadow evidence (W6.10): additive public structs. Existing
+ * arc_cfg_t/arc_stats_t layouts are intentionally unchanged. */
+_Static_assert(ARC_SHADOW_RECORD_CAP == 256, "shadow record retention is ABI-visible");
+_Static_assert(offsetof(arc_shadow_record_t, block_n) == 0, "shadow record.block_n offset");
+_Static_assert(offsetof(arc_shadow_record_t, seq) == 8, "shadow record.seq offset");
+_Static_assert(offsetof(arc_shadow_record_t, S_n) == 16, "shadow record.S_n offset");
+_Static_assert(offsetof(arc_shadow_record_t, A_n) == 24, "shadow record.A_n offset");
+_Static_assert(offsetof(arc_shadow_record_t, T_n) == 32, "shadow record.T_n offset");
+_Static_assert(offsetof(arc_shadow_record_t, release_ns) == 40, "shadow record.release_ns offset");
+_Static_assert(offsetof(arc_shadow_record_t, len) == 48, "shadow record.len offset");
+_Static_assert(offsetof(arc_shadow_record_t, released) == 52, "shadow record.released offset");
+_Static_assert(offsetof(arc_shadow_record_t, immediate_applied) == 56,
+               "shadow record.immediate_applied offset");
+_Static_assert(sizeof(arc_shadow_record_t) == 64, "shadow record size");
+_Static_assert(offsetof(arc_shadow_stats_t, epoch) == 0, "shadow stats.epoch offset");
+_Static_assert(offsetof(arc_shadow_stats_t, schedule_releases) == 8,
+               "shadow stats.schedule_releases offset");
+_Static_assert(offsetof(arc_shadow_stats_t, immediate_applies) == 16,
+               "shadow stats.immediate_applies offset");
+_Static_assert(offsetof(arc_shadow_stats_t, schedule_samples) == 24,
+               "shadow stats.schedule_samples offset");
+_Static_assert(offsetof(arc_shadow_stats_t, budget_alerts) == 32,
+               "shadow stats.budget_alerts offset");
+_Static_assert(offsetof(arc_shadow_stats_t, last_schedule_release_ns) == 40,
+               "shadow stats.last_schedule_release_ns offset");
+_Static_assert(offsetof(arc_shadow_stats_t, last_immediate_apply_ns) == 48,
+               "shadow stats.last_immediate_apply_ns offset");
+_Static_assert(offsetof(arc_shadow_stats_t, scheduled_backlog) == 56,
+               "shadow stats.scheduled_backlog offset");
+_Static_assert(offsetof(arc_shadow_stats_t, record_total) == 64,
+               "shadow stats.record_total offset");
+_Static_assert(offsetof(arc_shadow_stats_t, record_dropped) == 72,
+               "shadow stats.record_dropped offset");
+_Static_assert(offsetof(arc_shadow_stats_t, added_p50_ns) == 80,
+               "shadow stats.added_p50_ns offset");
+_Static_assert(offsetof(arc_shadow_stats_t, added_p95_ns) == 88,
+               "shadow stats.added_p95_ns offset");
+_Static_assert(offsetof(arc_shadow_stats_t, added_p99_ns) == 96,
+               "shadow stats.added_p99_ns offset");
+_Static_assert(offsetof(arc_shadow_stats_t, record_count) == 104,
+               "shadow stats.record_count offset");
+_Static_assert(offsetof(arc_shadow_stats_t, active) == 108, "shadow stats.active offset");
+_Static_assert(offsetof(arc_shadow_stats_t, schedule_mode) == 112,
+               "shadow stats.schedule_mode offset");
+_Static_assert(sizeof(arc_shadow_stats_t) == 120, "shadow stats size");
+
 int main(void) {
     return 0;
 }

@@ -176,7 +176,7 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
 
         if (s->mode >= ARC_MODE_QG) {
             int ordered =
-                s->have_last_release ? (rel.block_n <= s->last_released_n + 1) : (rel.block_n == 0);
+                s->order_initialized ? (rel.block_n <= s->last_released_n + 1) : (rel.block_n == 0);
             if (!ordered) {
                 uint64_t pred_T = min_pred_T(s, rel.block_n);
                 if (pred_T != UINT64_MAX) {
@@ -208,7 +208,10 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
         }
 
         arc_note_release(s, &rel, now_ns);
+        s->last_release = rel;
+        s->last_release_valid = 1;
         s->last_released_n = rel.block_n;
+        s->order_initialized = 1;
         if (s->apply != NULL) {
             uint8_t *entry = s->slab + (size_t)rel.slot * s->entry_max;
             (void)s->apply(s->ctx, entry, rel.len, now_ns);
@@ -231,4 +234,37 @@ int arc_drain(arc_state_t *s, uint64_t now_ns) {
         }
     }
     return released;
+}
+
+void arc_discard_all(arc_state_t *s) {
+    if (s == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < s->heap_n; i++) {
+        s->slot_used[s->heap[i].slot] = 0;
+    }
+    s->heap_n = 0;
+    if (s->next_block > 0) {
+        /* The discarded blocks were applied on the shadow path. Mark
+         * them released for QG ordering so the first live block after
+         * a promotion is not parked as a missing-predecessor gap. */
+        s->last_released_n = s->next_block - 1;
+        s->order_initialized = 1;
+    }
+}
+
+void arc_flush_ready(arc_state_t *s, uint64_t now_ns) {
+    if (s == NULL || s->heap_n == 0) {
+        return;
+    }
+    for (size_t i = 0; i < s->heap_n; i++) {
+        s->heap[i].T_n = now_ns;
+        s->heap[i].T_deadline = now_ns;
+        s->heap[i].parked = 0;
+    }
+    /* T_n ties now resolve on seq, so the flush releases in submit
+     * order even when the QG schedule had reordered the entries. */
+    for (size_t i = s->heap_n / 2; i > 0; i--) {
+        heap_down(s, i - 1);
+    }
 }

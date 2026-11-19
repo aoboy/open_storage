@@ -25,6 +25,19 @@ typedef struct {
     uint8_t parked;
 } arc_rel_t;
 
+/* arc_offset.c: the arrival path — returns the schedule for the entry
+ * (T_n/T_deadline + identity); *scheduled_now: 0 = queue it, 1 = oracle
+ * release, 2 = small-entry bypass (queued at T_n == A_n). */
+typedef struct {
+    uint64_t T_n;
+    uint64_t T_deadline;
+    uint64_t block_n;
+    uint64_t S_n;
+    uint64_t A_n;
+    uint64_t seq;
+    uint32_t len;
+} arc_sched_t;
+
 typedef struct {
     /* Algorithm state (the paper's variables) */
     double D;
@@ -61,9 +74,17 @@ typedef struct {
     uint64_t submit_seq;
     uint64_t next_block;
 
+    /* W6.10: last accepted schedule, for the sidecar's shadow records.
+     * Internal only; the public ABI and arc_stats_t are unchanged. */
+    arc_sched_t last_sched;
+    int last_sched_valid;
+
     /* release bookkeeping (populated by arc_heap) */
     uint64_t last_released_n;
-    int have_last_release;
+    int have_last_release; /* measurement bookkeeping */
+    int order_initialized; /* QG predecessor state, independent after a discard */
+    arc_rel_t last_release;
+    int last_release_valid;
     uint64_t last_release_ts;
     uint64_t last_release_S_ns;
     uint64_t added_samples[256];
@@ -96,19 +117,6 @@ struct arc_pacer {
     arc_state_t st;
 };
 
-/* arc_offset.c: the arrival path — returns the schedule for the entry
- * (T_n/T_deadline + identity); *scheduled_now: 0 = queue it, 1 = oracle
- * release, 2 = small-entry bypass (queued at T_n == A_n). */
-typedef struct {
-    uint64_t T_n;
-    uint64_t T_deadline;
-    uint64_t block_n;
-    uint64_t S_n;
-    uint64_t A_n;
-    uint64_t seq;
-    uint32_t len;
-} arc_sched_t;
-
 arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len, int *scheduled_now);
 
 /* arc_heap.c: the release queue. */
@@ -116,6 +124,16 @@ int arc_heap_push(arc_state_t *a, const arc_rel_t *rel);
 int arc_heap_pop(arc_state_t *a, arc_rel_t *out);
 void arc_note_release(arc_state_t *a, const arc_rel_t *rel, uint64_t now_ns);
 int arc_drain(arc_state_t *s, uint64_t now_ns);
+
+/* W6.10: drop a shadow schedule without invoking apply. The entries
+ * were already applied on the shadow immediate path; QG order bookkeeping
+ * advances past them so the next live entry is not mistaken for a gap. */
+void arc_discard_all(arc_state_t *s);
+
+/* Mode-transition flush: re-key every queued entry to now so the next
+ * poll releases the backlog in submit order (seq breaks the T_n ties)
+ * with an honest added-latency sample. */
+void arc_flush_ready(arc_state_t *s, uint64_t now_ns);
 
 /* percentile helper shared with tests */
 double arc_res_pctl(const uint64_t *samples, size_t n, size_t cap, double p);

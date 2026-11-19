@@ -1,12 +1,14 @@
 /*
- * ARC sidecar integration tests (plan prompt W4.3/W4.5).
+ * ARC sidecar integration tests (plan prompt W4.3/W4.5/W6.9/W6.10).
  *
- * The sidecar over the SPSC ring: shadow mode applies immediately with
- * the schedule computed (metrics alive), live mode owns the timing
- * (entries release per ARC-QG — ordering holds), killed is the oracle
- * (added latency zero by construction), and the modes flip live
- * without restart (the design-03 promotion + kill-switch flow).
- * A bursty generator exercises the pump loop end to end.
+ * The sidecar over the SPSC ring: shadow runs a real non-applying QG
+ * schedule while applying each entry immediately and recording the
+ * schedule separately (W6.10), live mode owns the timing (entries
+ * release per ARC-QG — ordering holds), killed is the oracle (added
+ * latency zero by construction), and the modes flip live without
+ * restart (the design-03 promotion + kill-switch flow). A bursty
+ * generator exercises the pump loop end to end; the saturation leg
+ * pins the W6.9 pending-entry retention path.
  */
 
 #include "sdf/arc.h"
@@ -149,15 +151,263 @@ static void test_mode_flip(void) {
     CHECK(arc_sidecar_set_mode(1) == -EINVAL); /* no sidecar to flip */
 }
 
+/* W6.10: shadow computes a real QG schedule while the immediate path
+ * applies each accepted entry exactly once. The two metric families
+ * must not double-count. */
+static void test_shadow_evidence(void) {
+    arc_cfg_t cfg;
+    base_cfg(&cfg);
+    CHECK(arc_sidecar_start(&cfg, 0) == 0);
+
+    arc_shadow_stats_t ss;
+    CHECK(arc_sidecar_shadow_stats(NULL) == -EINVAL);
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.epoch == 1);
+    CHECK(ss.active == 1);
+    CHECK(ss.schedule_mode == ARC_MODE_QG);
+    CHECK(ss.schedule_samples == 0);
+    CHECK(ss.immediate_applies == 0);
+    CHECK(ss.record_count == 0);
+
+    const int N = 8;
+    uint64_t stamps[N];
+    uint64_t now = sdf_now_ns();
+    for (int i = 0; i < N; i++) {
+        char entry[64];
+        memset(entry, i + 1, sizeof(entry));
+        stamps[i] = now - 10000000ull;
+        CHECK(arc_sidecar_submit(entry, sizeof(entry), stamps[i]) == 0);
+        CHECK(arc_sidecar_pump_once() >= 1);
+    }
+    CHECK(arc_sidecar_applied() == (uint64_t)N);
+
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.immediate_applies == (uint64_t)N);
+    CHECK(ss.schedule_releases == 0);
+    CHECK(ss.scheduled_backlog == (uint64_t)N);
+    CHECK(ss.record_total == (uint64_t)N);
+    CHECK(ss.record_count == (uint32_t)N);
+    CHECK(ss.record_dropped == 0);
+
+    arc_shadow_record_t recs[ARC_SHADOW_RECORD_CAP];
+    uint32_t n = arc_sidecar_shadow_records(recs, ARC_SHADOW_RECORD_CAP);
+    CHECK(n == (uint32_t)N);
+    for (int i = 0; i < N; i++) {
+        CHECK(recs[i].block_n == (uint64_t)i);
+        CHECK(recs[i].seq == (uint64_t)i);
+        CHECK(recs[i].S_n == stamps[i]);
+        CHECK(recs[i].A_n >= stamps[i]);
+        CHECK(recs[i].T_n >= recs[i].A_n);
+        CHECK(recs[i].len == 64);
+        CHECK(recs[i].released == 0);
+        CHECK(recs[i].immediate_applied == 1);
+        CHECK(recs[i].release_ns == 0);
+    }
+
+    sdf_sleep_ns(30000000ull);
+    CHECK(arc_sidecar_pump_once() >= N);
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.schedule_releases == (uint64_t)N);
+    CHECK(ss.schedule_samples == (uint64_t)N);
+    CHECK(ss.scheduled_backlog == 0);
+    CHECK(ss.last_schedule_release_ns > 0);
+    CHECK(ss.added_p99_ns > 0.0);
+    CHECK(ss.immediate_applies == (uint64_t)N);
+    CHECK(arc_sidecar_applied() == (uint64_t)N); /* no late shadow apply */
+
+    n = arc_sidecar_shadow_records(recs, ARC_SHADOW_RECORD_CAP);
+    CHECK(n == (uint32_t)N);
+    for (int i = 0; i < N; i++) {
+        CHECK(recs[i].released == 1);
+        CHECK(recs[i].release_ns >= recs[i].T_n);
+    }
+
+    /* max is a newest-window bound, in submit order */
+    n = arc_sidecar_shadow_records(recs, 3);
+    CHECK(n == 3);
+    CHECK(recs[0].block_n == (uint64_t)(N - 3));
+    CHECK(recs[2].block_n == (uint64_t)(N - 1));
+    CHECK(arc_sidecar_shadow_records(NULL, 10) == 0);
+    CHECK(arc_sidecar_shadow_records(recs, 0) == 0);
+
+    arc_sidecar_stop();
+    CHECK(arc_sidecar_shadow_stats(&ss) == -EINVAL);
+    CHECK(arc_sidecar_shadow_records(recs, 1) == 0);
+}
+
+/* W6.10 transitions: leaving shadow discards an already-applied
+ * schedule; entering shadow flushes live backlog; kills never
+ * duplicate an apply. */
+static void test_shadow_transitions(void) {
+    arc_cfg_t cfg;
+    base_cfg(&cfg);
+    CHECK(arc_sidecar_start(&cfg, 0) == 0);
+
+    uint64_t future = sdf_now_ns() + 50000000ull;
+    char entry[64];
+    memset(entry, 9, sizeof(entry));
+    for (int i = 0; i < 2; i++) {
+        CHECK(arc_sidecar_submit(entry, sizeof(entry), future + (uint64_t)i) == 0);
+        CHECK(arc_sidecar_pump_once() >= 1);
+    }
+    CHECK(arc_sidecar_applied() == 2);
+    CHECK(arc_sidecar_stats().in_flight == 2);
+
+    arc_shadow_stats_t ss;
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.scheduled_backlog == 2);
+
+    /* shadow -> live: the schedule was evidence only; its entries
+     * were already applied immediately. */
+    CHECK(arc_sidecar_set_mode(1) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_mode() == 1);
+    CHECK(arc_sidecar_applied() == 2);
+    CHECK(arc_sidecar_stats().in_flight == 0);
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.active == 0);
+    CHECK(ss.epoch == 1);
+    CHECK(ss.scheduled_backlog == 0);
+    CHECK(ss.record_count == 2); /* inspectable after the flip */
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_applied() == 2); /* no late shadow callback */
+
+    /* live -> shadow: accepted live backlog is flushed before the
+     * shadow epoch starts. */
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future) == 0);
+    CHECK(arc_sidecar_pump_once() >= 1);
+    CHECK(arc_sidecar_applied() == 2);
+    CHECK(arc_sidecar_stats().in_flight == 1);
+    CHECK(arc_sidecar_set_mode(0) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_mode() == 0);
+    CHECK(arc_sidecar_applied() == 3);
+    CHECK(arc_sidecar_stats().in_flight == 0);
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.epoch == 2);
+    CHECK(ss.active == 1);
+    CHECK(ss.immediate_applies == 0);
+    CHECK(ss.record_count == 0);
+
+    /* shadow -> killed: discard the schedule, apply only new entries. */
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future) == 0);
+    CHECK(arc_sidecar_pump_once() >= 1);
+    CHECK(arc_sidecar_applied() == 4);
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.immediate_applies == 1);
+    CHECK(ss.scheduled_backlog == 1);
+    CHECK(arc_sidecar_set_mode(2) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_mode() == 2);
+    CHECK(arc_sidecar_applied() == 4);
+    CHECK(arc_sidecar_stats().in_flight == 0);
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.active == 0);
+    CHECK(ss.scheduled_backlog == 0);
+
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), sdf_now_ns()) == 0);
+    CHECK(arc_sidecar_pump_once() >= 1);
+    CHECK(arc_sidecar_applied() == 5);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_applied() == 5);
+    arc_sidecar_stop();
+}
+
+/* The record window retains the newest ARC_SHADOW_RECORD_CAP accepted
+ * entries and reports older evictions deterministically. */
+static void test_shadow_record_cap(void) {
+    arc_cfg_t cfg;
+    base_cfg(&cfg);
+    cfg.capacity = 512;
+    cfg.batch_max = 128;
+    CHECK(arc_sidecar_start(&cfg, 0) == 0);
+
+    const int N = 300;
+    uint64_t future = sdf_now_ns() + 50000000ull;
+    char entry[64];
+    memset(entry, 4, sizeof(entry));
+    for (int i = 0; i < N; i++) {
+        CHECK(arc_sidecar_submit(entry, sizeof(entry), future + (uint64_t)i) == 0);
+    }
+    CHECK(arc_sidecar_pump_once() >= N);
+    CHECK(arc_sidecar_applied() == (uint64_t)N);
+
+    arc_shadow_stats_t ss;
+    CHECK(arc_sidecar_shadow_stats(&ss) == 0);
+    CHECK(ss.record_total == (uint64_t)N);
+    CHECK(ss.record_count == ARC_SHADOW_RECORD_CAP);
+    CHECK(ss.record_dropped == (uint64_t)(N - ARC_SHADOW_RECORD_CAP));
+
+    arc_shadow_record_t recs[ARC_SHADOW_RECORD_CAP];
+    uint32_t n = arc_sidecar_shadow_records(recs, ARC_SHADOW_RECORD_CAP);
+    CHECK(n == ARC_SHADOW_RECORD_CAP);
+    CHECK(recs[0].block_n == (uint64_t)(N - ARC_SHADOW_RECORD_CAP));
+    CHECK(recs[ARC_SHADOW_RECORD_CAP - 1].block_n == (uint64_t)(N - 1));
+    for (uint32_t i = 1; i < n; i++) {
+        CHECK(recs[i].block_n == recs[i - 1].block_n + 1);
+        CHECK(recs[i].seq == recs[i - 1].seq + 1);
+    }
+    arc_sidecar_stop();
+}
+
+/* W6.9: a ring-accepted entry refused by a full pacer is retained in
+ * the pending slot and applied exactly once after the backlog drains. */
+static void test_saturation_retention(void) {
+    arc_cfg_t cfg;
+    base_cfg(&cfg);
+    cfg.capacity = 2;
+    cfg.batch_max = 1;
+    CHECK(arc_sidecar_start(&cfg, 1) == 0);
+
+    char entry[64];
+    memset(entry, 5, sizeof(entry));
+    uint64_t future = sdf_now_ns() + 50000000ull;
+
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future) == 0);
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 1) == 0);
+    /* the ring is full: this caller still owns the refused entry */
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 2) == -EAGAIN);
+    CHECK(arc_sidecar_pump_once() >= 2);
+    CHECK(arc_sidecar_applied() == 0);
+    CHECK(arc_sidecar_stats().in_flight == 2);
+
+    /* two more ring-accepted entries; the pacer is full */
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 3) == 0);
+    CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 4) == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_applied() == 0);
+    CHECK(arc_sidecar_stats().in_flight == 2);
+
+    /* kill drains the old backlog first; the pending entry is retried
+     * on the next pump and nothing is lost or duplicated */
+    CHECK(arc_sidecar_set_mode(2) == 0);
+    CHECK(arc_sidecar_pump_once() >= 2);
+    CHECK(arc_sidecar_applied() == 2);
+    CHECK(arc_sidecar_stats().in_flight == 0);
+    CHECK(arc_sidecar_pump_once() >= 2);
+    CHECK(arc_sidecar_applied() == 4);
+    CHECK(arc_sidecar_stats().in_flight == 0);
+    CHECK(arc_sidecar_pump_once() >= 0);
+    CHECK(arc_sidecar_applied() == 4);
+    CHECK(arc_sidecar_stats().releases == 4);
+    arc_sidecar_stop();
+    CHECK(arc_sidecar_applied() == 4);
+}
+
 static void test_scrape(void);
 
 int main(void) {
     test_modes();
     test_mode_flip();
+    test_shadow_evidence();
+    test_shadow_transitions();
+    test_shadow_record_cap();
+    test_saturation_retention();
     test_scrape();
     test_validation();
     printf("test_arc_sidecar: ok (killed oracle, live ordered burst, "
-           "shadow immediate, W6.4 one-pump mode flips, validation)\n");
+           "W6.10 shadow schedule/records, exactly-once transitions, "
+           "W6.9 saturation retention, W6.4 one-pump flips, validation)\n");
     return 0;
 }
 
@@ -211,6 +461,9 @@ static void test_scrape(void) {
     CHECK(strstr(buf, "sdf_arc_releases_total") != NULL);
     CHECK(strstr(buf, "sdf_arc_mode 1") != NULL);
     CHECK(strstr(buf, "sdf_arc_added_latency_p99_ns") != NULL);
+    CHECK(strstr(buf, "sdf_arc_shadow_active 0") != NULL);
+    CHECK(strstr(buf, "sdf_arc_shadow_schedule_mode 0") != NULL);
+    CHECK(strstr(buf, "sdf_arc_shadow_added_latency_p99_ns") != NULL);
 
     arc_sidecar_stop();                        /* stops the endpoint with the sidecar */
     CHECK(arc_sidecar_serve(addr) == -EINVAL); /* stopped: refuse */

@@ -15,6 +15,7 @@
 
 #include "arc_internal.h"
 
+#include <errno.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
@@ -417,6 +418,61 @@ static void test_replay_qg(void) {
            N, st.added_p99_ns / 1e6);
 }
 
+/* Mode-transition flush: a QG schedule can have T_n out of submit
+ * order, but a flush must release the accepted backlog in submit order
+ * (W6.10's kill/transition guarantee). */
+static void test_flush_preserves_submit_order(void) {
+    arc_cfg_t cfg;
+    arc_pacer_t *p;
+    release_log_t log;
+    pacer_setup(&p, &cfg, &log, ARC_MODE_QG);
+
+    uint64_t now = sdf_now_ns();
+    char entry[64];
+    memset(entry, 0, sizeof(entry));
+    CHECK(arc_submit(p, entry, sizeof(entry), now + 100000000ull) == 0); /* block 0: late */
+    memset(entry, 1, sizeof(entry));
+    CHECK(arc_submit(p, entry, sizeof(entry), now) == 0); /* block 1: early */
+    CHECK(arc_stats(p).in_flight == 2);
+
+    arc_flush_ready(&p->st, now);
+    CHECK(arc_poll(p, now) == 2);
+    CHECK(log.n == 2);
+    CHECK(log.blocks[0] == 0);
+    CHECK(log.blocks[1] == 1);
+    free(p);
+}
+
+/* W6.9: backpressure is side-effect free — a refused submit must not
+ * consume a block/sequence number or perturb the estimator before the
+ * caller retries it. */
+static void test_backpressure_retains_state(void) {
+    arc_cfg_t cfg;
+    arc_pacer_t *p;
+    release_log_t log;
+    pacer_setup(&p, &cfg, &log, ARC_MODE_QG);
+
+    uint64_t future = sdf_now_ns() + 50000000ull;
+    char entry[64];
+    memset(entry, 6, sizeof(entry));
+    for (uint32_t i = 0; i < cfg.capacity; i++) {
+        CHECK(arc_submit(p, entry, sizeof(entry), future + i) == 0);
+    }
+    arc_stats_t before = arc_stats(p);
+    CHECK(before.in_flight == cfg.capacity);
+    CHECK(arc_submit(p, entry, sizeof(entry), future + cfg.capacity) == -EAGAIN);
+    arc_stats_t after = arc_stats(p);
+    CHECK(after.in_flight == before.in_flight);
+    CHECK(after.D == before.D);
+    CHECK(after.E == before.E);
+    CHECK(after.releases == before.releases);
+
+    arc_poll(p, UINT64_MAX / 4);
+    CHECK(log.n == (int)cfg.capacity);
+    CHECK(arc_stats(p).releases == cfg.capacity);
+    free(p);
+}
+
 int main(void) {
     test_golden_linear();
     test_golden_exponent();
@@ -424,7 +480,10 @@ int main(void) {
     test_paths();
     test_qg_guard();
     test_replay_qg();
+    test_flush_preserves_submit_order();
+    test_backpressure_retains_state();
     printf("test_arc_core: ok (paper 12.3 goldens, Q invariants, oracle, "
-           "absurd stamps, QG guard park/wake)\n");
+           "absurd stamps, QG guard park/wake, W6.10 ordered transition "
+           "flush, W6.9 side-effect-free backpressure)\n");
     return 0;
 }

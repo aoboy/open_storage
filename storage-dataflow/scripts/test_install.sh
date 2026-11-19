@@ -67,6 +67,8 @@ assert lib.arc_sidecar_start(cfg, 1) == 0
 assert lib.arc_sidecar_set_mode(2) == 0
 assert lib.arc_sidecar_pump_once() >= 0
 assert lib.arc_sidecar_mode() == 2
+shadow = ffi.new("arc_shadow_stats_t *")
+assert lib.arc_sidecar_shadow_stats(shadow) == 0
 lib.arc_sidecar_stop()
 assert lib.sdf_fluid_budget_n(64, 0.1) == 72
 assert ffi.sizeof("fe_cfg_t") > 0

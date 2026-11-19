@@ -92,6 +92,47 @@ typedef struct {
 
 typedef struct arc_pacer arc_pacer_t;
 
+/*
+ * W6.10 true-shadow evidence (additive API; no existing layout or symbol
+ * changes). The sidecar runs ARC-QG while shadow is active, applies each
+ * accepted entry immediately, and records the QG schedule separately.
+ * The counters are scoped to the current shadow epoch and reset whenever
+ * the sidecar enters shadow mode. Records are the most recent
+ * ARC_SHADOW_RECORD_CAP accepted entries, in submit order.
+ */
+#define ARC_SHADOW_RECORD_CAP 256
+
+typedef struct {
+    uint64_t block_n; /* submit-order QG key */
+    uint64_t seq;
+    uint64_t S_n;        /* producer timestamp */
+    uint64_t A_n;        /* shadow arrival timestamp */
+    uint64_t T_n;        /* scheduled QG release time */
+    uint64_t release_ns; /* schedule release; 0 until released */
+    uint32_t len;
+    uint32_t released;
+    uint32_t immediate_applied;
+    uint32_t reserved;
+} arc_shadow_record_t;
+
+typedef struct {
+    uint64_t epoch; /* increments on each entry to shadow */
+    uint64_t schedule_releases;
+    uint64_t immediate_applies;
+    uint64_t schedule_samples;
+    uint64_t budget_alerts;
+    uint64_t last_schedule_release_ns;
+    uint64_t last_immediate_apply_ns;
+    uint64_t scheduled_backlog;
+    uint64_t record_total;
+    uint64_t record_dropped;
+    double added_p50_ns, added_p95_ns, added_p99_ns;
+    uint32_t record_count;
+    uint32_t active;        /* shadow is the applied sidecar mode */
+    uint32_t schedule_mode; /* arc_mode_t used for the shadow schedule */
+    uint32_t reserved;
+} arc_shadow_stats_t;
+
 /* Bytes the caller-provided object needs (0 on bad configuration). */
 size_t arc_sizeof(const arc_cfg_t *cfg);
 
@@ -132,12 +173,12 @@ void arc_set_rtt(arc_pacer_t *p, uint64_t rtt_sm_ns);
 int arc_set_mode(arc_pacer_t *p, arc_mode_t mode);
 
 /*
- * Sidecar (plan prompt W4.3, design 03): entries in over an SPSC ring,
- * released through the apply callback on the receiver clock. Modes:
- * shadow (0) computes the schedule + metrics, applies immediately;
- * live (1) ARC owns the timing; killed (2) the IMMEDIATE oracle —
- * the design-03 kill switch. One pacer per process (the sidecar is a
- * singleton, like the wam apps' ARC stage).
+ * Sidecar (plan prompt W4.3/W6.10, design 03): entries in over an SPSC
+ * ring, released through the apply callback on the receiver clock. Modes:
+ * shadow (0) runs the QG schedule without applying it, while the
+ * immediate path applies each entry once; live (1) ARC owns the timing;
+ * killed (2) the IMMEDIATE oracle — the design-03 kill switch. One pacer
+ * per process (the sidecar is a singleton, like the wam apps' ARC stage).
  */
 int arc_sidecar_start(const arc_cfg_t *cfg, int mode);
 int arc_sidecar_submit(const void *entry, size_t len, uint64_t producer_ts);
@@ -155,6 +196,21 @@ int arc_sidecar_mode(void);
  * Returns 0, -EINVAL (bad mode) or -EINVAL when not running.
  */
 int arc_sidecar_set_mode(int mode);
+
+/*
+ * W6.10: snapshot the shadow epoch's schedule and immediate-apply
+ * evidence. Returns 0 or -EINVAL (NULL or sidecar not running). The
+ * snapshot remains inspectable after a flip out of shadow; `active`
+ * reports whether the sidecar is currently applying through shadow.
+ */
+int arc_sidecar_shadow_stats(arc_shadow_stats_t *out);
+
+/*
+ * Copy up to max shadow schedule records in submit order. Returns the
+ * number copied. The newest ARC_SHADOW_RECORD_CAP records are retained;
+ * record_dropped in arc_shadow_stats_t reports older evictions.
+ */
+uint32_t arc_sidecar_shadow_records(arc_shadow_record_t *out, uint32_t max);
 
 /* W6.1: live scrape over the sidecar's own dump (start() first; the
  * endpoint stops with the sidecar or serve_stop()). */

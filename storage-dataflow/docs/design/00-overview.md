@@ -694,6 +694,15 @@ Then apply a slow decay, clamped to `[offset_min_ns, offset_max_ns]`.
 - Fleet if engine p99 is at least 15% better, backpressure events are at least
   30% fewer, and added latency is ≤ 10 ms p99.
 
+**As built (W6.10):** shadow runs the real non-applying ARC-QG schedule while
+applying each accepted entry immediately once. Schedule releases, immediate
+applies, backlog, added-latency percentiles, and per-entry records are exposed
+separately, and the deploy controller refuses to promote on absent, empty,
+stale, inconsistent, or IMMEDIATE-only shadow evidence. W6.9 retains entries
+already accepted by the sidecar when the pacer is full; a full public ring
+still returns `-EAGAIN` to its owner. See
+[design 03 § true shadow scoring](03-arc-pacing.md#implementation-note--true-shadow-scoring-w69w610).
+
 ---
 
 ## 8. Project Folder Structure

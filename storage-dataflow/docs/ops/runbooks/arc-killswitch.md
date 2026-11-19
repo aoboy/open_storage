@@ -2,7 +2,7 @@
 
 **Component:** Prototype 3 — receiver-side pacing sidecar
 **Owner:** Receiver/apply plane
-**Last reviewed:** 2026-11-16
+**Last reviewed:** 2026-11-19
 
 ## Purpose
 
@@ -42,6 +42,15 @@ entries, reorders applies, or destabilises the storage engine.
 
 - Do not re-enable live mode until the root cause is fixed.
 - Re-run in shadow for 24 h.
+- Confirm the shadow epoch is non-vacuous before trusting the comparison:
+  - `shadow_active == 1` and `shadow_schedule_mode == QG`.
+  - `shadow_schedule_samples == shadow_schedule_releases > 0`.
+  - `shadow_immediate_applies == shadow_schedule_releases +
+    shadow_scheduled_backlog`.
+  - `shadow_record_total == shadow_immediate_applies > 0` (every applied
+    entry has a replayable record).
+  - The last shadow schedule release is fresh (promotion default: within
+    300 s).
 - Re-enter live on one shard only after:
   - Engine p99 at least 15% better than the bypass baseline.
   - Backpressure events at least 30% fewer.

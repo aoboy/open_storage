@@ -48,6 +48,13 @@
 | `engine_apply_p99_seconds` | gauge | Engine apply tail latency |
 | `engine_backpressure_events_total` | counter | Leader backpressure events |
 
+True shadow (W6.10) publishes separate `sdf_arc_shadow_*` series for the
+non-applying QG schedule releases/samples, immediate shadow applies,
+scheduled backlog, epoch, record count, and schedule added-latency
+percentiles. The shadow schedule and immediate paths are distinct evidence
+and must not be summed as one apply count; promotion uses the shadow epoch
+plus the non-vacuity checks in design 03.
+
 ## SLOs and alert thresholds
 
 | Signal | Warning | Page |

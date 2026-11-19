@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `d25d6b4`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of the W6.9/W6.10 change set; earlier rows cite their landing commits)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -410,12 +410,14 @@ ADRs [0001–0009](../adr/).
                                 install leg builds the extension
                                 from $DEST/usr and drives the
                                 sidecar; make ci green (9d56e78,
-                                c099e03, 301e306). KNOWN LIMITATION,
-                                recorded not claimed: shadow still
-                                maps to IMMEDIATE at the pacer, so
-                                true shadow added-latency metrics —
-                                and therefore non-vacuous promotion
-                                SLO evidence — remain open.
+                                c099e03, 301e306). KNOWN LIMITATION at
+                                that landing, recorded not claimed:
+                                shadow still mapped to IMMEDIATE at
+                                the pacer, so true shadow added-
+                                latency metrics — and therefore
+                                non-vacuous promotion SLO evidence —
+                                were open. Closed by W6.10; see the
+                                W6.9/W6.10 entries below.
   W6.6 v1.0 beachhead release : done — include/sdf/version.h is 1.0.0;
                                 the .pc/find_package versions follow
                                 by configure, and the Rust seam crate
@@ -487,6 +489,83 @@ ADRs [0001–0009](../adr/).
                                 open: no C removal, default cutover or
                                 performance claim; the first hosted run
                                 still requires a remote/runner.
+  W6.9 ARC entry retention   : done — arc_submit() now reserves the slab
+                                slot before the arrival path mutates the
+                                estimator, sequence, or auto windows, so
+                                a refused submit has no side effects. The
+                                sidecar holds a ring-accepted entry that
+                                the pacer refused (-EAGAIN) in a pump-
+                                owned pending slot and retries it before
+                                the next ring pop. The public SPSC ring
+                                still returns -EAGAIN to the caller, who
+                                keeps ownership; that is distinct from
+                                already-accepted internal backpressure.
+                                Stop and every mode transition drain the
+                                pending slot, ring, and pacer. Transition
+                                flushes re-key queued entries to release
+                                in submit order (seq breaks T_n ties),
+                                including the live-to-killed drain.
+                                Evidence: test_arc_core's side-effect-free
+                                backpressure + ordered-flush legs and
+                                test_arc_sidecar's saturation retention
+                                leg (kill drains old backlog, pending
+                                entry retried, exactly four applies, no
+                                duplicate) pass. Local gate: make build
+                                test and make ci green — 23/23 C tests
+                                in default, ASan+UBSan, and TSan; 25/25
+                                Python; install/deb legs green. The
+                                cargo-dependent Rust legs were skipped
+                                in this environment; no Rust or hosted
+                                claim is made.
+  W6.10 true ARC shadow      : done — shadow keeps the pacer in
+                                ARC_MODE_QG, computes the same schedule
+                                live would, applies each accepted entry
+                                immediately and exactly once, and the QG
+                                callback records the schedule release
+                                instead of applying again. Separate
+                                epoch-scoped shadow schedule/immediate
+                                counters and added-latency percentiles
+                                share no counter with live applies. The
+                                additive public API adds
+                                ARC_SHADOW_RECORD_CAP (256),
+                                arc_shadow_record_t, arc_shadow_stats_t,
+                                arc_sidecar_shadow_stats(), and
+                                arc_sidecar_shadow_records(); existing
+                                arc_cfg_t/arc_stats_t layouts and symbols
+                                are unchanged. Records are per-entry
+                                (block_n/seq/S_n/A_n/T_n/release_ns,
+                                released + immediate_applied) and expose
+                                the newest 256 accepted entries in submit
+                                order with explicit total/dropped counts.
+                                Leaving shadow discards only the already-
+                                applied schedule; entering shadow flushes
+                                live backlog first; stop leaves no late
+                                callback. The deploy gate rejects absent,
+                                empty, stale (> shadow_evidence_max_age_s,
+                                default 300 s), inactive, inconsistent
+                                (including record totals that do not match
+                                immediate applies), or IMMEDIATE-only
+                                evidence on top of the 24 h window and
+                                alert budget, and records the reason.
+                                The scrape endpoint exposes the
+                                sdf_arc_shadow_* schedule and immediate
+                                series. Evidence: test_abi pins the new
+                                layouts (record 64 B, stats 120 B);
+                                test_arc_sidecar covers evidence,
+                                exactly-once transitions, the 256-record
+                                window, and W6.9 saturation;
+                                test_arc_core covers ordered transitions;
+                                Python 16/16 test_arc_deploy, including
+                                the live CFFI promote->live-park->kill
+                                leg; e2e_apply now requires real shadow
+                                samples before promotion. Local gate:
+                                make build test and make ci green —
+                                23/23 C tests in default, ASan+UBSan,
+                                and TSan; 25/25 Python; install/deb
+                                legs green; e2e_apply green. The cargo-
+                                dependent Rust legs were skipped in
+                                this environment. No hosted, performance,
+                                or 24 h soak claim is made.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
@@ -977,7 +1056,9 @@ apply callback (design 03 §Objective).
 (`min_smooth_bytes`), batch drain by `batch_max`/`batch_deadline_ns`,
 modes wired: **shadow** (compute + metrics, apply immediately via the
 old path), **live** (`ARC_MODE_QG`), **killed** (`ARC_MODE_IMMEDIATE`);
-metrics per 03 §Metrics.
+metrics per 03 §Metrics. W6.10 later replaced shadow's IMMEDIATE mapping
+with the non-applying QG schedule described in the ledger; this prompt
+records the original W4.3 delivery.
 **Acceptance:** integration test: entry ordering preserved under
 bursty injection (heap key `(release_time, producer_ts, seq)`, ties by
 seq); killed-mode added latency = 0 by construction; shadow metrics
@@ -1187,11 +1268,11 @@ W6.6 (v1.0 release)              <- DONE (ef737b9)
 W6.8 (Rust LT)                   <- DONE (77e0292, 568c30c, 180f025);
                                     C/Rust comparison window open; C default
 W6.7 (S3/peer)                   <- existing; endpoint/stand-in gated
-W6.9 (ARC entry retention)       <- NEXT actionable correctness fix
-   |- W6.10 (true ARC shadow)     <- real promotion evidence after W6.9
+W6.9 (ARC entry retention)       <- DONE (this change set)
+   |- W6.10 (true ARC shadow)     <- DONE (this change set)
    |    └─ W6.14 (observability)  <- real shadow/drop/histogram semantics
    └─ W6.12 (measurement gates)   <- benchmark the corrected ARC
-W6.11 (hosted + conformance)     <- external runner; expanded proof corpus
+W6.11 (hosted + conformance)     <- NEXT; external runner; expanded corpus
    |- W6.12 -> W6.13 (LT decision) <- evidence review, not automatic cutover
    |- W6.15 (production HTTP)     <- hosted integration/transport evidence
    └─ W6.16 (isolated wheel)      <- hosted packaging evidence
@@ -1277,8 +1358,8 @@ green untouched).
 
 ### PROMPT W6.4 — CFFI bindings for the full control surface
 
-**Status:** done — see the ledger; true shadow-mode scoring is recorded
-there as a known limitation, not claimed (9d56e78, c099e03, 301e306).
+**Status:** done — see the ledger (9d56e78, c099e03, 301e306). The
+true-shadow limitation recorded at that landing was closed by W6.10.
 
 **Objective:** `build_ffi` cdefs `origin.h` + `wm.h` today; the
 Python deploy loop runs against a stubbed transport. Extend the
@@ -1397,7 +1478,8 @@ is made.
 
 ### PROMPT W6.9 — Preserve ARC sidecar entries across pacer backpressure
 
-**Status:** proposed — highest-priority correctness fix.
+**Status:** done — see the ledger; the saturation, duplicate, ordering,
+kill-drain, and lifecycle legs are green.
 
 **Objective:** close the accepted-entry loss window in the ARC sidecar when
 its input ring accepts an entry but `arc_submit()` subsequently returns
@@ -1445,15 +1527,17 @@ now.
 
 ### PROMPT W6.10 — True ARC shadow scoring and non-vacuous promotion evidence
 
-**Status:** proposed.
+**Status:** done — see the ledger; shadow now runs a real non-applying QG
+schedule and the promotion gate rejects vacuous evidence.
 
 **Objective:** replace shadow's current mapping to `ARC_MODE_IMMEDIATE` with a
 real non-applying QG schedule, so shadow added-latency and promotion decisions
 measure the algorithm that live mode would execute.
 
-**Evidence/rationale:** `docs/design/03-arc-pacing.md` explicitly records that
-shadow metrics and promotion SLO evidence are vacuous today. The deploy
-controller therefore needs both real schedule metrics and a non-vacuity gate.
+**Evidence/rationale:** `docs/design/03-arc-pacing.md` recorded at the W6.4
+baseline that shadow metrics and promotion SLO evidence were vacuous. The
+deploy controller therefore needed both real schedule metrics and a
+non-vacuity gate; both landed in this prompt.
 
 **Deliverables:**
 
@@ -1868,8 +1952,10 @@ documentation/tag commits). W6.8 has landed the functional Rust LT arm
 byte-identical 556-comparison reports, including 76 fountain comparisons.
 The C/Rust comparison window is open with C still default; no cutover,
 C-removal or performance claim is made. W6.7 remains gated on an endpoint/
-stand-in decision; W6.9 is the next actionable correctness package, followed
-by the proposed dependency-ordered W6.10–W6.18 packages.
+stand-in decision. W6.9 and W6.10 have landed as the corrected ARC semantics
+change set (ledger above); W6.11 is the next package but remains externally
+gated on a hosted runner, followed by the dependency-ordered W6.12–W6.18
+packages.
 
 ### Milestone M7 (proposed)
 
@@ -1877,7 +1963,8 @@ by the proposed dependency-ordered W6.10–W6.18 packages.
 implementation-complete only when:
 
 - W6.9 proves exactly-once retention under backpressure and W6.10 makes shadow
-  promotion evidence non-vacuous.
+  promotion evidence non-vacuous. Both are implemented and locally proven (see
+  the ledger); this bullet does not claim a hosted or production-soak run.
 - W6.11 records an actual hosted full-matrix run and durable conformance
   corpora; W6.12 supplies reference-runner benchmark artifacts.
 - W6.13 records an explicit LT decision without implying automatic C removal.

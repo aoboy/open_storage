@@ -59,6 +59,15 @@ ADR-0001's compliance notes.
    sidecar applies immediately; killed = `ARC_MODE_IMMEDIATE`; live =
    `ARC_MODE_QG`.
 
+   **Amendment (W6.10):** shadow now keeps the pacer in `ARC_MODE_QG` and
+   computes the same non-applying schedule live would, while the sidecar
+   applies each accepted entry immediately and suppresses the later QG
+   apply. The evidence is exposed through an additive API
+   (`arc_shadow_stats_t`, `arc_shadow_record_t`, and the shadow accessors)
+   without changing the layouts or symbols above. ADR-0001's
+   ABI-breaking-change process is not triggered because existing structs
+   and symbols are unchanged.
+
 ## Consequences
 
 Positive:

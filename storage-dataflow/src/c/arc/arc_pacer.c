@@ -160,11 +160,12 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
     if (len > s->entry_max) {
         return -EINVAL;
     }
+    s->last_sched_valid = 0;
 
-    int how = 0;
-    arc_sched_t sched = arc_arrival(s, producer_ts, (uint64_t)sdf_now_ns(), len, &how);
-
-    /* find a slab slot */
+    /* Reserve the slab slot before the arrival path mutates the
+     * estimator, sequence, or auto windows. A full pacer is an
+     * accepted-by-the-ring retry (W6.9): the same entry must be
+     * schedulable later without being counted twice. */
     uint32_t slot = UINT32_MAX;
     for (uint32_t i = 0; i < s->capacity; i++) {
         if (!s->slot_used[i]) {
@@ -175,6 +176,10 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
     if (slot == UINT32_MAX) {
         return -EAGAIN;
     }
+
+    int how = 0;
+    arc_sched_t sched = arc_arrival(s, producer_ts, (uint64_t)sdf_now_ns(), len, &how);
+
     if (len > 0) {
         memcpy(s->slab + (size_t)slot * s->entry_max, entry, len);
     }
@@ -205,6 +210,14 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
         s->slot_used[slot] = 0;
         return -EAGAIN;
     }
+
+    /* Preserve the final, clamped schedule for the sidecar's W6.10
+     * shadow record. This handoff is internal and does not add public
+     * ABI surface beyond the dedicated shadow accessors. */
+    sched.T_n = rel.T_n;
+    sched.T_deadline = rel.T_deadline;
+    s->last_sched = sched;
+    s->last_sched_valid = 1;
     return how == 0 ? 0 : 1;
 }
 

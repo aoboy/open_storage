@@ -7,6 +7,12 @@ gate consumes the recorded evidence (24 h of shadow with added-delay
 SLO clean, per design 03's rollout table), and the kill switch is always
 armed: any SLO breach recommends (and can apply) the flip to killed.
 
+W6.10 makes that shadow evidence non-vacuous. Promotion requires a live
+shadow epoch with QG schedule samples, matching immediate applies, a
+fresh schedule release, and retained per-entry records. Absent, empty,
+stale, inconsistent, or IMMEDIATE-only evidence is rejected even when
+the wall-clock window and alert count would otherwise pass.
+
 The sidecar itself is C (W4.3); this controller drives it through the
 CFFI bindings or a stubbed transport in tests.
 """
@@ -33,15 +39,16 @@ _MODE_CODE: dict[ArcMode, int] = {
     ArcMode.KILLED: 2,
 }
 
+# arc_mode_t.ARC_MODE_QG: the non-vacuous shadow schedule mode (W6.10).
+_ARC_MODE_QG = 2
+
 
 class SidecarTransport(Protocol):
     """What the controller needs from the sidecar."""
 
-    def stats(self) -> dict[str, int]:
-        ...
+    def stats(self) -> dict[str, int]: ...
 
-    def set_mode(self, mode: ArcMode) -> None:
-        ...
+    def set_mode(self, mode: ArcMode) -> None: ...
 
 
 class CffiSidecarTransport:
@@ -52,8 +59,10 @@ class CffiSidecarTransport:
     is design 03's "within one poll interval" contract, and entering
     killed drains the pacer backlog in that same pump.
 
-    ``stats()`` maps ``arc_stats_t`` onto the controller's vocabulary;
-    ``budget_alerts`` is the pacer's cumulative alert count.
+    ``stats()`` maps ``arc_stats_t`` and the additive W6.10 shadow
+    evidence onto the controller's vocabulary; ``budget_alerts`` stays
+    the pacer's cumulative live/schedule alert count, while the
+    ``shadow_*`` keys are scoped to the current shadow epoch.
     Use as a context manager or call ``close()``.
     """
 
@@ -70,9 +79,7 @@ class CffiSidecarTransport:
         try:
             from sdf_cffi import ffi, lib
         except ImportError as exc:  # pragma: no cover - build-state dependent
-            raise RuntimeError(
-                "CFFI extension unavailable; run ./scripts/build.sh first"
-            ) from exc
+            raise RuntimeError("CFFI extension unavailable; run ./scripts/build.sh first") from exc
         self.ffi: Any = ffi
         self.lib: Any = lib
         cfg = ffi.new("arc_cfg_t *")
@@ -89,6 +96,10 @@ class CffiSidecarTransport:
 
     def stats(self) -> dict[str, int]:
         st = self.lib.arc_sidecar_stats()
+        shadow = self.ffi.new("arc_shadow_stats_t *")
+        rc = self.lib.arc_sidecar_shadow_stats(shadow)
+        if rc != 0:
+            raise RuntimeError(f"arc_sidecar_shadow_stats failed: {rc}")
         return {
             "mode": int(self.lib.arc_sidecar_mode()),
             "releases": int(st.releases),
@@ -101,6 +112,22 @@ class CffiSidecarTransport:
             "added_p95_ns": int(st.added_p95_ns),
             "added_p99_ns": int(st.added_p99_ns),
             "applied": int(self.lib.arc_sidecar_applied()),
+            "shadow_epoch": int(shadow.epoch),
+            "shadow_active": int(shadow.active),
+            "shadow_schedule_mode": int(shadow.schedule_mode),
+            "shadow_schedule_releases": int(shadow.schedule_releases),
+            "shadow_immediate_applies": int(shadow.immediate_applies),
+            "shadow_schedule_samples": int(shadow.schedule_samples),
+            "shadow_budget_alerts": int(shadow.budget_alerts),
+            "shadow_last_schedule_release_ns": int(shadow.last_schedule_release_ns),
+            "shadow_last_immediate_apply_ns": int(shadow.last_immediate_apply_ns),
+            "shadow_scheduled_backlog": int(shadow.scheduled_backlog),
+            "shadow_record_total": int(shadow.record_total),
+            "shadow_record_dropped": int(shadow.record_dropped),
+            "shadow_record_count": int(shadow.record_count),
+            "shadow_added_p50_ns": int(shadow.added_p50_ns),
+            "shadow_added_p95_ns": int(shadow.added_p95_ns),
+            "shadow_added_p99_ns": int(shadow.added_p99_ns),
         }
 
     def set_mode(self, mode: ArcMode) -> None:
@@ -137,6 +164,7 @@ class ArcDeployConfig:
     """Design 03's rollout gates as controller knobs."""
 
     shadow_min_seconds: int = 24 * 3600
+    shadow_evidence_max_age_s: float = 300.0  # reject a silent/stale shadow epoch
     added_latency_budget_ns: int = 10_000_000  # 10 ms p99 (design 03)
     added_latency_budget_max_alerts: int = 3
     poll_interval_s: float = 1.0
@@ -156,12 +184,55 @@ class ArcDeployLoop:
     """One control interval per step(); the operator surface is the
     decision record, the transport applies the flips."""
 
-    def __init__(self, transport: SidecarTransport,
-                 config: ArcDeployConfig | None = None) -> None:
+    def __init__(self, transport: SidecarTransport, config: ArcDeployConfig | None = None) -> None:
         self.transport = transport
         self.config = config or ArcDeployConfig()
         self.state = ArcDeployState()
         self._started = False
+
+    def _shadow_evidence(self, stats: dict[str, int], now_ns: int) -> tuple[bool, str]:
+        """Classify shadow evidence for the promotion gate (W6.10).
+
+        Returns ``(ok, reason)``. The reason is recorded in the decision
+        record so an operator can see why a time/SLO-clean shadow epoch
+        was still held back.
+        """
+        if "shadow_epoch" not in stats:
+            return False, "absent"
+        if int(stats.get("shadow_epoch", 0)) <= 0:
+            return False, "absent"
+        if int(stats.get("shadow_active", 0)) != 1:
+            return False, "inactive"
+        if int(stats.get("shadow_schedule_mode", 0)) != _ARC_MODE_QG:
+            return False, "immediate-only"
+
+        releases = int(stats.get("shadow_schedule_releases", 0))
+        samples = int(stats.get("shadow_schedule_samples", 0))
+        immediate = int(stats.get("shadow_immediate_applies", 0))
+        backlog = int(stats.get("shadow_scheduled_backlog", 0))
+        records = int(stats.get("shadow_record_total", 0))
+
+        if samples <= 0 or releases <= 0 or records <= 0:
+            return False, "empty"
+        if samples != releases:
+            return False, "inconsistent"
+        if immediate <= 0 or immediate != releases + backlog:
+            return False, "inconsistent"
+        if records != immediate:
+            # Every immediate apply must have produced its per-entry
+            # schedule record; a partial set means the epoch is not
+            # replayable evidence.
+            return False, "inconsistent"
+
+        last = int(stats.get("shadow_last_schedule_release_ns", 0))
+        if last <= 0:
+            return False, "empty"
+        if last > now_ns:
+            return False, "stale"
+        max_age_ns = int(self.config.shadow_evidence_max_age_s * 1_000_000_000)
+        if now_ns - last > max_age_ns:
+            return False, "stale"
+        return True, "ok"
 
     def start(self) -> ArcDeployState:
         """Arm the loop in shadow mode (the design-03 starting state)."""
@@ -187,9 +258,7 @@ class ArcDeployLoop:
         stats = self.transport.stats()
         now = time.monotonic_ns()
         assert self.state.shadow_started_ns is not None
-        self.state.shadow_elapsed_s = (
-            (now - self.state.shadow_started_ns) / 1e9
-        )
+        self.state.shadow_elapsed_s = (now - self.state.shadow_started_ns) / 1e9
 
         record: dict[str, object] = {
             "mode": self.state.mode.value,
@@ -199,24 +268,20 @@ class ArcDeployLoop:
 
         if self.state.mode == ArcMode.SHADOW:
             # promotion gate (design 03's rollout table): 24 h of shadow,
-            # added-latency SLO clean
-            slo_ok = (
-                stats.get("budget_alerts", 0)
-                <= self.config.added_latency_budget_max_alerts
-            )
-            if (
-                self.state.shadow_elapsed_s >= self.config.shadow_min_seconds
-                and slo_ok
-            ):
+            # added-latency SLO clean, and a non-vacuous QG shadow epoch.
+            evidence_ok, evidence_reason = self._shadow_evidence(stats, now)
+            shadow_alerts = int(stats.get("shadow_budget_alerts", 0))
+            slo_ok = evidence_ok and shadow_alerts <= self.config.added_latency_budget_max_alerts
+            record["shadow_evidence"] = evidence_reason
+            record["shadow_budget_alerts"] = shadow_alerts
+            if self.state.shadow_elapsed_s >= self.config.shadow_min_seconds and slo_ok:
                 self.state.mode = ArcMode.LIVE
                 self.transport.set_mode(ArcMode.LIVE)
                 # Baseline the cumulative counter at promotion: alerts
                 # observed during shadow are evidence, not fresh breaches
                 # for the live watch (W6.4 fix — without this the first
                 # live step called the whole shadow history "new").
-                self.state.budget_alerts_seen = int(
-                    stats.get("budget_alerts", 0)
-                )
+                self.state.budget_alerts_seen = int(stats.get("budget_alerts", 0))
                 self.state.recommendations.append(
                     f"promoted to live after {self.state.shadow_elapsed_s:.0f}s"
                 )
@@ -230,9 +295,7 @@ class ArcDeployLoop:
             new_alerts = alerts - self.state.budget_alerts_seen
             self.state.budget_alerts_seen = alerts
             if new_alerts > 0:
-                self.state.recommendations.append(
-                    f"added-latency budget breach x{new_alerts}"
-                )
+                self.state.recommendations.append(f"added-latency budget breach x{new_alerts}")
                 if self.config.auto_kill:
                     self.state.mode = ArcMode.KILLED
                     self.transport.set_mode(ArcMode.KILLED)

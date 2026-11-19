@@ -42,7 +42,22 @@ except ImportError:
     class SC:
         def __init__(self): self.mode = None
         def set_mode(self, m): self.mode = m
-        def stats(self): return {"budget_alerts": 0}
+        def stats(self):
+            now = time.monotonic_ns()
+            return {
+                "mode": 0,
+                "budget_alerts": 0,
+                "shadow_epoch": 1,
+                "shadow_active": 1,
+                "shadow_schedule_mode": 2,
+                "shadow_schedule_releases": 10,
+                "shadow_immediate_applies": 10,
+                "shadow_schedule_samples": 10,
+                "shadow_budget_alerts": 0,
+                "shadow_last_schedule_release_ns": now,
+                "shadow_scheduled_backlog": 0,
+                "shadow_record_total": 10,
+            }
 
     sc = SC()
     loop = ArcDeployLoop(sc, ArcDeployConfig(shadow_min_seconds=1))
@@ -64,6 +79,15 @@ else:
         loop.start()
         tr.pump()  # apply shadow
 
+        # W6.10: a real shadow QG sample is required for promotion.
+        assert tr.submit(b"s" * 64, producer_ts=time.monotonic_ns()) == 0
+        assert tr.pump() >= 1
+        time.sleep(0.030)
+        assert tr.pump() >= 1
+        shadow = tr.stats()
+        assert shadow["shadow_schedule_samples"] >= 1
+        assert shadow["shadow_schedule_mode"] == 2
+
         loop.state.shadow_started_ns -= 1
         rec = loop.step()
         assert rec["action"] == "promote"
@@ -80,7 +104,7 @@ else:
         assert loop.kill() == ArcMode.KILLED
         assert tr.pump() >= 1
         st = tr.stats()
-        assert st["mode"] == 2 and st["applied"] == 1 and st["in_flight"] == 0
+        assert st["mode"] == 2 and st["applied"] == 2 and st["in_flight"] == 0
         print("runbook flow (live C sidecar via CFFI): "
               "shadow -> live -> killed OK")
 EOF
