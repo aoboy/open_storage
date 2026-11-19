@@ -103,6 +103,11 @@ add_executable(test_arc_core unit/test_arc_core.c)
 target_link_libraries(test_arc_core PRIVATE sdf_arc sdf_common)
 target_include_directories(test_arc_core PRIVATE ${CMAKE_SOURCE_DIR}/src/c/arc)
 add_test(NAME arc_core COMMAND test_arc_core)
+
+# Plan W4.3/W4.5 — the sidecar over the SPSC ring.
+add_executable(test_arc_sidecar integration/test_arc_sidecar.c)
+target_link_libraries(test_arc_sidecar PRIVATE sdf_arc sdf_common)
+add_test(NAME arc_sidecar COMMAND test_arc_sidecar)
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)
