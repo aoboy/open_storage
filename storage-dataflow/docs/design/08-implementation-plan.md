@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `9d38d53`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `301e306`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -355,6 +355,67 @@ ADRs [0001–0009](../adr/).
                                 run); attach-or-create with the API's
                                 own rc (the post-close -errno draft
                                 could return a clobbered value).
+
+  W6.3 multi-block repair     : done — the W3.5 coordinator owned one
+                                decoder, budget, gate and ESI cursor;
+                                W6.3 moved the loop to the
+                                coordinator while the fountain
+                                contract stays ONE block per codec
+                                object. cfg gains n_blocks (0/1 =
+                                legacy single block, <= 64), stats
+                                gain per-block sent/received/bytes/
+                                rounds/fallback/rank/ok; symbols are
+                                admitted by decode-rank deficit
+                                (descending, ties by block index),
+                                with per-block ARQ fallback. `ok` is
+                                now a BYTE-EXACT gate: every block
+                                is memcmp'd against the deterministic
+                                sender block (per-block salt), not
+                                just fd_decode's rank result. Live
+                                find: the old LT integration fixture
+                                fed LT's decoder a Nanorq-encoded
+                                stream and passed on garbage — the
+                                byte-exact gate exposed it; the
+                                fixture now encodes the arm/eps/
+                                blocks under test. Evidence: 4-block
+                                nanorq, eps=0.02, loss=30%, wave=64
+                                -> 5 coordinator rounds, block_rounds
+                                5,5,5,5, block_rank 66,66,66,65,
+                                block_ok 1,1,1,1; e2e ladder green;
+                                23/23 ctest (ac9332c, 3104fd2).
+  W6.4 CFFI control surface   : done — the cdef chain follows the
+                                include graph (origin -> wm -> arc ->
+                                fluid -> fountain); the extension
+                                links the PIC static archives
+                                (nanorq rebuilt -fPIC and installed)
+                                and builds against an installed
+                                prefix via --prefix; the loader
+                                honours SDF_CFFI_DIR. The ARC
+                                sidecar gained arc_set_mode() +
+                                arc_sidecar_set_mode(): the desired
+                                mode is atomic and lands on the next
+                                pump, and entering killed drains the
+                                QG backlog (IMMEDIATE bypass) in
+                                that same pump; stop() now flushes
+                                the ring before clearing running.
+                                CffiSidecarTransport drives the real
+                                C sidecar, and promotion baselines
+                                budget_alerts_seen so shadow
+                                evidence is not re-counted as fresh
+                                live breaches. Evidence: C one-pump
+                                flip + kill-drain test; live CFFI
+                                deploy test (promote -> live parks
+                                an entry -> kill -> drained);
+                                e2e_apply runbook through CFFI; the
+                                install leg builds the extension
+                                from $DEST/usr and drives the
+                                sidecar; make ci green (9d56e78,
+                                c099e03, 301e306). KNOWN LIMITATION,
+                                recorded not claimed: shadow still
+                                maps to IMMEDIATE at the pacer, so
+                                true shadow added-latency metrics —
+                                and therefore non-vacuous promotion
+                                SLO evidence — remain open.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
@@ -1049,8 +1110,8 @@ Sequencing (leverage first):
 W6.1 (scrape + telemetry chain)   <- closes gaps 1+3, highest value
 W6.2 (ARC goldens)                <- cheap, finishes the parity story
 W6.5 (hosted CI matrix)           <- DONE (cbc5bd9): legs real + wired
-   |- W6.3 (multi-block)          <- parallel-safe after W6.1
-   |- W6.4 (CFFI surface)         <- parallel-safe
+   |- W6.3 (multi-block)          <- DONE (ac9332c, 3104fd2)
+   |- W6.4 (CFFI surface)         <- DONE (9d56e78, c099e03, 301e306)
 W6.6 (v1.0 release)              <- after the above land
 W6.7 (S3/peer)  W6.8 (Rust)       <- schedule-gated on W6.5
 ```
@@ -1108,6 +1169,8 @@ provenance documented in the file.
 
 ### PROMPT W6.3 — Multi-block repair jobs
 
+**Status:** done — see the ledger (ac9332c, 3104fd2).
+
 **Objective:** the fountain contract pinned one block per codec
 object with multi-block looping at the coordinator; W3.5 ran single
 blocks. Real repair jobs are multi-block objects.
@@ -1129,6 +1192,9 @@ green untouched).
 **Size:** 3–4 days. Parallel-safe after W6.1.
 
 ### PROMPT W6.4 — CFFI bindings for the full control surface
+
+**Status:** done — see the ledger; true shadow-mode scoring is recorded
+there as a known limitation, not claimed (9d56e78, c099e03, 301e306).
 
 **Objective:** `build_ffi` cdefs `origin.h` + `wm.h` today; the
 Python deploy loop runs against a stubbed transport. Extend the
