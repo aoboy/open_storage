@@ -240,11 +240,14 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@1.100.0
+        with:
+          components: rustfmt, clippy
 
-      # --require makes a missing cargo a failure, not a skip: this leg
-      # is AUTHORITATIVE in CI (W6.5).
-      - name: Rust seam (declaration surface)
-        run: ./scripts/test_rust_seam.sh --require
+      # --require makes missing cargo/components a failure, not a skip. W6.8
+      # keeps the declaration gate and adds the full C/Rust functional A/B,
+      # Rust-backed ASan+UBSan, install/CFFI and Debian package legs.
+      - name: Rust quality + functional C/Rust A/B (W6.8)
+        run: ./scripts/test_rust_fountain.sh --require
 
   fuzz:
     runs-on: ubuntu-latest

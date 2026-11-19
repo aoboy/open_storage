@@ -27,7 +27,8 @@ fi
 # /usr (not /usr/local): this is a system package, and the .pc files
 # bake the configure-time prefix.
 cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr >/dev/null
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DSDF_USE_RUST_FOUNTAIN="${SDF_USE_RUST_FOUNTAIN:-OFF}" >/dev/null
 cmake --build "$BUILD" --parallel >/dev/null
 DESTDIR="$STAGE" cmake --install "$BUILD" >/dev/null
 

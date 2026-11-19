@@ -7,5 +7,5 @@ Name: sdf_fountain
 Description: Storage Dataflow Stack — Fountain codecs behind one ABI (LT + vendored RaptorQ)
 Version: @PROJECT_VERSION@
 Requires: sdf_common
-Libs: -L${libdir} -lsdf_fountain -lnanorq -lm
+Libs: -L${libdir} -lsdf_fountain -lnanorq @SDF_FOUNTAIN_PC_NATIVE_LIBS@
 Cflags: -I${includedir}

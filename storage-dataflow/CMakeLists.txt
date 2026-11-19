@@ -49,21 +49,82 @@ add_library(sdf_wm STATIC
 target_link_libraries(sdf_wm PUBLIC sdf_common)
 target_include_directories(sdf_wm PUBLIC include)
 
-# --- Fountain codec (plan W3; ADR-0004 arms) --------------------------------
-add_custom_target(nanorq_build
-    COMMAND make -C ${CMAKE_SOURCE_DIR}/third_party/nanorq libnanorq.a)
-add_library(sdf_fountain STATIC
+# --- Fountain codec (plan W3/W6.8; ADR-0003/0004 arms) ---------------------
+# The C frontends and vendored nanorq adapter are common to both variants.
+# SDF_USE_RUST_FOUNTAIN replaces ONLY fe_codec_lt.c + fe_prng.c. The Rust
+# staticlib is folded into libsdf_fountain.a, preserving every installed
+# consumer surface (pkg-config, find_package, CFFI and the Debian payload).
+option(SDF_USE_RUST_FOUNTAIN "Use the Rust LT fountain arm (nanorq stays C)" OFF)
+set(_fountain_sources
     src/c/fountain/fe_enc.c
     src/c/fountain/fe_dec.c
     src/c/fountain/fe_codec_nanorq.c
-    src/c/fountain/fe_codec_lt.c
-    src/c/fountain/fe_prng.c
 )
+set(SDF_FOUNTAIN_NATIVE_LIBS m)
+set(SDF_FOUNTAIN_PC_NATIVE_LIBS "-lm")
+if(SDF_USE_RUST_FOUNTAIN)
+    find_program(SDF_CARGO_EXECUTABLE NAMES cargo REQUIRED)
+    set(_rust_crate "${CMAKE_SOURCE_DIR}/src/rust/sdf-fountain")
+    set(_rust_target "${CMAKE_CURRENT_BINARY_DIR}/rust-fountain-target")
+    set(_rust_archive "${_rust_target}/release/libsdf_fountain.a")
+    set(_rust_stamp "${CMAKE_CURRENT_BINARY_DIR}/sdf-fountain-rust.stamp")
+    set(_rust_link_source "${CMAKE_CURRENT_BINARY_DIR}/rust_fountain_link.c")
+    file(GLOB _rust_sources CONFIGURE_DEPENDS "${_rust_crate}/src/*.rs")
+    add_custom_command(
+        OUTPUT "${_rust_stamp}"
+        COMMAND "${CMAKE_COMMAND}" -E env "CARGO_TARGET_DIR=${_rust_target}"
+            "${SDF_CARGO_EXECUTABLE}" build --manifest-path "${_rust_crate}/Cargo.toml"
+            --locked --release
+        COMMAND "${CMAKE_COMMAND}" -E touch "${_rust_stamp}"
+        BYPRODUCTS "${_rust_archive}"
+        DEPENDS ${_rust_sources} "${_rust_crate}/Cargo.toml"
+            "${_rust_crate}/Cargo.lock" "${_rust_crate}/build.rs"
+            "${CMAKE_SOURCE_DIR}/bindings/cbindgen.toml"
+        COMMENT "Building the Rust LT fountain staticlib"
+        VERBATIM)
+    add_custom_command(
+        OUTPUT "${_rust_link_source}"
+        COMMAND "${CMAKE_COMMAND}" -E copy
+            "${CMAKE_SOURCE_DIR}/cmake/rust_fountain_link_anchor.c" "${_rust_link_source}"
+        COMMAND "${CMAKE_COMMAND}" -E touch "${_rust_link_source}"
+        DEPENDS "${_rust_stamp}" "${CMAKE_SOURCE_DIR}/cmake/rust_fountain_link_anchor.c"
+        VERBATIM)
+    list(APPEND _fountain_sources "${_rust_link_source}")
+    # rustc --print native-static-libs for the pinned Linux toolchain. libc is
+    # named explicitly for non-compiler drivers; the C driver already adds it.
+    set(SDF_FOUNTAIN_NATIVE_LIBS gcc_s util rt pthread m ${CMAKE_DL_LIBS} c)
+    set(SDF_FOUNTAIN_PC_NATIVE_LIBS "-lgcc_s -lutil -lrt -lpthread -lm -l${CMAKE_DL_LIBS} -lc")
+    message(STATUS "Fountain LT arm: Rust (C frontends + nanorq retained)")
+else()
+    list(APPEND _fountain_sources
+        src/c/fountain/fe_codec_lt.c
+        src/c/fountain/fe_prng.c)
+    message(STATUS "Fountain LT arm: C (comparison-window default)")
+endif()
+
+add_custom_target(nanorq_build
+    COMMAND make -C ${CMAKE_SOURCE_DIR}/third_party/nanorq libnanorq.a)
+add_library(sdf_fountain STATIC ${_fountain_sources})
 add_dependencies(sdf_fountain nanorq_build)
 target_link_libraries(sdf_fountain PUBLIC sdf_common
-    ${CMAKE_SOURCE_DIR}/third_party/nanorq/libnanorq.a m)
+    ${CMAKE_SOURCE_DIR}/third_party/nanorq/libnanorq.a ${SDF_FOUNTAIN_NATIVE_LIBS})
 target_include_directories(sdf_fountain PUBLIC include
     PRIVATE src/c/fountain ${CMAKE_SOURCE_DIR}/third_party/nanorq/include)
+if(SDF_USE_RUST_FOUNTAIN)
+    set(_rust_combined "${CMAKE_CURRENT_BINARY_DIR}/libsdf_fountain.combined.a")
+    add_custom_command(TARGET sdf_fountain POST_BUILD
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSDF_C_ARCHIVE=$<TARGET_FILE:sdf_fountain>"
+            "-DSDF_RUST_ARCHIVE=${_rust_archive}"
+            "-DSDF_COMBINED_ARCHIVE=${_rust_combined}"
+            "-DSDF_AR=${CMAKE_AR}"
+            "-DSDF_RANLIB=${CMAKE_RANLIB}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/merge_rust_fountain.cmake"
+        COMMENT "Merging the Rust LT arm into libsdf_fountain.a"
+        VERBATIM)
+endif()
+# find_package(sdf) consumes the same variant-specific native dependencies.
+set(SDF_FOUNTAIN_CMAKE_NATIVE_LIBS "${SDF_FOUNTAIN_NATIVE_LIBS}")
 
 # --- FLUID repair gate + coordinator (plan W3.4/W3.5) ----------------------
 add_library(sdf_fluid STATIC
@@ -152,8 +213,8 @@ write_basic_package_version_file(
     sdf-config-version.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion)
-install(FILES packaging/sdf-config.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdf
-    RENAME sdf-config.cmake)
+configure_file(packaging/sdf-config.cmake sdf-config.cmake @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/sdf-config.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdf)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/sdf-config-version.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sdf)

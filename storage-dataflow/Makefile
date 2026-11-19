@@ -1,4 +1,4 @@
-.PHONY: all build test bench lint doc clean asan tsan ci
+.PHONY: all build test bench lint doc clean asan tsan ci install deb rust-seam rust-fountain
 
 # Gates run serially (plan W0.5): a gate that races another gate is not
 # a gate.
@@ -37,12 +37,17 @@ tsan:
 # Local CI gate (plan W0.5, mirroring the wack_a_mole `make ci` shape):
 # format/tidy where installed (lint.sh skips cleanly), build + full
 # suite, then both sanitizer legs.
-ci: lint test asan tsan install deb rust-seam
-	@echo "ci gate green: lint(+skips) test asan tsan install deb rust-seam(+skips)"
+ci: lint test asan tsan install deb rust-seam rust-fountain
+	@echo "ci gate green: lint(+skips) test asan tsan install deb rust-seam rust-fountain(+skips)"
 
 # Plan W5.3 — the Rust seam leg (advisory without cargo; see the script).
 rust-seam:
 	./scripts/test_rust_seam.sh
+
+# Plan W6.8 — functional Rust: C/Rust full-suite A/B, Rust ASan+UBSan,
+# installed CFFI/pkg-config/find_package and the Debian package surface.
+rust-fountain:
+	./scripts/test_rust_fountain.sh
 
 # Plan W5.2 — the install leg (DESTDIR-staged pkg-config + find_package).
 install:

@@ -41,4 +41,10 @@ FLAGS="$(pkg-config --cflags --libs sdf_wm sdf_arc)"
 cc tools/install_hello.c $FLAGS -o "$WORK/deb_hello"
 "$WORK/deb_hello"
 
-echo "test_deb: OK ($(basename "$DEB") built, dpkg-installed, consumer compiled)"
+# W6.8: the packaged fountain archive is self-contained for both codecs,
+# including the Rust staticlib's native support libraries when selected.
+FOUNTAIN_FLAGS="$(pkg-config --cflags --libs sdf_fountain)"
+cc tests/c/unit/test_fe_codec.c $FOUNTAIN_FLAGS -o "$WORK/deb_fountain"
+"$WORK/deb_fountain"
+
+echo "test_deb: OK (rust-fountain=${SDF_USE_RUST_FOUNTAIN:-OFF}; $(basename "$DEB") built, dpkg-installed, consumers compiled)"

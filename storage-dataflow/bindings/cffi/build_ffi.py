@@ -56,6 +56,16 @@ LIBRARIES = [
     "sdf_origin",
     "sdf_common",
     "nanorq",
+    # W6.8: when the opt-in Rust LT staticlib is merged into sdf_fountain,
+    # these are its rustc-reported native dependencies. They are harmless for
+    # the C-only archive and keep in-tree/installed CFFI link surfaces equal.
+    "gcc_s",
+    "util",
+    "rt",
+    "pthread",
+    "m",
+    "dl",
+    "c",
 ]
 
 

@@ -35,8 +35,12 @@ set_target_properties(sdf::sdf_origin_http PROPERTIES
     INTERFACE_LINK_LIBRARIES "sdf::sdf_origin;sdf::sdf_common")
 set_target_properties(sdf::sdf_wm PROPERTIES
     INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::sdf_origin;sdf::sdf_origin_loopback")
+# Configured from the selected C/Rust LT implementation (W6.8). Rust's
+# staticlib needs the native support libraries reported by rustc; the C arm
+# retains the original m-only surface.
+set(_sdf_fountain_native_libs "@SDF_FOUNTAIN_CMAKE_NATIVE_LIBS@")
 set_target_properties(sdf::sdf_fountain PROPERTIES
-    INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::nanorq;m")
+    INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::nanorq;${_sdf_fountain_native_libs}")
 set_target_properties(sdf::sdf_fluid PROPERTIES
     INTERFACE_LINK_LIBRARIES "sdf::sdf_common;sdf::sdf_wm;sdf::sdf_fountain;sdf::sdf_origin_loopback;m")
 set_target_properties(sdf::sdf_arc PROPERTIES
