@@ -1,9 +1,10 @@
 # Prototype 3 — ARC Pacing Sidecar
 
-**Status:** Design ready; C implementation is a stub. Highest interaction
-risk. Lands in plan wave
-[W4](08-implementation-plan.md#7-phase-w4--arc-pacing-sidecar-prototype-3)
-with the validated wack_a_mole ARC core imported behind an ABI v2
+**Status:** **As-built (Wave 4)** — ARC-QG core behind ABI v2 with the
+paper's section 12.3 goldens landing on the analytic fixed point
+(D alternates {94.7934, 93.8016} ms on the real clock); the sidecar with
+shadow/live/killed; the deploy controller with the promotion gate and
+the always-armed kill switch; the runbook executed as a test
 ([ADR-0006](../adr/0006-arc-abi-v2.md); provenance
 [07 §3.3](07-wam-import-map.md#33-arc-prototype-3)).
 **Related:** [Overview §6.3, §7.5](00-overview.md#6-prototype-sequence-roirisk-order).

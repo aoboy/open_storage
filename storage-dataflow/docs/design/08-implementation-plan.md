@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `33806b3`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `a215a46`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -154,10 +154,59 @@ ADRs [0001–0009](../adr/).
   whole — both codec arms golden-pinned behind one ABI, the FLUID
   budget + gate on the paper's identity, the coordinator with the
   never-ship-incomplete guarantee, and the three-arm ladder recorded.
-  Wave 4 (ARC pacing sidecar, P3) unblocked: W4.1 arc.h v2 per
-  ADR-0006, W4.2 the ARC-QG core import with the paper section 12.3
-  goldens, W4.3 the sidecar over SPSC handoff, W4.4 the Python
-  deploy loop, W4.5 the trace replay + kill-switch verification.
+
+  W4.1+W4.2 arc.h v2 + core : done — modes (BASE/Q/QG/IMMEDIATE),
+                                the full paper parameter set with
+                                presence-style defaults (the
+                                unconditional-defaults draft silently
+                                overwrote caller params — the golden
+                                leg caught it), size helper + in-place
+                                init, submit with S_n (A_n on the
+                                receiver clock, no synchronization),
+                                QG drain with park/timeout/wake; the
+                                goldens drive the REAL clock the way
+                                the sidecar runs: the linear cycle
+                                lands on the paper's analytic fixed
+                                point exactly (D alternates
+                                {94.7934, 93.8016} ms), the exponent
+                                example holds the paper band; replay
+                                paced at the true 60 fps cadence:
+                                QG releases all frames in submit order
+                                (the guard reorders the valleys —
+                                guard_waits is the mechanism working),
+                                zero timeouts, p99 added 65 ms
+                                (9932dbe, e2db1b7)
+  W4.3 sidecar + SPSC       : done — entries over the W0.2 ring
+                                (recovery never blocks), the pump
+                                drains ring -> ARC -> apply; shadow
+                                runs the IMMEDIATE pacer (the old
+                                apply path with the estimator recording
+                                what live WOULD impose — the promotion
+                                evidence), live runs QG, killed is
+                                the oracle; shadow/killed share the
+                                pacer mode by design, differing
+                                procedurally (what W4.4 gates on vs
+                                its rollback target); stop flushes
+                                (6e70ec4)
+  W4.4 deploy controller     : done — start() arms in shadow, the
+                                promotion gate (24 h + SLO clean), the
+                                live SLO watch with kill
+                                recommendation/auto-kill, the operator
+                                switch (c8b83e7, 9201ad6)
+  W4.5 e2e + runbook leg     : done — sidecar modes + ARC goldens +
+                                the scripted runbook flow shadow ->
+                                live -> killed; the kill-switch
+                                runbook is executed, not just
+                                documented (a215a46)
+
+  WAVE 4 COMPLETE — milestone M4 reached: the P3 sidecar is whole —
+  the ARC-QG core proven against the paper's analytic cycle on the
+  real clock, the sidecar with shadow/live/killed, the deploy
+  controller with the promotion gate and the always-armed kill
+  switch, and the runbook executed as a test. All three prototypes
+  (P1 dispatch, P2 repair, P3 pacing) now exist end to end with
+  their e2e gates green. Wave 5 (hardening, packaging, Rust seams)
+  remains per the plan.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger

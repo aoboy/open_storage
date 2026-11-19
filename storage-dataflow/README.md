@@ -55,7 +55,7 @@ their tooling is not installed.
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |
 | Fountain codecs (P2) | **As-built (Wave 3)**: nanorq (RaptorQ) + LT arms behind one ABI, 356 golden comparisons |
 | FLUID repair (P2) | **As-built (Wave 3)**: budget + gate on the section-4.3 identity, coordinator with mandatory ARQ fallback, three-arm loss ladder green |
-| ARC pacing sidecar (P3) | Stubs — import-led per ADR-0006; backlog in [`08`](docs/design/08-implementation-plan.md) |
+| ARC pacing sidecar (P3) | **As-built (Wave 4)**: ARC-QG core on the paper's analytic fixed point, shadow/live/killed sidecar, deploy gate + armed kill switch, runbook executed as a test |
 | Rust modules | Deferred to phase 4 |
 
 ## Documentation
