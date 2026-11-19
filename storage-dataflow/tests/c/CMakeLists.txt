@@ -108,6 +108,23 @@ add_test(NAME arc_core COMMAND test_arc_core)
 add_executable(test_arc_sidecar integration/test_arc_sidecar.c)
 target_link_libraries(test_arc_sidecar PRIVATE sdf_arc sdf_common)
 add_test(NAME arc_sidecar COMMAND test_arc_sidecar)
+
+# Plan W5.1 — fuzzers (shapes from wam M.1/X4; deterministic smoke
+# budget in ctest, NOT the full libFuzzer leg which runs in CI nightly).
+add_executable(fuzz_fountain fuzz/fuzz_fountain.c)
+target_link_libraries(fuzz_fountain PRIVATE sdf_fountain sdf_common)
+add_test(NAME fuzz_fountain COMMAND fuzz_fountain)
+set_tests_properties(fuzz_fountain PROPERTIES ENVIRONMENT "SDF_FUZZ_ITERS=20000")
+
+add_executable(fuzz_wm_profile fuzz/fuzz_wm_profile.c)
+target_link_libraries(fuzz_wm_profile PRIVATE sdf_wm sdf_common)
+add_test(NAME fuzz_wm_profile COMMAND fuzz_wm_profile)
+set_tests_properties(fuzz_wm_profile PROPERTIES ENVIRONMENT "SDF_FUZZ_ITERS=20000")
+
+add_executable(fuzz_arc_stream fuzz/fuzz_arc_stream.c)
+target_link_libraries(fuzz_arc_stream PRIVATE sdf_arc sdf_common)
+add_test(NAME fuzz_arc_stream COMMAND fuzz_arc_stream)
+set_tests_properties(fuzz_arc_stream PROPERTIES ENVIRONMENT "SDF_FUZZ_ITERS=5000")
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)
