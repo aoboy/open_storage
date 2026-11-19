@@ -9,7 +9,10 @@ Python control plane, the live SHM chain, golden-vector parity, the fuzz
 and packaging legs, and an opt-in Rust LT fountain arm behind the unchanged C
 ABI. The C headers under `include/sdf/` are the ABI contract.
 
-See [`docs/design/00-overview.md`](docs/design/00-overview.md) for the full
+The implementation lives in `storage-dataflow/`; run the commands below from
+that directory.
+
+See [`docs/design/00-overview.md`](/storage-dataflow/docs/design/00-overview.md) for the full
 design and plan.
 
 ## Quick start
@@ -49,7 +52,7 @@ when cargo/components are absent. Configure one functional Rust build with
 
 | Component | State |
 |---|---|
-| Latest release | **v1.0.0 (W6.6)** — [release notes](docs/releases/v1.0.0.md), ledger-derived evidence, source tag and Debian development package |
+| Latest release | **v1.0.0 (W6.6)** — [release notes](/storage-dataflow/docs/releases/v1.0.0.md), ledger-derived evidence, source tag and Debian development package |
 | Public C ABI headers | Defined |
 | CMake build | Working (libraries, 23-test suite, benches, fuzzers) |
 | Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
@@ -61,7 +64,7 @@ when cargo/components are absent. Configure one functional Rust build with
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
 | CI | **W6.5/W6.8**: 8-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, authoritative Rust quality + C/Rust functional A/B, full fuzz) + nightly p99 gate; local mirror green; first hosted run pending a remote |
-| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); Rust LT remains opt-in with C as the comparison-window default and no C removal/cutover is claimed (W6.8); true shadow-mode ARC scoring is deferred — shadow still maps to IMMEDIATE, so promotion SLO evidence is not yet non-vacuous (W6.4 note, [design 03](docs/design/03-arc-pacing.md#implementation-note--mode-switching-w64)) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
+| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); Rust LT remains opt-in with C as the comparison-window default and no C removal/cutover is claimed (W6.8); true shadow-mode ARC scoring is deferred — shadow still maps to IMMEDIATE, so promotion SLO evidence is not yet non-vacuous (W6.4 note, [design 03](/storage-dataflow/docs/design/03-arc-pacing.md#implementation-note--mode-switching-w64)) — [plan §14](/storage-dataflow/docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
 | Golden-vector parity gate | Active: **556 comparisons, zero pending** — WM, both fountain arms, ARC §12.3 (W6.2; ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | **As-built (W6.4)**: CFFI covers origin → wm → arc → fluid → fountain, links the PIC archives, and builds against an installed prefix (`SDF_CFFI_DIR` override); `CffiSidecarTransport` drives the live C ARC sidecar (mode flips in one pump); SHM bridge live (W6.1 process-pair chain) |
@@ -72,22 +75,22 @@ when cargo/components are absent. Configure one functional Rust build with
 
 ## Documentation
 
-- [`docs/design/00-overview.md`](docs/design/00-overview.md) — design baseline (three planes, prototypes, language strategy)
-- [`docs/design/01-whack-a-mole.md`](docs/design/01-whack-a-mole.md) — prototype 1
-- [`docs/design/02-fluid-repair.md`](docs/design/02-fluid-repair.md) — prototype 2
-- [`docs/design/03-arc-pacing.md`](docs/design/03-arc-pacing.md) — prototype 3
-- [`docs/design/04-rust-migration.md`](docs/design/04-rust-migration.md) — migration plan
-- [`docs/design/05-observability.md`](docs/design/05-observability.md) — metrics, config, CI
-- [`docs/design/06-nanorq-evaluation.md`](docs/design/06-nanorq-evaluation.md) — codec evaluation
-- [`docs/design/07-wam-import-map.md`](docs/design/07-wam-import-map.md) — provenance: what is imported from wack_a_mole, and the acceptance rules
-- [`docs/design/08-implementation-plan.md`](docs/design/08-implementation-plan.md) — **the executable backlog** (waves W0–W5, prompts, sizes, status ledger)
-- [`docs/design/09-origin-driver-seam.md`](docs/design/09-origin-driver-seam.md) — the `sdf_origin_ops_t` contract (origins are the paths)
-- [`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md) — v1.0.0 release notes, verification evidence and known limitations
-- [`docs/adr/`](docs/adr/) — decision records 0001–0009
+- [`docs/design/00-overview.md`](/storage-dataflow/docs/design/00-overview.md) — design baseline (three planes, prototypes, language strategy)
+- [`docs/design/01-whack-a-mole.md`](/storage-dataflow/docs/design/01-whack-a-mole.md) — prototype 1
+- [`docs/design/02-fluid-repair.md`](/storage-dataflow/docs/design/02-fluid-repair.md) — prototype 2
+- [`docs/design/03-arc-pacing.md`](/storage-dataflow/docs/design/03-arc-pacing.md) — prototype 3
+- [`docs/design/04-rust-migration.md`](/storage-dataflow/docs/design/04-rust-migration.md) — migration plan
+- [`docs/design/05-observability.md`](/storage-dataflow/docs/design/05-observability.md) — metrics, config, CI
+- [`docs/design/06-nanorq-evaluation.md`](/storage-dataflow/docs/design/06-nanorq-evaluation.md) — codec evaluation
+- [`docs/design/07-wam-import-map.md`](/storage-dataflow/docs/design/07-wam-import-map.md) — provenance: what is imported from wack_a_mole, and the acceptance rules
+- [`docs/design/08-implementation-plan.md`](/storage-dataflow/docs/design/08-implementation-plan.md) — **the executable backlog** (waves W0–W5, prompts, sizes, status ledger)
+- [`docs/design/09-origin-driver-seam.md`](/storage-dataflow/docs/design/09-origin-driver-seam.md) — the `sdf_origin_ops_t` contract (origins are the paths)
+- [`docs/releases/v1.0.0.md`](/storage-dataflow/docs/releases/v1.0.0.md) — v1.0.0 release notes, verification evidence and known limitations
+- [`docs/adr/`](/storage-dataflow/docs/adr/) — decision records 0001–0009
 
 History and landing discipline (commit prefixes, doc-sync protocol,
-evidence rules): [`../CONTRIBUTING.md`](../CONTRIBUTING.md). Ops config
+evidence rules): [`CONTRIBUTING.md`](/CONTRIBUTING.md). Ops config
 format is strict TOML per
-[ADR-0005](docs/adr/0005-config-format-toml.md) — the `.yaml`
+[ADR-0005](/storage-dataflow/docs/adr/0005-config-format-toml.md) — the `.yaml`
 placeholders under `configs/` are superseded and land as `.toml` with
 plan prompt W0.3.
