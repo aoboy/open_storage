@@ -50,6 +50,9 @@ their tooling is not installed.
 | Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
+| Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
+| Packaging | **As-built (Wave 5)**: install + pkg-config + find_package legs in ci; version.h single source of truth |
+| Rust seam | Skeleton crate + cbindgen declaration-diff gate (advisory without cargo; no functional Rust) |
 | Golden-vector parity gate | Active: 152 comparisons green, seed groups pending W2.1 (ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
 | SHM / CFFI integration | CFFI build wired; SHM bridge is a stub |

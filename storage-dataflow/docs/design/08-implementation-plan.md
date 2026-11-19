@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `a215a46`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `6eee0a2`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -203,10 +203,46 @@ ADRs [0001–0009](../adr/).
   the ARC-QG core proven against the paper's analytic cycle on the
   real clock, the sidecar with shadow/live/killed, the deploy
   controller with the promotion gate and the always-armed kill
-  switch, and the runbook executed as a test. All three prototypes
-  (P1 dispatch, P2 repair, P3 pacing) now exist end to end with
-  their e2e gates green. Wave 5 (hardening, packaging, Rust seams)
-  remains per the plan.
+  switch, and the runbook executed as a test.
+
+  W5.1 fuzzers                : done — the three WAM-shape fuzzers
+                                (fountain streams, embodiment vectors,
+                                ARC release streams) with smoke budgets
+                                in ctest and full legs verified green;
+                                the ARC leg found a REAL bug on its
+                                first run: the QG park broke the drain
+                                loop, stranding one absurd-stamp entry
+                                per poll pass (545d5ec) — the same class
+                                of find as wam's M.1 fuzz history
+                                (a20bfed)
+  W5.2 packaging + embedding  : done — version.h as the single source
+                                of truth, one .pc per link granularity,
+                                find_package(sdf) imported targets, the
+                                DESTDIR-staged install leg in ci
+                                (external hello-world via pkg-config +
+                                a fresh CMake consumer); embedding
+                                notes (thread contract,
+                                no-alloc-after-warmup) in design 05;
+                                live find: unquoted pc-in heredocs had
+                                shipped empty libdir/exec_prefix
+                                (d9d92a2, 175477a)
+  W5.3 Rust seam               : done as designed — the sdf-fountain
+                                skeleton crate, cbindgen over the
+                                declared surface, the
+                                declaration-surface diff as the gate;
+                                cargo absent here: the leg skips
+                                cleanly and is advisory (the hosted
+                                matrix owns the authority — the wam
+                                hosted-matrix posture); no functional
+                                Rust (6eee0a2)
+
+  WAVE 5 COMPLETE — milestone M5 reached: hardening (3 fuzzers with
+  a live bug find), packaging (install + pkg-config + find_package
+  legs in ci), and the Rust seam validated by construction. The
+  plan is COMPLETE: all five waves, all six milestones, every
+  prototype (P1 dispatch, P2 repair, P3 pacing) built, tested, and
+  gated end to end — 57 prompt landings from the baseline import
+  to the last seam.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
