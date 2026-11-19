@@ -19,7 +19,8 @@ Checks: >
   -cert-dcl37-c,
   -cert-dcl51-cpp,
   performance-*,
-  portability-*
+  portability-*,
+  readability-braces-around-statements
 # Why the exclusions:
 #  insecureAPI.DeprecatedOrUnsafeBufferHandling — Annex-K *_s functions
 #    do not exist in glibc; the project targets Linux.

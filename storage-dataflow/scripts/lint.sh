@@ -6,19 +6,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if command -v clang-format >/dev/null 2>&1; then
-    mapfile -t sources < <(find src/c include -type f \( -name '*.c' -o -name '*.h' \))
-    if ((${#sources[@]})); then
-        clang-format --dry-run --Werror "${sources[@]}"
-    fi
+    ./scripts/format_c.sh --check
 else
     echo "clang-format not installed; skipping" >&2
 fi
 
 if command -v clang-tidy >/dev/null 2>&1 && [[ -f build/compile_commands.json ]]; then
-    mapfile -t c_sources < <(find src -type f -name '*.c')
-    if ((${#c_sources[@]})); then
-        clang-tidy -p build "${c_sources[@]}"
-    fi
+    ./scripts/tidy_c.sh
 else
     echo "clang-tidy or build/compile_commands.json missing; skipping" >&2
 fi

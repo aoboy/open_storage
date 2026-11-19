@@ -2,8 +2,8 @@ name: ci
 
 # The full matrix (plan prompt W6.5): every leg mirrors a LOCAL gate that
 # is green in this tree — `make ci` plus the e2e, fuzz, bench-gate and
-# rust-seam legs. Style starts from the committed clang-format pass
-# (07a7a18) and the curated .clang-tidy gate (analyzer fatal).
+# rust-seam legs. Style uses the shared first-party clang-format scope and
+# the curated .clang-tidy gate (analyzer and brace warnings fatal).
 
 on:
   push:
@@ -39,10 +39,8 @@ jobs:
             clang-format==23.1.5 clang-tidy==23.1.4
           echo "$RUNNER_TEMP/clang-tools/bin" >> "$GITHUB_PATH"
 
-      - name: Format check (tree is clean at 07a7a18)
-        run: |
-          find src/c include -type f \( -name '*.c' -o -name '*.h' \) -print0 |
-            xargs -0 clang-format --dry-run --Werror
+      - name: Format check (shared first-party C scope)
+        run: ./scripts/format_c.sh --check
 
       - name: Configure (compile_commands for tidy)
         run: |
@@ -50,9 +48,7 @@ jobs:
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: "Tidy check (.clang-tidy: warnings are fatal)"
-        run: |
-          find src -type f -name '*.c' -print0 |
-            xargs -0 clang-tidy -p build --quiet
+        run: ./scripts/tidy_c.sh
 
       - name: Seam comparator + bench-gate selftests
         run: |

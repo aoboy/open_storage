@@ -1,4 +1,4 @@
-.PHONY: all build test bench lint doc clean asan tsan ci install deb rust-seam rust-fountain
+.PHONY: all build test bench format lint doc clean asan tsan ci install deb rust-seam rust-fountain
 
 # Gates run serially (plan W0.5): a gate that races another gate is not
 # a gate.
@@ -14,6 +14,9 @@ test:
 
 bench:
 	./scripts/run_bench.sh
+
+format:
+	./scripts/format_c.sh --write
 
 lint:
 	./scripts/lint.sh
