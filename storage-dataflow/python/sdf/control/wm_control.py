@@ -9,6 +9,8 @@ import statistics
 import time
 from dataclasses import dataclass
 
+from sdf.common.shm import TelemetrySlot, WmShm
+
 
 @dataclass
 class PathTelemetry:
@@ -82,7 +84,9 @@ class SoftSheddingController:
         self.beta = beta
         self.units = renormalize([m // n] * n, m)
 
-    def step_with_opinions(self, opinions: list) -> list[int]:
+    def step_with_opinions(
+        self, opinions: list[tuple[int, int, float, float] | None]
+    ) -> list[int]:
         """Soft shedding over per-path opinions.
 
         ``opinions[i]`` is ``(sent, acked, ewma_lat_ns, ewma_err)`` or
@@ -92,7 +96,7 @@ class SoftSheddingController:
         reference score (median) is computed over opinion paths only —
         design 01's missing-telemetry rule.
         """
-        scores: list = []
+        scores: list[float | None] = []
         for obs in opinions:
             if obs is None:
                 scores.append(None)
@@ -152,7 +156,7 @@ class WmControlLoop:
     advance every step.
     """
 
-    def __init__(self, shm, m: int = 1024, alpha: float = 0.25,
+    def __init__(self, shm: WmShm, m: int = 1024, alpha: float = 0.25,
                  beta: float = 0.02) -> None:
         n = shm.n_paths
         self.shm = shm
@@ -163,15 +167,15 @@ class WmControlLoop:
         self.heartbeat = 0
         self.last_step_ns: int | None = None
 
-    def step(self) -> dict:
+    def step(self) -> dict[str, object]:
         """One control interval. Returns the decision record."""
-        slots = self.shm.read_telemetry()
+        slots: list[TelemetrySlot] = self.shm.read_telemetry()
         mask = self.shm.down_mask()
 
         # latest snapshot per path; absent => no opinion
-        latest: dict[int, tuple] = {}
+        latest: dict[int, tuple[int, int, float, float]] = {}
         for slot in slots:
-            (pid, _pad, reqs_out, reqs_done, reqs_failed, _bytes,
+            (pid, _pad, reqs_out, reqs_done, _reqs_failed, _bytes,
              _inflight, ewma_lat, ewma_err) = slot
             latest[pid] = (reqs_out, reqs_done, ewma_lat, ewma_err)
 

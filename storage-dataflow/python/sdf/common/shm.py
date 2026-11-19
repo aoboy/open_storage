@@ -18,10 +18,12 @@ Layout (offsets are ABI, shared with the C side):
 
 from __future__ import annotations
 
+import contextlib
 import mmap
 import os
 import struct
-import time
+from collections.abc import Mapping
+from typing import cast
 
 SEQLOCK_OFF = 0x0000
 ACTIVE_BYTE_OFF = 0x0004
@@ -37,6 +39,10 @@ MAX_PATHS = 64
 _TELEM_CAP = 32
 _TELEM_SLOT_FMT = "<IIQQQQQdd"  # id, pad, reqs_out/done/failed, bytes_rx, in_flight, lats
 _TELEM_SLOT_SIZE = struct.calcsize(_TELEM_SLOT_FMT)
+
+# (id, pad, reqs_out, reqs_done, reqs_failed, bytes_rx, in_flight,
+#  ewma_lat_ns, ewma_err) — the SPSC slot's decoded shape.
+TelemetrySlot = tuple[int, int, int, int, int, int, int, float, float]
 
 _PROFILE_FMT = "<IIIIQ"  # version, m, n, pad, down_mask (b[] follows)
 _TELEM_HDR_FMT = "<IIQ"  # magic, n_paths, down_mask
@@ -120,25 +126,30 @@ class WmShm:
 
     # ---- telemetry (reader side; writer helper for tests) ------------
 
-    def read_telemetry(self) -> list[tuple]:
+    def read_telemetry(self) -> list[TelemetrySlot]:
         """Drain all available slots (consumer side of the SPSC ring).
 
         Ring layout mirrors spsc_ring_t exactly: head at +0, tail at
         +64 (its own cacheline), mask at +128, slots at +192.
         """
-        out: list[tuple] = []
+        out: list[TelemetrySlot] = []
         head = struct.unpack_from("<Q", self._mem, TELEM_RING_OFF)[0]
         tail = struct.unpack_from("<Q", self._mem, TELEM_RING_OFF + 64)[0]
         mask = struct.unpack_from("<I", self._mem, TELEM_RING_OFF + 128)[0]
         while head != tail:
             slot_off = TELEM_RING_OFF + 192 + (tail & mask) * _TELEM_SLOT_SIZE
-            out.append(struct.unpack_from(_TELEM_SLOT_FMT, self._mem, slot_off))
+            out.append(
+                cast(
+                    TelemetrySlot,
+                    struct.unpack_from(_TELEM_SLOT_FMT, self._mem, slot_off),
+                )
+            )
             tail += 1
         if out:
             struct.pack_into("<Q", self._mem, TELEM_RING_OFF + 64, tail)
         return out
 
-    def push_telemetry(self, stats: dict) -> bool:
+    def push_telemetry(self, stats: Mapping[str, int | float]) -> bool:
         """Producer side of the ring — test/loopback use (the production
         direction is C -> Python). Returns False when full (-EAGAIN)."""
         head = struct.unpack_from("<Q", self._mem, TELEM_RING_OFF)[0]
@@ -158,8 +169,8 @@ class WmShm:
     # ---- C fast-path deference (design 01 open question 3) ----------
 
     def down_mask(self) -> int:
-        return struct.unpack_from(_TELEM_HDR_FMT, self._mem,
-                                  TELEM_HDR_OFF)[2]
+        return int(struct.unpack_from(_TELEM_HDR_FMT, self._mem,
+                                      TELEM_HDR_OFF)[2])
 
     # ---- liveness ----------------------------------------------------
 
@@ -169,10 +180,10 @@ class WmShm:
             os.close(self._fd)
             self._closed = True
 
-    def __enter__(self) -> "WmShm":
+    def __enter__(self) -> WmShm:
         return self
 
-    def __exit__(self, *exc) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.close()
 
 
@@ -181,7 +192,5 @@ _PROFILE_FMT_SIZE = struct.calcsize(_PROFILE_FMT)
 
 def unlink(name: str) -> None:
     norm = name if name.startswith("/") else "/" + name
-    try:
+    with contextlib.suppress(FileNotFoundError):
         os.unlink("/dev/shm" + norm)
-    except FileNotFoundError:
-        pass

@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Protocol
+from typing import Protocol
 
 
 class ArcMode(str, Enum):
@@ -28,7 +28,7 @@ class ArcMode(str, Enum):
 class SidecarTransport(Protocol):
     """What the controller needs from the sidecar."""
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, int]:
         ...
 
     def set_mode(self, mode: ArcMode) -> None:
@@ -76,7 +76,7 @@ class ArcDeployLoop:
         self._started = True
         return self.state
 
-    def step(self) -> dict:
+    def step(self) -> dict[str, object]:
         """One interval: read the sidecar, advance the rollout state.
 
         Returns the decision record. Raises RuntimeError when the loop
@@ -94,7 +94,7 @@ class ArcDeployLoop:
             (now - self.state.shadow_started_ns) / 1e9
         )
 
-        record: dict = {
+        record: dict[str, object] = {
             "mode": self.state.mode.value,
             "shadow_elapsed_s": self.state.shadow_elapsed_s,
             "budget_alerts": stats.get("budget_alerts", 0),
