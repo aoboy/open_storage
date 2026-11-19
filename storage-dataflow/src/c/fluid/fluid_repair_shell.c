@@ -1,10 +1,11 @@
 /*
- * fluid-repair — the W3.6 e2e driver (plan prompt W3.6, design 02).
+ * fluid-repair — the W3.6/W6.3 e2e driver (design 02).
  *
  * One repair job per invocation with the Pareto numbers on stdout:
  * the three-arm A/B (control ARQ, FLUID+LT, FLUID+nanorq) across the
- * loss ladder. Exit nonzero when a block fails to complete — the
- * script gate trusts the exit code.
+ * loss ladder, and — since W6.3 — N-block objects with per-block
+ * evidence. Exit nonzero when a block fails to complete byte-exact;
+ * the script gate trusts the exit code.
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -41,10 +42,15 @@ int main(int argc, char **argv) {
             cfg.k = (uint32_t)strtoul(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--sym") == 0 && i + 1 < argc) {
             cfg.sym_len = (uint32_t)strtoul(argv[++i], NULL, 10);
+        } else if (strcmp(argv[i], "--blocks") == 0 && i + 1 < argc) {
+            cfg.n_blocks = (uint32_t)strtoul(argv[++i], NULL, 10);
+        } else if (strcmp(argv[i], "--wave") == 0 && i + 1 < argc) {
+            cfg.wave = (uint32_t)strtoul(argv[++i], NULL, 10);
         } else {
             fprintf(stderr,
                     "usage: %s [--arm control|lt|nanorq] [--eps E] "
-                    "[--loss PCT] [--k K] [--sym T]\n",
+                    "[--loss PCT] [--k K] [--sym T] [--blocks N] "
+                    "[--wave W]\n",
                     argv[0]);
             return 2;
         }
@@ -93,13 +99,30 @@ int main(int argc, char **argv) {
                           : (cfg.arm == SDF_REPAIR_NANORQ ? "nanorq" : "lt");
     printf("REPAIR arm=%s eps=%.2f loss=%.0f k=%u sent=%llu received=%llu "
            "bytes_tx=%llu rounds=%llu fallback=%d rank=%u ok=%d "
-           "overhead=%.2f wall_ms=%llu\n",
+           "overhead=%.2f wall_ms=%llu",
            arm, cfg.eps, cfg.loss_pct, cfg.k, (unsigned long long)st.sent,
            (unsigned long long)st.received, (unsigned long long)st.bytes_tx,
            (unsigned long long)st.rounds, st.arq_fallback, st.decode_rank, st.ok,
-           cfg.k > 0 && cfg.sym_len > 0
-               ? (double)st.bytes_tx / ((double)cfg.k * (double)cfg.sym_len)
+           cfg.k > 0 && cfg.sym_len > 0 && st.n_blocks > 0
+               ? (double)st.bytes_tx / ((double)cfg.k * (double)cfg.sym_len * (double)st.n_blocks)
                : 0.0,
            (unsigned long long)(st.wall_ns / 1000000ull));
+    /* Multi-block evidence (W6.3): per-block rounds, fallback, rank
+     * and the byte-exact gate. Single-block lines stay unchanged. */
+    if (st.n_blocks > 1) {
+        printf(" blocks=%u block_rounds=", st.n_blocks);
+        for (uint32_t b = 0; b < st.n_blocks; b++)
+            printf("%s%llu", b ? "," : "", (unsigned long long)st.blocks[b].rounds);
+        printf(" block_fallback=");
+        for (uint32_t b = 0; b < st.n_blocks; b++)
+            printf("%s%d", b ? "," : "", st.blocks[b].arq_fallback);
+        printf(" block_rank=");
+        for (uint32_t b = 0; b < st.n_blocks; b++)
+            printf("%s%u", b ? "," : "", st.blocks[b].decode_rank);
+        printf(" block_ok=");
+        for (uint32_t b = 0; b < st.n_blocks; b++)
+            printf("%s%d", b ? "," : "", st.blocks[b].ok);
+    }
+    printf("\n");
     return st.ok == 1 ? 0 : 1;
 }
