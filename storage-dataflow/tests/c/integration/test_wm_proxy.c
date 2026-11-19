@@ -11,7 +11,9 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include "sdf/common/ring.h"
 #include "sdf/origin.h"
+#include "sdf/wm_shm.h"
 #include "sdf/wm.h"
 #include "sdf/wm_proxy.h"
 
@@ -176,8 +178,11 @@ static void test_midrun_degradation_redistributes(void) {
     CHECK(total == 4096);
 }
 
+static void test_shm_chain_inprocess(void);
+
 int main(void) {
     make_files();
+    test_shm_chain_inprocess();
     test_steady_discrepancy_bound();
     test_control_arm_and_kill_switch();
     test_ab_split();
@@ -187,3 +192,64 @@ int main(void) {
            "switch, A/B split, mid-run redistribution)\n");
     return 0;
 }
+
+/* ---- W6.1: the live SHM chain, in-process leg ------------------------- */
+
+/* Pre-publish a profile into the segment the proxy will attach to;
+ * the run must acquire it (version + allocation) and leave telemetry
+ * in the ring. The process-pair leg (a live Python loop driving the
+ * proxy through the same segment) is e2e_shm_chain.sh. */
+static void test_shm_chain_inprocess(void) {
+    char shm_name[64];
+    snprintf(shm_name, sizeof(shm_name), "sdf-proxy-test-%d", (int)getpid());
+    sdf_shm_t seg;
+    CHECK(sdf_wm_shm_create(shm_name, N_ORIGINS, &seg) == 0);
+
+    /* publish profile v1 with a DIFFERENT allocation (60/20/10/10):
+     * the proxy must recompile onto it at its first control tick */
+    wm_profile_t pub;
+    memset(&pub, 0, sizeof(pub));
+    pub.version = 1;
+    pub.m = 1024;
+    pub.n = N_ORIGINS;
+    pub.b[0] = 614;
+    pub.b[1] = 205;
+    pub.b[2] = 102;
+    pub.b[3] = 103;
+    CHECK(sdf_wm_shm_publish(&seg, &pub) == 0);
+
+    sdf_wm_proxy_cfg_t pc;
+    sdf_wm_proxy_stats_t st;
+    base_cfg(&pc, 2048);
+    pc.rollout_pct = 100;
+    pc.shm_name = shm_name;
+    CHECK(sdf_wm_proxy_run(&pc, &st) == 0);
+
+    /* the chain's evidence */
+    CHECK(st.shm_version_acquired == 1);
+    CHECK(st.shm_acquires >= 1);
+    CHECK(st.shm_telemetry_pushed >= N_ORIGINS); /* >= one tick's slots */
+    CHECK(st.control_ticks >= 1);
+    /* the working profile became the published one */
+    for (uint32_t i = 0; i < N_ORIGINS; i++)
+        CHECK(st.end_profile_b[i] == (int)pub.b[i]);
+    /* updates_applied stays 0: the external loop is authoritative on
+     * this path, the in-process controller never publishes */
+    CHECK(st.updates_applied == 0);
+
+    /* telemetry landed: drain the ring at the segment offset (the
+     * production reader is Python; this proves the producer side) */
+    spsc_ring_t *ring =
+        (spsc_ring_t *)((uint8_t *)seg.base + SDF_SHM_OFF_TELEMETRY_RING);
+    wm_shm_telem_t slot;
+    uint32_t slots = 0;
+    while (spsc_try_pop(ring, &slot)) {
+        CHECK(slot.id < N_ORIGINS);
+        slots++;
+    }
+    CHECK(slots == st.shm_telemetry_pushed); /* exact accounting */
+
+    sdf_wm_shm_close(&seg);
+    CHECK(sdf_shm_unlink(shm_name) == 0);
+}
+

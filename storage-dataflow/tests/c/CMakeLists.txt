@@ -109,6 +109,11 @@ add_executable(test_arc_sidecar integration/test_arc_sidecar.c)
 target_link_libraries(test_arc_sidecar PRIVATE sdf_arc sdf_common)
 add_test(NAME arc_sidecar COMMAND test_arc_sidecar)
 
+# Plan W6.1 — the live scrape endpoint (the wam K.1b contract).
+add_executable(test_metrics_endpoint unit/test_metrics_endpoint.c)
+target_link_libraries(test_metrics_endpoint PRIVATE sdf_common)
+add_test(NAME metrics_endpoint COMMAND test_metrics_endpoint)
+
 # Plan W5.1 — fuzzers (shapes from wam M.1/X4; deterministic smoke
 # budget in ctest, NOT the full libFuzzer leg which runs in CI nightly).
 add_executable(fuzz_fountain fuzz/fuzz_fountain.c)

@@ -12,6 +12,11 @@
 #include "sdf/arc.h"
 #include "sdf/common/timer.h"
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -112,10 +117,68 @@ static void test_validation(void) {
     arc_sidecar_stop(); /* double stop safe */
 }
 
+static void test_scrape(void);
+
 int main(void) {
     test_modes();
+    test_scrape();
     test_validation();
     printf("test_arc_sidecar: ok (killed oracle, live ordered burst, "
            "shadow immediate, validation)\n");
     return 0;
+}
+
+/* ---- W6.1: the live scrape over the sidecar --------------------------- */
+
+static void test_scrape(void) {
+    arc_cfg_t cfg;
+    base_cfg(&cfg);
+    CHECK(arc_sidecar_start(&cfg, 1) == 0);
+
+    /* serve requires the running sidecar; a bad port fails */
+    CHECK(arc_sidecar_serve(NULL) == -EINVAL);
+    int port = 22600 + (int)(getpid() % 400);
+    char addr[32];
+    snprintf(addr, sizeof(addr), "127.0.0.1:%d", port);
+    CHECK(arc_sidecar_serve(addr) == 0);
+    CHECK(arc_sidecar_serve(addr) == -EEXIST); /* one endpoint */
+
+    /* drive one release so the scrape carries live numbers */
+    char entry[64];
+    memset(entry, 7, sizeof(entry));
+    CHECK(arc_sidecar_submit(entry, sizeof(entry),
+                             sdf_now_ns() - 30000000ull) == 0);
+    for (int i = 0; i < 8; i++) {
+        arc_sidecar_pump_once();
+        sdf_sleep_ns(10000000ull);
+    }
+
+    /* scrape: GET answers the sidecar's own series */
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    CHECK(fd >= 0);
+    struct sockaddr_in sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((unsigned short)port);
+    CHECK(inet_pton(AF_INET, "127.0.0.1", &sa.sin_addr) == 1);
+    CHECK(connect(fd, (struct sockaddr *)&sa, sizeof(sa)) == 0);
+    const char *get = "GET /metrics HTTP/1.1\r\nHost: x\r\n\r\n";
+    CHECK(send(fd, get, strlen(get), 0) == (ssize_t)strlen(get));
+    static char buf[4096];
+    size_t got = 0;
+    while (got + 1 < sizeof(buf)) {
+        ssize_t n = recv(fd, buf + got, sizeof(buf) - 1 - got, 0);
+        if (n <= 0)
+            break;
+        got += (size_t)n;
+    }
+    buf[got] = '\0';
+    close(fd);
+    CHECK(strstr(buf, "HTTP/1.1 200 OK\r\n") != NULL);
+    CHECK(strstr(buf, "sdf_arc_releases_total") != NULL);
+    CHECK(strstr(buf, "sdf_arc_mode 1") != NULL);
+    CHECK(strstr(buf, "sdf_arc_added_latency_p99_ns") != NULL);
+
+    arc_sidecar_stop(); /* stops the endpoint with the sidecar */
+    CHECK(arc_sidecar_serve(addr) == -EINVAL); /* stopped: refuse */
 }
