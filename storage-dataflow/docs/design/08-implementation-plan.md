@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `ef737b9`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `180f025`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -446,6 +446,47 @@ ADRs [0001–0009](../adr/).
                                 installed (ef737b9). No hosted run
                                 is fabricated; it remains pending a
                                 remote/runner.
+  W6.8 functional Rust LT     : done — lt.rs behaviorally ports the C
+                                xorshift64* stream, robust-soliton draw,
+                                deterministic neighbors and peeling over
+                                the same caller-owned repr(C) layouts.
+                                Only the internal lt_*/lt_prng_next arm
+                                is replaced: C fe_*/fd_* dispatch and
+                                nanorq remain, with no codec heap
+                                allocation and panic catch/abort at the
+                                FFI boundary. SDF_USE_RUST_FOUNTAIN=ON
+                                selects Rust; OFF remains the default.
+                                Cargo's staticlib is merged into the
+                                existing libsdf_fountain.a, so callers,
+                                public headers and installed archive
+                                names do not change (77e0292, 568c30c,
+                                180f025). Evidence: pinned Rust 1.100.0
+                                fmt/clippy clean, cargo tests 4/4;
+                                cbindgen declarations 15 functions /
+                                5 typedefs / 2 structs / 1 enum
+                                identical; C and Rust ctest 23/23 each;
+                                complete parity reports byte-identical —
+                                556 comparisons, ZERO pending, of which
+                                76 are fountain (17 roundtrip + 17
+                                lossy-repair + 21 nanorq + 21 LT). The
+                                prompt-era 356-fountain figure is
+                                superseded, not current harness evidence.
+                                The merged archive has exactly 15 public
+                                plus 13 internal symbols once each and
+                                no C LT objects; Rust-source rebuild/
+                                remerge/relink is green. Rust-backed
+                                ASan+UBSan is 23/23 (C callers and the
+                                allocator boundary instrumented, not a
+                                claim of Rust-internal ASan). Installed
+                                pkg-config, find_package, CFFI and dpkg
+                                consumers execute BOTH LT and nanorq in
+                                both variants. Full make ci is green:
+                                C default/ASan+UBSan/TSan 23/23 each,
+                                Python 19/19, plus the dual-variant
+                                gates above. The comparison window stays
+                                open: no C removal, default cutover or
+                                performance claim; the first hosted run
+                                still requires a remote/runner.
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
@@ -1142,9 +1183,10 @@ W6.2 (ARC goldens)                <- cheap, finishes the parity story
 W6.5 (hosted CI matrix)           <- DONE (cbc5bd9): legs real + wired
    |- W6.3 (multi-block)          <- DONE (ac9332c, 3104fd2)
    |- W6.4 (CFFI surface)         <- DONE (9d56e78, c099e03, 301e306)
-W6.6 (v1.0 release)              <- DONE (ef737b9); next: W6.8
-W6.7 (S3/peer)                   <- waits on endpoint/stand-in decision
-W6.8 (Rust)                      <- cargo prerequisite discharged by W6.5
+W6.6 (v1.0 release)              <- DONE (ef737b9)
+W6.8 (Rust LT)                   <- DONE (77e0292, 568c30c, 180f025);
+                                    C/Rust comparison window open; C default
+W6.7 (S3/peer)                   <- next; waits on endpoint/stand-in decision
 ```
 
 ### PROMPT W6.1 — Live metrics scrape + the telemetry chain, closed end to end
@@ -1309,21 +1351,36 @@ stand-in decision).
 
 ### PROMPT W6.8 — Functional Rust: `sdf-fountain` behind the goldens
 
-**Objective:** begin ADR-0003's migration for real — the fountain in
-Rust, exporting the same `extern "C"` symbols, gated by the golden
-vectors and the cbindgen header diff (authoritative once W6.5's
-runner exists).
+**Status:** done — implementation, build/gates and design documentation
+landed as 77e0292, 568c30c and 180f025. Local acceptance is green; the
+comparison window remains open with C as the default. The first hosted run
+still requires a remote/runner and is not claimed here.
 
-**Deliverables:** the `sdf-fountain` crate grows a real
-implementation of the LT arm first (the reference codec — simpler,
-fully specified in-repo); CMake links the Rust cdylib in place of
-the C objects behind a flag; the 356 fountain comparisons run
-through the Rust build in CI.
+**Objective:** begin ADR-0003's migration for real — the internal LT arm
+in Rust, exporting the same `lt_*`/`lt_prng_next` `extern "C"` symbols
+behind unchanged public C dispatch, gated by the golden vectors and the
+cbindgen declaration-surface diff.
 
-**Acceptance:** golden vectors pass through the Rust implementation;
-cbindgen declaration diff empty; no caller changes (ADR-0003's
-contract). nanorq stays C (the vendored library IS the validated
-upstream — migrating the adapter adds no proof).
+**Deliverables:** the `sdf-fountain` crate grows a real implementation of
+the LT arm first (the reference codec — simpler, fully specified in-repo);
+CMake links the Rust staticlib in place of only the C LT/PRNG objects behind
+`SDF_USE_RUST_FOUNTAIN`, merging it into the existing `libsdf_fountain.a`.
+The current harness's **76 fountain comparisons** — 17 roundtrip, 17
+lossy-repair, 21 nanorq and 21 LT — run through BOTH builds within **556
+total comparisons**. The prompt-era 356-fountain figure is superseded,
+not current harness evidence. The aggregate gate runs locally and is wired
+into hosted CI.
+
+**Acceptance:** golden vectors pass through both implementations with
+byte-identical complete reports; the parsed cbindgen declaration diff is
+empty; no caller changes (ADR-0003's contract). nanorq stays C (the vendored
+library IS the validated upstream — migrating the adapter adds no proof).
+Full `make ci` is green, including both 23/23 variant suites, Rust 4/4,
+Rust-backed ASan+UBSan 23/23, exact archive symbols, and installed
+pkg-config/CMake/CFFI/Debian consumers executing both codecs. Sanitizer
+coverage is limited to instrumented C callers and the allocator boundary;
+no Rust-internal ASan, performance-cutover, C-removal or hosted-run claim
+is made.
 
 **Size:** 5–8 days. Gated on W6.5 (cargo in CI).
 
@@ -1347,7 +1404,11 @@ remaining evidence line is the first hosted run itself: no remote is
 configured in this environment, so a runner cannot be dispatched from
 here. Reported as implementation-complete, not as a fabricated hosted
 run. W6.6 (the release) has since landed as v1.0.0 (ef737b9 plus its
-documentation/tag commits); W6.8 is next, while W6.7 remains gated on
+documentation/tag commits). W6.8 has landed the functional Rust LT arm
+(77e0292, 568c30c, 180f025): both variants pass the same 23-test suites and
+byte-identical 556-comparison reports, including 76 fountain comparisons.
+The C/Rust comparison window is open with C still default; no cutover,
+C-removal or performance claim is made. W6.7 is next and remains gated on
 an endpoint/stand-in decision.
 
 
