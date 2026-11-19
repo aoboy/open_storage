@@ -261,7 +261,96 @@ RECEIVER / APPLY PLANE
   Storage engine / apply path (local NVMe cache, replication apply, WAL replay)
 ```
 
-### 5.2 Component Responsibilities
+### 5.2 Three-Plane Architecture Block Diagram
+
+The following block diagram expands §5.1 into the payload, control, and
+telemetry paths. The Python control plane configures and observes the C data
+plane but never sits inline with payload movement. Codec and future language
+implementations remain behind the stable `include/sdf/` C ABI.
+
+```text
+                       CACHE FILL / EC REPAIR / REPLICATION INGEST
+                                           |
+                                           v
++================================================================================+
+| SENDER / SOURCE PLANE                                                          |
+|                                                                                |
+|  [Job + byte-range planner]                                                    |
+|               |                                                                |
+|               v                                                                |
+|  [Repair-only fountain encoder: Nanorq RaptorQ | C LT | opt-in Rust LT]        |
+|               | source units / repair symbols                                  |
+|               v                                                                |
+|  [Whack-a-Mole dispatch: compiled profile + bit-reversal + soft shedding]      |
+|               | unit -> origin assignment                                      |
+|               v                                                                |
+|  [Origin I/O seam: sdf_origin_ops_t; nonblocking fetch + completion callback]  |
+|               |                                                                |
+|       +-------+----------+-------------+---------------+                       |
+|       | Loopback harness | HTTP / CDN  | S3 / blob (gated)| NVMe peer (gated)  |
+|       +-------+----------+-------------+---------------+                       |
++===============+================================================================+
+                | byte-range responses / coded symbols
+                v
++================================================================================+
+| WAN / INTERCONNECT PLANE                                                       |
+|                                                                                |
+|  [Path 1] [Path 2] ... [Path k]: independent latency, loss, and degradation    |
+|               |                                                                |
+|               +--> [Completion tally + normalized sdf_origin_stats_t]          |
++===============+================================================================+
+                | received source units / repair symbols
+                v
++================================================================================+
+| RECEIVER / APPLY PLANE                                                         |
+|                                                                                |
+|  [FLUID repair coordinator]                                                    |
+|    [Nanorq / LT decoder] --> [Decode-sufficiency + Loss-Product < epsilon gate]|
+|               |                         |                                      |
+|               |                         +--> [Exact-range ARQ fallback]        |
+|               v recovered entries                                              |
+|  [ARC receiver pacer: adaptive offset + ordered release heap]                  |
+|    shadow / live / killed modes; receiver clock only; no leader feedback       |
+|               | smoothed, ordered apply stream                                 |
+|               v                                                                |
+|  [Storage engine: local NVMe cache | follower replication apply | WAL replay]  |
++================================================================================+
+
++================================================================================+
+| CROSS-CUTTING CONTROL + OBSERVABILITY PLANE (Python; off the payload hot path) |
+|                                                                                |
+|  [Strict TOML configs] --> [wm_control | fluid_coord | arc_deploy]             |
+|                                  | profiles / epsilon / A-B arms / modes       |
+|                                  v                                             |
+|                         [SHM seqlock publication] ==> acquire by C components  |
+|                                                                                |
+|  [C proxy + FLUID + ARC] ..> [SHM telemetry ring + lock-free metrics]          |
+|                                  :                                             |
+|                                  :                                             |
+|                    [4 Hz scoring / A-B analysis / rollout gates]               |
+|                                  |                                             |
+|                    +-------------+--------------+                              |
+|                    v                            v                              |
+|             [/metrics endpoint]       [Deploy gate + kill switch]              |
+|                    |                            |                              |
+|                    v                            +==> ARC / profile control     |
+|         [Dashboards + CI/SLO evidence]                                         |
++================================================================================+
+
+  | / --> / v : payload or recovered-data flow
+  ..> / :   : telemetry and observation
+  ==>       : published configuration or deployment control
+```
+
+The control loop consumes normalized origin statistics and pipeline metrics,
+then publishes new profiles, repair parameters, and ARC modes. FLUID's
+exact-range ARQ fallback closes the decode-safety path before entries enter
+ARC; it does not bypass receiver pacing. Hard origin failures still use the C
+`wm_mark_down` fast path, without waiting for Python.
+S3 and NVMe-peer blocks denote the common origin-driver seam; production
+endpoint evidence remains separately gated and is not implied by this diagram.
+
+### 5.3 Component Responsibilities
 
 | Component | Side | Responsibility | Language |
 |---|---|---|---|
@@ -273,7 +362,7 @@ RECEIVER / APPLY PLANE
 | `arc_pacer` | Receiver | Offset estimator + heap + release loop | C |
 | `arc_deploy` | Control | Pipeline selection, kill switch, shadow mode | Python |
 
-### 5.3 Origin driver seam (new)
+### 5.4 Origin driver seam (new)
 
 The interconnect "paths" of §5.1 are **origins** — S3 blobs, CDN edges,
 peers, colocated clusters. One vtable (`sdf_origin_ops_t`) is the only
@@ -286,7 +375,7 @@ UDP/RoCE drivers themselves are deliberately not imported (import map
 §4). Full contract: [`09-origin-driver-seam.md`](09-origin-driver-seam.md),
 decision record: [ADR-0008](../adr/0008-origin-driver-seam.md).
 
-### 5.4 Provenance and execution
+### 5.5 Provenance and execution
 
 The data-plane cores (spray, FLUID budget, ARC schedule, RaptorQ codec)
 are **imported from the wack_a_mole repository** behind the

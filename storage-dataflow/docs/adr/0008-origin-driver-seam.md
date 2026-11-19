@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-11-18
 **Related:** [Origin driver seam design](../design/09-origin-driver-seam.md),
-[Overview §5.3](../design/00-overview.md#53-origin-driver-seam-new),
+[Overview §5.4](../design/00-overview.md#54-origin-driver-seam-new),
 [Implementation plan W1](../design/08-implementation-plan.md),
 [wack_a_mole `include/wam/transport.h` (vtable pattern)]
 

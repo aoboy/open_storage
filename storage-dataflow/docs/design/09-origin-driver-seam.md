@@ -5,7 +5,7 @@ harness driver with live degradation knobs (W1.2), HTTP reference driver
 (W1.3), and the origin_loadgen harness with the four canonical
 degradation profiles (W1.4); 12/12 ctest with ASan+UBSan and TSan green.
 **Related:** [ADR-0008](../adr/0008-origin-driver-seam.md) (the decision),
-[00-overview §5.3](00-overview.md#53-origin-driver-seam-new),
+[00-overview §5.4](00-overview.md#54-origin-driver-seam-new),
 [01-whack-a-mole](01-whack-a-mole.md) (the consumer),
 [07-import-map §4](07-wam-import-map.md) (why the UDP/RoCE drivers are not
 imported).
