@@ -119,3 +119,24 @@ superseded by the paper parameter set (auto-params from RTT and Δ_n
 quantiles, W4.2); ordering violations are a correctness bug by
 construction under QG — any observed violation rolls back to shadow
 (W4.5 kill-switch leg proves the rollback).
+
+### Implementation note — mode switching (W6.4)
+
+`arc_set_mode()` swaps the pacer mode in place; `arc_sidecar_set_mode()`
+stores an atomic *desired* mode that `arc_sidecar_pump_once()` applies,
+so a controller flip lands within one poll interval. Entering `killed`
+drains the whole QG backlog on that pump: under `ARC_MODE_IMMEDIATE`
+`arc_drain` releases queued entries regardless of their `T_n` (the hit
+is real elapsed time, so the added-latency sample stays honest).
+
+**Known limitation (recorded, not claimed).** The pacer still maps
+`shadow` onto `ARC_MODE_IMMEDIATE`; it does not compute a non-applying
+QG schedule in parallel. Shadow-mode added-latency metrics are therefore
+not collected against the real sidecar, and promotion SLO evidence from
+shadow is vacuous today. Implementing true shadow needs a second,
+non-applying release path (or a shadow-marked schedule that suppresses
+the apply callback without double-counting metrics); until then the
+promotion gate must not be treated as production evidence. W6.4 also
+baselines the controller's cumulative `budget_alerts_seen` at promotion
+so historical shadow counters are never re-counted as fresh live
+breaches.

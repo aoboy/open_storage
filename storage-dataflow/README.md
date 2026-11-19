@@ -53,18 +53,18 @@ installs it, while `make ci` skips that leg cleanly when cargo is absent.
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
-| Packaging | **As-built (Wave 5)**: install + pkg-config + find_package legs in ci; version.h single source of truth |
+| Packaging | **As-built (Wave 5/W6.4)**: install + pkg-config + find_package legs in ci; version.h single source of truth; the installed surface includes the PIC `libnanorq.a` and builds the CFFI extension from `$PREFIX` |
 | Rust seam | **As-built (W6.5)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff, authoritative in CI (`--require`); no functional Rust yet |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
 | CI | **W6.5**: 8-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, authoritative rust seam, full fuzz) + nightly p99 gate; actionlint 1.7.12 clean; local mirror green; first hosted run pending a remote |
-| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); no functional Rust yet (W6.8, schedule-gated) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
+| Known gaps (owned) | First hosted CI run pending a remote (the matrix + nightly gate are wired and locally mirrored, W6.5); no functional Rust yet (W6.8, schedule-gated); true shadow-mode ARC scoring is deferred — shadow still maps to IMMEDIATE, so promotion SLO evidence is not yet non-vacuous (W6.4 note, [design 03](docs/design/03-arc-pacing.md#implementation-note--mode-switching-w64)) — [plan §14](docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins) |
 | Golden-vector parity gate | Active: **556 comparisons, zero pending** — WM, both fountain arms, ARC §12.3 (W6.2; ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |
-| SHM / CFFI integration | CFFI build wired; SHM bridge live (W6.1 process-pair chain) |
+| SHM / CFFI integration | **As-built (W6.4)**: CFFI covers origin → wm → arc → fluid → fountain, links the PIC archives, and builds against an installed prefix (`SDF_CFFI_DIR` override); `CffiSidecarTransport` drives the live C ARC sidecar (mode flips in one pump); SHM bridge live (W6.1 process-pair chain) |
 | Fountain codecs (P2) | **As-built (Wave 3)**: nanorq (RaptorQ) + LT arms behind one ABI; the parity gate now covers 556 comparisons total (W6.2) |
-| FLUID repair (P2) | **As-built (Wave 3)**: budget + gate on the section-4.3 identity, coordinator with mandatory ARQ fallback, three-arm loss ladder green |
-| ARC pacing sidecar (P3) | **As-built (Wave 4)**: ARC-QG core on the paper's analytic fixed point, shadow/live/killed sidecar, deploy gate + armed kill switch, runbook executed as a test |
+| FLUID repair (P2) | **As-built (Wave 3/W6.3)**: budget + gate on the section-4.3 identity, coordinator with mandatory per-block ARQ fallback, three-arm loss ladder green; N-block objects (≤64) with per-block codec/budget/gate, deficit-ranked admission, per-block round accounting, and a **byte-exact** decode gate |
+| ARC pacing sidecar (P3) | **As-built (Wave 4/W6.4)**: ARC-QG core on the paper's analytic fixed point, shadow/live/killed sidecar with ABI mode setters (one-pump flips, killed drains the backlog), deploy gate + armed kill switch, runbook executed as a test; true shadow-mode metrics remain the recorded open item |
 | Rust modules | Deferred to phase 4 |
 
 ## Documentation
