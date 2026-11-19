@@ -1,12 +1,37 @@
+# The clang-tidy gate (plan W6.5). The static analyzer and the bug
+# classes that can indicate real defects are ON and warnings are fatal.
+# Families turned off below are deliberate project conventions or checks
+# that cannot be satisfied on this target — not a blanket silence.
 Checks: >
+  -*,
   bugprone-*,
-  clang-analyzer-*,
   -bugprone-easily-swappable-parameters,
   -bugprone-reserved-identifier,
+  -bugprone-signed-bitwise,
+  -bugprone-narrowing-conversions,
+  -bugprone-unchecked-string-to-number-conversion,
+  clang-analyzer-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   cert-*,
   -cert-err33-c,
+  -cert-err34-c,
+  -cert-dcl16-c,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
   performance-*,
   portability-*
-WarningsAsErrors: ''
+# Why the exclusions:
+#  insecureAPI.DeprecatedOrUnsafeBufferHandling — Annex-K *_s functions
+#    do not exist in glibc; the project targets Linux.
+#  bugprone-signed-bitwise / narrowing-conversions — the ARC §12.3 math
+#    is double by design and the hash/bit paths mix signed counters with
+#    unsigned masks after bounds checks; the conversions are intentional.
+#  cert-dcl16-c — lowercase ull/ll suffixes are the in-tree convention.
+#  cert-dcl37-c/dcl51-cpp — _POSIX_C_SOURCE is a required feature-test
+#    macro, not a user identifier.
+#  cert-err33-c/err34-c + unchecked-string-to-number — CLI and HTTP
+#    header parsers validate their ranges downstream; the checker cannot
+#    see those contracts.
+WarningsAsErrors: '*'
 HeaderFilterRegex: '^(include|src)/'
 FormatStyle: file

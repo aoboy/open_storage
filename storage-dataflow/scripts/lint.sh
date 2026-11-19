@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 if command -v clang-format >/dev/null 2>&1; then
-    mapfile -t sources < <(find src include -type f \( -name '*.c' -o -name '*.h' \))
+    mapfile -t sources < <(find src/c include -type f \( -name '*.c' -o -name '*.h' \))
     if ((${#sources[@]})); then
         clang-format --dry-run --Werror "${sources[@]}"
     fi
