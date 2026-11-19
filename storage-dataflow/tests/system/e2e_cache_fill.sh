@@ -39,6 +39,47 @@ for p in steady slow dies flapping; do
     run_profile "$p"
 done
 
+# W6.1 scrape smoke: one paced run behind the live endpoint, one GET
+PORT=$((22800 + RANDOM % 200))
+rm -f "/dev/shm/sdf-e2e-scrape-$$" 2>/dev/null || true
+SDF_METRICS_ENDPOINT="127.0.0.1:$PORT" \
+    "$PROXY" --units 20000 --pace-ns 150000 --shm "sdf-e2e-scrape-$$" \
+    --profile steady >"/tmp/sdf-e2e-scrape.log" 2>&1 &
+SCRAPE_PID=$!
+ok=""
+for _ in $(seq 1 60); do
+    if out="$(PYTHONPATH="$ROOT/python" python3 - <<PYEOF
+import socket
+s = socket.create_connection(("127.0.0.1", $PORT), timeout=3)
+s.sendall(b"GET /metrics HTTP/1.1\r\nHost: x\r\n\r\n")
+buf = b""
+while True:
+    d = s.recv(4096)
+    if not d:
+        break
+    buf += d
+text = buf.decode()
+assert "HTTP/1.1 200 OK" in text
+assert "sdf_proxy_control_heartbeat_ticks" in text
+assert "sdf_proxy_shm_profile_version" in text
+print("scraped")
+PYEOF
+)"; then
+        ok="$out"
+        break
+    fi
+    sleep 0.2
+done
+if [[ -z "$ok" ]]; then
+    echo "E2E FAIL: the scrape smoke never answered" >&2
+    kill "$SCRAPE_PID" 2>/dev/null || true
+    gate=1
+else
+    echo "scrape smoke: $ok (live 200 + heartbeat + version series)"
+fi
+wait "$SCRAPE_PID" || true
+rm -f "/dev/shm/sdf-e2e-scrape-$$" 2>/dev/null || true
+
 # Bytes-neutral leg (design 01: a dispatch-only change must move the
 # same bytes): treatment (100%) vs control (0%) complete every unit.
 for arm in 100 0; do
