@@ -1,16 +1,73 @@
 name: ci
 
+# The full matrix (plan prompt W6.5): every leg mirrors a LOCAL gate that
+# is green in this tree — `make ci` plus the e2e, fuzz, bench-gate and
+# rust-seam legs. Style starts from the committed clang-format pass
+# (07a7a18) and the curated .clang-tidy gate (analyzer fatal).
+
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  style:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Pin the exact tools the committed pass and the local gate used:
+      # distro clang-format drifts and would reformat the whole tree.
+      - name: Install pinned clang tooling
+        run: |
+          python3 -m venv "$RUNNER_TEMP/clang-tools"
+          "$RUNNER_TEMP/clang-tools/bin/pip" install --upgrade pip
+          "$RUNNER_TEMP/clang-tools/bin/pip" install \
+            clang-format==23.1.5 clang-tidy==23.1.4
+          echo "$RUNNER_TEMP/clang-tools/bin" >> "$GITHUB_PATH"
+
+      - name: Format check (tree is clean at 07a7a18)
+        run: |
+          find src/c include -type f \( -name '*.c' -o -name '*.h' \) -print0 |
+            xargs -0 clang-format --dry-run --Werror
+
+      - name: Configure (compile_commands for tidy)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: "Tidy check (.clang-tidy: warnings are fatal)"
+        run: |
+          find src -type f -name '*.c' -print0 |
+            xargs -0 clang-tidy -p build --quiet
+
+      - name: Seam comparator + bench-gate selftests
+        run: |
+          python3 scripts/check_rust_seam.py --selftest
+          python3 scripts/fetch_bench_history.py --selftest
+          python3 scripts/bench_regression.py --selftest
+
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    env:
+      CC: ${{ matrix.compiler }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,26 +78,163 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build
+          sudo apt-get install -y cmake ninja-build ${{ matrix.compiler }}
 
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install cffi mypy prometheus-client pytest pyyaml ruff xxhash
+          python3 -m pip install cffi mypy pytest ruff xxhash pyyaml
 
-      - name: Build
-        run: ./scripts/build.sh
-
-      - name: C tests
-        run: ctest --test-dir build --output-on-failure
+      - name: Build + C tests
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
 
       - name: Python tests
         run: PYTHONPATH=python python3 -m pytest tests/python -q
 
-      - name: CFFI smoke test
-        run: PYTHONPATH=python:bindings/cffi python3 -c "import sdf_cffi; print(sdf_cffi.ffi.sizeof('wm_profile_t'))"
+      - name: CFFI build + smoke
+        run: |
+          python3 bindings/cffi/build_ffi.py
+          PYTHONPATH=python:bindings/cffi python3 -c \
+            "import sdf_cffi; print(sdf_cffi.ffi.sizeof('wm_profile_t'))"
 
       - name: Python static checks
         run: |
           (cd python && ruff check sdf)
           (cd python && mypy --config-file mypy.ini sdf)
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: ASan + UBSan
+        run: |
+          cmake -S . -B build-asan -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
+          cmake --build build-asan --parallel
+          ctest --test-dir build-asan --output-on-failure
+
+      - name: TSan
+        run: |
+          # The runner's high ASLR entropy can break TSan's shadow map.
+          sudo sysctl -w vm.mmap_rnd_bits=28 || true
+          cmake -S . -B build-tsan -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_FLAGS="-fsanitize=thread -fno-omit-frame-pointer -g"
+          cmake --build build-tsan --parallel
+          ctest --test-dir build-tsan --output-on-failure
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools + Python dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cffi pytest pyyaml xxhash ruff mypy
+
+      - name: Build once
+        run: ./scripts/build.sh
+
+      - name: "e2e: cache-fill (4 profiles + bytes-neutral arms + scrape)"
+        run: ./tests/system/e2e_cache_fill.sh
+
+      - name: "e2e: repair (3 arms x loss ladder + epsilon sweep)"
+        run: ./tests/system/e2e_repair.sh
+
+      - name: "e2e: apply (sidecar modes + kill-switch runbook)"
+        run: ./tests/system/e2e_apply.sh
+
+      - name: "e2e: live SHM chain (process pair)"
+        run: ./tests/system/e2e_shm_chain.sh
+
+  bench-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install cffi pyyaml xxhash
+
+      # The C bench records the seeded spray; the script fails past
+      # 30 cyc/decision (2x the 15-cyc target) — the W2.6 gate.
+      - name: Seeded-spray bench gate
+        run: ./scripts/run_bench.sh --iterations 20000
+
+      - name: Upload the record
+        uses: actions/upload-artifact@v4
+        with:
+          name: wm-bench-gate
+          path: build/bench_results.txt
+          if-no-files-found: error
+
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y cmake pkg-config
+
+      - name: Install leg (pkg-config + find_package)
+        run: ./scripts/test_install.sh
+
+  rust-seam:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@1.100.0
+
+      # --require makes a missing cargo a failure, not a skip: this leg
+      # is AUTHORITATIVE in CI (W6.5).
+      - name: Rust seam (declaration surface)
+        run: ./scripts/test_rust_seam.sh --require
+
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build --parallel
+
+      # ctest runs the smoke budgets; these are the full defaults
+      # (200k / 200k / 100k) used by the W5.4 harnesses.
+      - name: Full fuzz budgets
+        run: |
+          ./build/tests/c/fuzz_fountain
+          ./build/tests/c/fuzz_wm_profile
+          ./build/tests/c/fuzz_arc_stream

@@ -1,5 +1,9 @@
 name: bench
 
+# Nightly control-plane regression gate (plan W6.5, design 00 section
+# 11.3): fail when p99 regresses more than 5% against the median of the
+# last 7 days. Never ctest-gated — it needs history and a quiet runner.
+
 on:
   schedule:
     - cron: "0 6 * * *"
@@ -7,10 +11,12 @@ on:
 
 permissions:
   contents: read
+  actions: read # list/download the last 7 days of bench artifacts
 
 jobs:
   control-plane-bench:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -21,14 +27,40 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install pyyaml
+          python3 -m pip install cffi pyyaml xxhash
 
-      - name: Run benchmark
+      - name: Run benchmark (C gate + control-plane microbench)
         run: ./scripts/run_bench.sh --iterations 20000
 
-      - name: Upload results
+      # Upload before the gate: a regressed night still becomes history
+      # (the fetch below excludes this run by id).
+      - name: Upload the night's result
         uses: actions/upload-artifact@v4
         with:
           name: wm-control-bench
           path: out/bench/
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Fetch the 7-day history
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/fetch_bench_history.py \
+            --repo "$GITHUB_REPOSITORY" --days 7 \
+            --out bench-history --exclude-run "$GITHUB_RUN_ID"
+
+      - name: Regression gate (p99 > 5% vs the 7-day median)
+        run: |
+          python3 scripts/bench_regression.py \
+            --history bench-history \
+            --current out/bench/wm_control_microbench.json \
+            --metric step_ns.p99 --threshold 0.05
+
+      - name: Upload the C bench record
+        uses: actions/upload-artifact@v4
+        with:
+          name: wm-c-bench
+          path: build/bench_results.txt
+          if-no-files-found: error
+          retention-days: 14
