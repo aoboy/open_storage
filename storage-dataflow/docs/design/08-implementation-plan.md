@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of `180f025`; refreshed per wave)
+## IMPLEMENTATION STATUS (informative — judgement; as of `d25d6b4`; refreshed per wave)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -1186,7 +1186,18 @@ W6.5 (hosted CI matrix)           <- DONE (cbc5bd9): legs real + wired
 W6.6 (v1.0 release)              <- DONE (ef737b9)
 W6.8 (Rust LT)                   <- DONE (77e0292, 568c30c, 180f025);
                                     C/Rust comparison window open; C default
-W6.7 (S3/peer)                   <- next; waits on endpoint/stand-in decision
+W6.7 (S3/peer)                   <- existing; endpoint/stand-in gated
+W6.9 (ARC entry retention)       <- NEXT actionable correctness fix
+   |- W6.10 (true ARC shadow)     <- real promotion evidence after W6.9
+   |    └─ W6.14 (observability)  <- real shadow/drop/histogram semantics
+   └─ W6.12 (measurement gates)   <- benchmark the corrected ARC
+W6.11 (hosted + conformance)     <- external runner; expanded proof corpus
+   |- W6.12 -> W6.13 (LT decision) <- evidence review, not automatic cutover
+   |- W6.15 (production HTTP)     <- hosted integration/transport evidence
+   └─ W6.16 (isolated wheel)      <- hosted packaging evidence
+W6.16 + W6.14 -> W6.17 (RPM/Helm) <- deploy only tested artifacts
+W6.9 + W6.10 + W6.11 + W6.12 + W6.13
+                                  -> W6.18 (opt-in Rust ARC)
 ```
 
 ### PROMPT W6.1 — Live metrics scrape + the telemetry chain, closed end to end
@@ -1384,15 +1395,463 @@ is made.
 
 **Size:** 5–8 days. Gated on W6.5 (cargo in CI).
 
-### Parking lot (candidates, unsized)
+### PROMPT W6.9 — Preserve ARC sidecar entries across pacer backpressure
+
+**Status:** proposed — highest-priority correctness fix.
+
+**Objective:** close the accepted-entry loss window in the ARC sidecar when
+its input ring accepts an entry but `arc_submit()` subsequently returns
+`-EAGAIN` because the pacer slab or heap is full.
+
+**Evidence/rationale:** source inspection at the baseline shows
+`arc_sidecar_pump_once()` popping a slot and breaking on `-EAGAIN` without
+restoring or retaining it (`src/c/arc/arc_sidecar_main.c`, pump loop).
+`arc_submit()` can return `-EAGAIN` on slab/heap exhaustion
+(`src/c/arc/arc_pacer.c`). The comment says to re-push the entry, but no such
+operation exists. This is a source-audited finding; the new regression test
+must demonstrate it before the fix rather than claiming a reproduced failure
+now.
+
+**Deliverables:**
+
+- A regression that fills a future-dated QG pacer, refills the input ring,
+  forces internal pacer backpressure, and then drains all accepted entries.
+- Pump-owned pending-entry retention, or an equivalent non-destructive ring
+  handoff, preserving FIFO and exactly-once application without changing the
+  public ABI.
+- Explicit stop/mode-flip behavior for pending plus ring plus pacer entries;
+  cleanup must not free storage while an accepted entry remains stranded.
+- Focused saturation, duplicate, ordering, kill-drain, and lifecycle tests.
+- Design/ledger documentation distinguishing caller-refused `-EAGAIN` at the
+  public submission ring from internal, already-accepted backpressure.
+
+**Acceptance:**
+
+- The new saturation regression fails on the pre-fix implementation and passes
+  after it.
+- Every submission for which `arc_sidecar_submit()` returned 0 is eventually
+  applied exactly once, with payload identity and required ordering intact,
+  across repeated saturation and shadow/live/killed transitions.
+- A full input ring still returns `-EAGAIN` to the caller, which retains
+  ownership of that unaccepted entry; it is not conflated with internal retry.
+- Stop and kill-drain leave no accepted entry in the pending slot, input ring,
+  or pacer, and produce no late callback after destruction.
+- Existing ARC goldens and tests remain green; focused ARC tests,
+  ASan+UBSan, TSan where applicable, and full `make ci` pass.
+
+**Size:** 1–2 days. **Depends on:** none.
+
+---
+
+### PROMPT W6.10 — True ARC shadow scoring and non-vacuous promotion evidence
+
+**Status:** proposed.
+
+**Objective:** replace shadow's current mapping to `ARC_MODE_IMMEDIATE` with a
+real non-applying QG schedule, so shadow added-latency and promotion decisions
+measure the algorithm that live mode would execute.
+
+**Evidence/rationale:** `docs/design/03-arc-pacing.md` explicitly records that
+shadow metrics and promotion SLO evidence are vacuous today. The deploy
+controller therefore needs both real schedule metrics and a non-vacuity gate.
+
+**Deliverables:**
+
+- A second non-applying release path or shadow-marked schedule that computes
+  QG release times while the existing path applies each entry immediately and
+  exactly once.
+- Separate shadow schedule and immediate-apply metrics; no double-counting of
+  applies, drops, backlog, added latency, or budget alerts.
+- Deterministic per-entry shadow schedule records suitable for replay and a
+  later C/Rust dual-pacer comparison.
+- Deploy-controller rejection of promotion when shadow evidence is absent,
+  empty, stale, or IMMEDIATE-only, while retaining the existing time/SLO gates.
+- Unit, integration, CFFI, fuzz, and transition tests for
+  shadow→live→killed, backlog draining, and W6.9 saturation.
+- Internal-only stats/layout extensions where possible; otherwise stop and
+  process the required public-ABI ADR/version change before implementation.
+
+**Acceptance:**
+
+- For identical timestamped inputs, shadow computes the same release schedule
+  as live QG while shadow apply timing remains immediate.
+- The bursty-trace harness emits genuine shadow added-latency samples; zero
+  valid samples or IMMEDIATE-only samples cannot satisfy promotion even after
+  a simulated 24 hours.
+- Valid clean samples plus the existing time and alert requirements permit
+  promotion; historical shadow alerts are not recounted as live breaches.
+- Killed mode drains accepted backlog with zero drops, no ordering violations,
+  and no late shadow callback; mode changes cannot duplicate an apply.
+- Existing extracted ARC goldens pass unchanged. Any new shadow vectors are
+  extracted from the corrected C implementation through its public ABI.
+- Python deploy tests, C ARC tests, both sanitizer suites, and full `make ci`
+  pass. A fixture-shortened run is not reported as a production 24-hour soak.
+
+**Size:** 4–6 days. **Depends on:** W6.9.
+
+---
+
+### PROMPT W6.11 — Authoritative hosted and expanded conformance evidence
+
+**Status:** proposed; externally gated on a remote/runner.
+
+**Objective:** close M6's remaining hosted-evidence line and turn the current
+smoke/fixed-shape checks into a durable regression corpus without inflating
+comparison counts or claiming unexecuted coverage.
+
+**Deliverables:**
+
+- Configure the repository remote/runner and execute the complete existing CI
+  matrix at recorded revisions, including the authoritative W6.8 Rust leg.
+- Exercise the nightly workflow and preserve honest baseline/insufficient-
+  history behavior; do not claim a seven-day median before it exists.
+- Persistent minimized fuzz corpora and regression inputs, including W5's ARC
+  park/stranding find and W6.9's saturation case, plus deterministic replay.
+- Input-derived fountain fuzz geometries across supported K/symbol lengths and
+  both codecs; malformed streams retain bounded/no-crash behavior.
+- WM rejection-immutability checks and real residual-fairness hit/conservation
+  assertions replacing placeholder checks.
+- Additional provenance-recorded fountain geometries extracted from the C
+  implementation, without altering existing expected bytes by hand.
+- An installed-artifact CFFI golden consumer that complements, rather than
+  replaces, `tests/c/test_parity.c` and the existing 556-comparison C harness.
+- Ledger entries with hosted run IDs, revisions, toolchains, exact comparison
+  counts, skips, and failures.
+
+**Acceptance:**
+
+- One actual full-matrix hosted run is green at a recorded revision; W6.11
+  remains open until that run exists.
+- Nightly execution is observed, and first-baseline/insufficient-history skips
+  are reported exactly as executed.
+- Every checked-in regression input reproduces its intended invariant in the
+  replay leg; smoke and full fuzz budgets pass.
+- New fountain tests cover multiple supported shapes and both codecs; the WM
+  rejection test compares complete pre/post profile state, and fairness tests
+  inspect actual recipient hit counts.
+- The CFFI consumer runs against installed artifacts and reports zero pending
+  applicable groups. Existing aggregate parity remains zero-pending; new
+  counts are derived from the harness/vector files, not guessed.
+- No hosted, coverage, or historical-performance statement lacks a linked run
+  artifact.
+
+**Size:** 3–5 days plus runner and nightly-history waits.
+**Depends on:** external remote/runner; W6.9 for its final regression corpus.
+
+---
+
+### PROMPT W6.12 — ARC benchmark activation and paired C/Rust LT measurements
+
+**Status:** proposed.
+
+**Objective:** implement the missing performance evidence before using ARC's
+200 ns/block target or Rust LT results as a gate, baseline, or cutover argument.
+
+**Deliverables:**
+
+- `bench_arc` workloads for submit/poll/release, immediate and queued QG paths,
+  named batch sizes and queue depths, with machine-readable ns/block output.
+- Reference-runner activation of the 200 ns/block target and the plan's 2× CI
+  failure headroom; microbenchmarks remain outside CTest.
+- Negative tests proving missing, malformed, stale, and regressed ARC samples
+  fail a required gate rather than silently skipping.
+- Paired same-runner C/Rust LT encode, generate/push, peel/decode, and repair
+  benchmarks across several supported K, symbol sizes, and loss patterns.
+- Raw benchmark artifacts keyed by revision/runner/flags and reusable hooks for
+  a later C/Rust ARC comparison.
+- Synthetic nightly-history tests for the >5% regression rule and its
+  insufficient-history behavior.
+
+**Acceptance:**
+
+- `make bench` runs `bench_arc` and emits stable named records; the enforced
+  reference-runner threshold fails above 400 ns/block, while the 200 ns/block
+  result is reported separately as target met or missed.
+- Existing WM thresholds and e2e benchmark reports remain intact.
+- Identical C/Rust LT workloads and iteration budgets produce comparable p99
+  and throughput artifacts; no cross-machine comparison is accepted as paired
+  evidence.
+- Synthetic regressions trip the intended gates; insufficient real history
+  skips rather than fabricating a baseline.
+- Results are published as measurements only. This prompt makes no default
+  cutover, C-removal, or universal performance claim.
+
+**Size:** 3–5 days plus baseline collection.
+**Depends on:** W6.9 and W6.11's stable reference runner.
+
+---
+
+### PROMPT W6.13 — Fountain comparison-window evidence review and decision
+
+**Status:** proposed — decision package, not authorization to delete C.
+
+**Objective:** close the W6.8 LT comparison window with an explicit per-module
+decision grounded in hosted correctness and same-runner performance evidence.
+
+**Deliverables:**
+
+- A joint report covering W6.8 ABI/golden/symbol/package results, W6.11 hosted
+  and expanded-conformance evidence, and W6.12 raw paired measurements.
+- At least seven paired same-runner nightly samples, or a documented decision
+  to retain the status quo while evidence remains insufficient.
+- Confirmation that a release containing the opt-in Rust LT and retained C arm
+  has completed the ADR-required comparison window before any default-change
+  recommendation.
+- An ADR recording one decision: retain C default, retain both with Rust
+  opt-in, or authorize a subsequent default change with rollback criteria.
+- Explicit C-retention/removal criteria and a rollback plan; nanorq remains C
+  and outside this decision.
+
+**Acceptance:**
+
+- A cutover recommendation is invalid without hosted correctness, unchanged
+  public declarations/callers, byte-identical deterministic parity, both-
+  variant consumers, and performance within the documented nightly noise rule.
+- Missing, stale, mixed-runner, or contradictory evidence results in C retained
+  and default, not a conditional performance claim.
+- W6.13 itself neither changes the CMake default nor deletes C. Any approved
+  default switch/removal is a separate reviewed landing with its own tests and
+  rollback.
+- Historical v1.0.0 release notes remain the record at that tag; current
+  status lives in the design/ADR/ledger documents.
+
+**Size:** 2–3 days plus comparison-release and sample-collection waits.
+**Depends on:** W6.11 and W6.12.
+
+---
+
+### PROMPT W6.14 — Executable metrics, dashboards, alerts, and Python export
+
+**Status:** proposed.
+
+**Objective:** reconcile the documented metric inventory, actual C/Python
+series, and dashboard queries so every rollout guardrail is backed by an
+emitted or explicitly external signal.
+
+**Deliverables:**
+
+- One documented naming/schema contract reconciling design names, `sdf_`-prefixed
+  scrapes, histogram conventions, bounded labels, and compatibility needs.
+- Prometheus cumulative histogram `_bucket`, `_sum`, and `_count` series for
+  owned latency/batch metrics, including `le="+Inf"` and monotonic buckets.
+- ARC drop/backpressure accounting using W6.9's exact accepted-entry semantics,
+  and genuine shadow/live series using W6.10's separated statistics.
+- Python control-plane metric registration/export replacing the remaining
+  metrics TODO, with bounded labels and liveness samples.
+- Importable WM, FLUID, and ARC dashboards plus warning/page alert tests at the
+  documented thresholds; externally owned engine metrics require an explicit
+  input/exporter contract rather than silently empty panels.
+- Automated query validation against live scrapes and checked-in external
+  fixtures where applicable.
+
+**Acceptance:**
+
+- Every dashboard query resolves to a locally emitted series or a declared
+  external fixture; no nonexistent histogram/drop series remains hidden.
+- Histogram counts equal observed events, sums match test inputs within their
+  numeric tolerance, buckets are cumulative, and labels remain bounded.
+- W6.9's accepted-entry saturation test keeps the dropped counter at zero;
+  caller-refused submissions and actual invalid-input drops are distinguishable.
+- ARC dashboards distinguish shadow schedule latency from immediate/live apply
+  behavior and expose kill-switch state.
+- Python tests exercise `prometheus_client.generate_latest()` and liveness;
+  alert tests cover every warning/page boundary, including any ARC drop.
+- Full Python/C tests and the new observability validation leg pass. Local
+  query validation is not represented as a hosted Grafana import.
+
+**Size:** 3–5 days. **Depends on:** W6.9 and W6.10.
+
+---
+
+### PROMPT W6.15 — Production HTTP origins, HTTPS, and measured transport A/B
+
+**Status:** proposed; does not include W6.7 S3/NVMe-peer drivers.
+
+**Objective:** move WM and FLUID beyond forced-loopback harness origins and
+turn the reference HTTP driver into a measured, bounded production candidate
+without weakening loopback determinism.
+
+**Evidence/rationale:** the WM harness constructs loopback files and overwrites
+origin classes; FLUID likewise forces loopback. HTTP currently accepts only
+`http://`, allocates per unit, and is explicitly a smoke/reference leg, while
+shipped environment examples contain HTTPS origins. Risk S8 and the HTTP
+parking-lot entries therefore require both integration and measurement work.
+
+**Deliverables:**
+
+- Class-based driver selection and real origin configuration for WM and FLUID,
+  retaining explicit harness modes and failing clearly on unsupported classes
+  instead of silently converting them to loopback.
+- HTTPS with certificate/hostname verification and explicit CA configuration;
+  no insecure default or silent HTTP downgrade.
+- Bounded connection/response resources, correct partial-response and timeout
+  handling, and removal of per-unit allocation after warmup on the fetch/
+  completion path.
+- Local controlled HTTP/TLS integration tests for WM fill and FLUID repair,
+  including reconnect, slow server, malformed response, certificate failure,
+  drain/restore, saturation, and exact normalized statistics.
+- `bench_origin` issue-to-completion p99, goodput, connection reuse, and post-
+  warmup allocation measurements against named local servers/runners.
+- A design decision on optional `SDF_HAVE_CURL`; if admitted, implement it OFF
+  by default behind the same origin vtable with POSIX/curl correctness and
+  performance A/B. No libcurl dependency enters the default build.
+
+**Acceptance:**
+
+- HTTP/HTTPS configurations select `sdf_http_ops()` in both coordinators;
+  loopback e2e behavior and injected-knob determinism remain unchanged.
+- Local TLS WM fill and multi-block FLUID repair are byte-exact under scripted
+  loss/reconnect/timeout cases, with ARQ fallback and exact stats intact.
+- Invalid certificates fail closed; unsupported S3/peer classes fail clearly
+  and remain exclusively W6.7 scope.
+- No fetch/completion-path allocation occurs after warmup; saturation returns
+  the documented backpressure result without dispatcher head-of-line blocking.
+- Benchmark artifacts identify server, runner, flags, workload, and sample
+  counts. Establish a baseline before activating any nightly regression gate;
+  no improvement is claimed without repeated measurements.
+- Builds without libcurl stay clean; if the optional leg lands, equivalent
+  responses yield equivalent normalized origin statistics.
+
+**Size:** 6–10 days plus baseline collection.
+**Depends on:** W6.11 for authoritative hosted integration legs; W6.14 for
+production rollout telemetry, but core implementation may proceed in parallel.
+
+---
+
+### PROMPT W6.16 — Isolated-installable Python/CFFI wheel
+
+**Status:** proposed.
+
+**Objective:** ship the Python control plane and its compiled binding as one
+installable artifact, eliminating the current checkout/`PYTHONPATH`/
+`SDF_CFFI_DIR` dependency for installed consumers.
+
+**Deliverables:**
+
+- Package the CFFI loader and generated `_sdf_cffi` shared object together with
+  the `sdf` Python package and console entry point.
+- A reproducible wheel build against a named installed C or Rust archive
+  variant, preserving development-only loader overrides without requiring them
+  at runtime.
+- Wheel content and native dependency inspection, plus isolated installation
+  tests from a working directory outside the checkout.
+- Documentation for build prerequisites, bundled versus external native
+  libraries, supported platforms, and variant selection.
+
+**Acceptance:**
+
+- The wheel contains the Python loader, package data, entry point, and compiled
+  `_sdf_cffi` object; its dependency resolution contains no accidental source-
+  or build-tree library path.
+- In a fresh venv outside the checkout, with `PYTHONPATH` and `SDF_CFFI_DIR`
+  unset, installing only the wheel and declared dependencies executes ARC
+  sidecar control and LT/nanorq fountain operations successfully.
+- The isolation test runs for both `SDF_USE_RUST_FOUNTAIN=OFF` and `ON` without
+  caller changes; development overrides continue to work only when explicitly
+  supplied.
+- Existing installed-prefix CFFI tests, Python tests, and package consumers
+  remain green.
+
+**Size:** 2–4 days. **Depends on:** W6.11 for authoritative hosted wheel legs.
+
+---
+
+### PROMPT W6.17 — RPM artifacts and an operable control-plane Helm chart
+
+**Status:** proposed; target distro and test cluster must be named.
+
+**Objective:** replace the RPM and Helm placeholders with tested distribution
+artifacts while preserving the existing static-library surface and the rule
+that the storage platform owns data-plane sidecar injection.
+
+**Deliverables:**
+
+- Select and document an RPM target; build from the same staged `/usr` install
+  payload as Debian and reuse its external C/pkg-config/fountain consumer tests.
+- A real long-running Python control-plane service entry point, replacing the
+  CLI-only placeholder for deployment use.
+- A Helm chart for the control plane only: image, strict configuration,
+  Service/scrape annotations, readiness/liveness, security context, resources,
+  upgrade/rollback settings, and kill-switch-safe rollout defaults.
+- Dev/staging/prod values with rollout percentages defaulting to zero until
+  signed gates exist; no invented production endpoints or measured-optimal
+  knobs.
+- RPM and Helm lint/build/test legs plus installation, upgrade, rollback, and
+  uninstall documentation with explicit environment boundaries.
+
+**Acceptance:**
+
+- RPM installation into an isolated rootfs supports compiling and running the
+  external WM/ARC and LT/nanorq consumers against only that payload.
+- `helm lint` and `helm template` pass for supplied values; an available kind
+  or equivalent cluster reaches Ready, executes a real control/profile
+  operation, exposes W6.14 metrics, and completes rollback.
+- The chart deploys no S3/NVMe-peer driver and no data-plane sidecar.
+- Versioning continues to derive from `include/sdf/version.h`; public archive,
+  header, and package names do not fork.
+- Missing distro/cluster environments remain explicit blockers; local template
+  success is not reported as cluster deployment evidence.
+
+**Size:** 5–8 days plus external environment waits.
+**Depends on:** W6.14 and W6.16; W6.11 for authoritative hosted package legs.
+
+---
+
+### PROMPT W6.18 — Functional opt-in Rust ARC behind the unchanged C ABI
+
+**Status:** proposed — second functional Rust migration, with C retained.
+
+**Objective:** port the corrected ARC pacer to Rust while preserving ordering,
+deadline, callback, shadow, deployment, and rollback semantics behind the
+existing public headers and callers.
+
+**Deliverables:**
+
+- `src/rust/sdf-arc` implementation of offset estimation, Q/QG scheduling,
+  heap ordering, guard/deadline behavior, drain, callbacks, statistics, and the
+  sidecar behavior required by the existing ABI.
+- `SDF_USE_RUST_ARC=ON|OFF`, default OFF, with the Rust staticlib folded into
+  the existing `libsdf_arc.a`; no caller, Python, public-header, or installed
+  archive-name change.
+- Panic containment at every FFI export and allocation-free steady-state
+  operation after initialization; exact archive-symbol and cbindgen
+  declaration-surface gates.
+- Both-variant C/Python/e2e/fuzz suites, extracted-golden comparisons, and
+  installed pkg-config/CMake/CFFI/wheel/Debian/RPM consumers.
+- Dual-pacer shadow comparison using W6.10's per-entry records and paired ARC
+  benchmarks using W6.12's harness.
+- Comparison-window documentation modeled on W6.8/W6.13, without a cutover or
+  C-removal claim.
+
+**Acceptance:**
+
+- Both implementations pass the same ABI, unit, integration, Python, e2e, fuzz,
+  and extracted-golden suites; deterministic reports are byte-identical.
+- QG ordering, guard timeout, idle re-anchor, deadline, small-entry bypass,
+  W6.9 saturation, true-shadow, and kill-drain semantics match C exactly.
+- C and Rust shadow runs produce matching per-entry schedules within a
+  documented timing tolerance; timing-based replay does not become a fake
+  hand-authored JSON golden.
+- No panic crosses FFI, no allocation occurs after warmup, and sanitizer
+  reports state precisely which C/Rust code is instrumented.
+- Both variants execute through all installed consumers; ARC benchmark results
+  satisfy the same regression process as LT before any future decision.
+- C remains compiled, installed, selectable, and default. This prompt does not
+  migrate Whack-a-Mole or nanorq and does not authorize ARC cutover.
+
+**Size:** 6–9 days plus comparison-window evidence.
+**Depends on:** W6.9, W6.10, W6.11, W6.12, and W6.13's decision-process
+precedent; W6.16/W6.17 for the complete installed-consumer matrix.
+
+---
+
+### Parking lot (remaining candidates, unsized)
 
 | Item | Note |
 |---|---|
-| `bench_arc` + gate activation | the plan §10 table lists it record-only; the WAM J.3 target is ≤ 200 ns/block |
-| TSNC recoding behind the fountain ABI | WAM's N.4 posture: a labeled option, never default |
-| HTTP driver perf | currently the reference smoke leg (risk S8) |
-| staging/prod config differentiation | real knob sets come from the first deployment |
-| SDF_HAVE_CURL path for the HTTP driver | the optional libcurl leg stays OFF |
+| TSNC recoding behind the fountain ABI | admission-gated on a named relay/use case and a wire-format decision; a labeled option, never default |
+| Time-varying WM schedules | admission-gated on a named consumer and per-fill profile-version lifecycle |
+| Signed P1/P2/P3 staged rollouts | external deployment plus 24 h/72 h/7 d soak evidence; lab results cannot substitute |
 
 ### Milestone M6
 
@@ -1408,8 +1867,39 @@ documentation/tag commits). W6.8 has landed the functional Rust LT arm
 (77e0292, 568c30c, 180f025): both variants pass the same 23-test suites and
 byte-identical 556-comparison reports, including 76 fountain comparisons.
 The C/Rust comparison window is open with C still default; no cutover,
-C-removal or performance claim is made. W6.7 is next and remains gated on
-an endpoint/stand-in decision.
+C-removal or performance claim is made. W6.7 remains gated on an endpoint/
+stand-in decision; W6.9 is the next actionable correctness package, followed
+by the proposed dependency-ordered W6.10–W6.18 packages.
 
+### Milestone M7 (proposed)
+
+**M7 — Corrected ARC semantics and evidence-driven migration candidates** is
+implementation-complete only when:
+
+- W6.9 proves exactly-once retention under backpressure and W6.10 makes shadow
+  promotion evidence non-vacuous.
+- W6.11 records an actual hosted full-matrix run and durable conformance
+  corpora; W6.12 supplies reference-runner benchmark artifacts.
+- W6.13 records an explicit LT decision without implying automatic C removal.
+- Metrics/dashboards, production HTTP, and distribution artifacts have their
+  executable local and available-hosted acceptance legs.
+- W6.18 provides an opt-in Rust ARC comparison candidate while C remains the
+  default for both fountain LT and ARC.
+
+M7 does **not** claim production P1/P2/P3 rollout gates, a 24-hour/72-hour/
+seven-day soak, a Rust default cutover, or W6.7 endpoint availability.
+
+### Deferred beyond W6.9–W6.18
+
+- **W6.7 S3/NVMe-peer:** already specified; schedule when its endpoint or
+  stand-in decision is made.
+- **Signed staged production rollouts:** require real deployment owners,
+  engine telemetry, dashboards, safe configs, and calendar soaks. Lab evidence
+  cannot substitute for these gates.
+- **TSNC recoding and time-varying WM schedules:** remain admission-gated on a
+  named consumer, interoperability/wire-format decisions, and separately sized
+  implementation prompts; TSNC is never default.
+- **Rust Whack-a-Mole or Rust RaptorQ:** no migration merely for completeness;
+  both need a new documented reason and A/B case.
 
 *End of document.*
