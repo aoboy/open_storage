@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of the W6.9/W6.10 change set; earlier rows cite their landing commits)
+## IMPLEMENTATION STATUS (informative — judgement; as of `3e25194` (W6.9/W6.10); earlier rows cite their landing commits)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -516,7 +516,7 @@ ADRs [0001–0009](../adr/).
                                 Python; install/deb legs green. The
                                 cargo-dependent Rust legs were skipped
                                 in this environment; no Rust or hosted
-                                claim is made.
+                                claim is made (3e25194).
   W6.10 true ARC shadow      : done — shadow keeps the pacer in
                                 ARC_MODE_QG, computes the same schedule
                                 live would, applies each accepted entry
@@ -565,7 +565,7 @@ ADRs [0001–0009](../adr/).
                                 legs green; e2e_apply green. The cargo-
                                 dependent Rust legs were skipped in
                                 this environment. No hosted, performance,
-                                or 24 h soak claim is made.
+                                or 24 h soak claim is made (3e25194).
 
 Percentages are engineering judgement weighted by scope and test
 evidence, not a contract; each entry names what is missing. This ledger
