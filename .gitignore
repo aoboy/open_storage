@@ -38,3 +38,6 @@ __pycache__/
 *.log
 *.tmp
 .cache/
+
+# Local research analysis: retain on disk but never commit.
+research/LT3_Storage_ML_Fabrics_Modal_Fit_Analysis.pdf
