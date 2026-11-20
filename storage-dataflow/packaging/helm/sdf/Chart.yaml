@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sdf-control-plane
+description: Python control plane for the storage dataflow stack
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

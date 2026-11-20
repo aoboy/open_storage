@@ -26,6 +26,7 @@ design and plan.
 ./scripts/build_wheel.sh  # installable Python/CFFI wheel (see packaging/wheel)
 make ci                   # lint, C tests/sanitizers, install/deb/wheel, e2e, Rust gates
 make e2e                  # cache-fill, repair, apply, and live SHM e2e harnesses
+make helm                 # helm lint + dev/staging/prod template render (requires helm)
 ```
 
 Requirements: CMake >= 3.24, a C17 compiler, and Python >= 3.10. The FFI,
@@ -64,7 +65,7 @@ when cargo/components are absent. Configure one functional Rust build with
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Python simulators | **As-built**: `wm_sim` (plain spray, golden-validated), `fluid_sim` (budget/gate loss ladder), and `arc_sim` (ARC offset/E hysteresis) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
-| Packaging | **As-built (Wave 5/W6.4/W6.6/W6.8/W6.16)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested with both C and Rust LT; the isolated Python/CFFI wheel is built and exercised in a fresh venv locally for both OFF and Rust-ON variants, and the OFF wheel also passed hosted run 44774290565; the hosted wheel job now has an OFF/ON matrix, with the ON leg not yet executed (rpm/Helm remain placeholders) |
+| Packaging | **As-built (Wave 5/W6.4/W6.6/W6.8/W6.16)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested with both C and Rust LT; the isolated Python/CFFI wheel is built and exercised in a fresh venv locally for both OFF and Rust-ON variants, and the OFF wheel also passed hosted run 44774290565; the hosted wheel job now has an OFF/ON matrix, with the ON leg not yet executed; the control-plane Helm chart is locally linted/rendered, while RPM and cluster deployment remain pending |
 | Rust seam + LT | **As-built (W6.5/W6.8)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff; functional opt-in Rust LT with C dispatch/nanorq retained and exact archive symbols. Hosted rust-seam run 44774290565 at `0d6e60a` ran both variants against the current 28-test/1,410-golden tree |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |

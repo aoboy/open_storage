@@ -1,0 +1,6 @@
+The control plane is deployed as {{ include "sdf.fullname" . }}.
+
+It mounts ConfigMap {{ .Values.config.existingConfigMap }} at
+{{ .Values.config.mountPath }} and exposes /healthz and /readyz on the
+Service's health port. Data-plane sidecars are injected by the storage
+platform and are not part of this chart.

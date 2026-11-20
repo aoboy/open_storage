@@ -1,0 +1,5 @@
+image:
+  repository: sdf
+  tag: staging
+config:
+  existingConfigMap: sdf-config-staging

@@ -2081,10 +2081,13 @@ entry point loads the strict TOML environment, ticks controllers at the WM
 cadence, attaches WM through `SDF_WM_SHM` and the ARC sidecar through
 `SDF_ARC_SIDECAR`, writes atomic health JSON including ARC mode and
 FLUID class policy, serves optional `/healthz` and `/readyz` HTTP probes, and
-shuts down on SIGINT/SIGTERM. `sdf status` reads the health record including ARC mode and FLUID
-classes, and the installed-wheel smoke runs two service ticks and the status command outside
-the checkout. RPM and Helm remain blocked on a named target distro and test
-cluster.
+shuts down on SIGINT/SIGTERM. `sdf status` reads the health record including
+ARC mode and FLUID classes, and the installed-wheel smoke runs two service
+ticks and the status command outside the checkout. The control-plane Helm
+chart now exists with strict ConfigMap mounting, HTTP probes, security
+context, resources, and dev/staging/prod values; `make helm` passes Helm
+4.3.2 lint and rendering. RPM packaging and cluster deployment remain blocked
+on a named target distro and test cluster.
 
 **Objective:** replace the RPM and Helm placeholders with tested distribution
 artifacts while preserving the existing static-library surface and the rule

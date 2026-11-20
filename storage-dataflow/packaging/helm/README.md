@@ -1,10 +1,16 @@
-# Packaging placeholder (helm)
+# Helm packaging
 
-Still a placeholder as of v1.0.0 (plan prompt W6.6). The Debian package
-is the one real distribution artifact (`packaging/debian`,
-`scripts/build_deb.sh`, `scripts/test_deb.sh`).
+The control-plane chart lives in [`sdf/`](sdf/). It deploys only the Python
+control plane and mounts reviewed `wm.toml`, `fluid.toml`, and `arc.toml`
+configuration from an existing ConfigMap.
 
-The chart for the storage dataflow control plane has not been created
-yet. When added, it should deploy only the Python control plane; the
-data-plane sidecars are injected by the storage platform, not by this
-chart. See docs/design/00-overview.md section 8.
+```sh
+HELM=/path/to/helm make helm
+```
+
+The local gate runs `helm lint --strict` and renders default plus
+dev/staging/prod values. It is not cluster deployment evidence; the chart
+still needs an available kind/cluster plus a real image and environment
+ConfigMap before readiness, rollback, or control-operation claims are made.
+
+RPM packaging and a named target distro remain separate W6.17 work.

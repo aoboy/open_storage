@@ -1,4 +1,4 @@
-.PHONY: all build test bench bench-paired e2e format lint doc clean asan tsan ci install deb wheel wheel-test rust-seam rust-fountain
+.PHONY: all build test bench bench-paired e2e helm format lint doc clean asan tsan ci install deb wheel wheel-test rust-seam rust-fountain
 
 # Gates run serially (plan W0.5): a gate that races another gate is not
 # a gate.
@@ -23,6 +23,9 @@ e2e:
 	./tests/system/e2e_repair.sh
 	./tests/system/e2e_apply.sh
 	./tests/system/e2e_shm_chain.sh
+
+helm:
+	./scripts/test_helm.sh
 
 format:
 	./scripts/format_c.sh --write

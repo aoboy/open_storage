@@ -1,0 +1,5 @@
+image:
+  repository: sdf
+  tag: "1.0.0"
+config:
+  existingConfigMap: sdf-config-prod
