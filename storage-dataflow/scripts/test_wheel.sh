@@ -141,6 +141,15 @@ assert payload["controller_names"] == []
 assert payload["config_dir"].endswith("/configs")
 print("installed wheel service: OK (2 ticks, atomic health)")
 PY
+STATUS_OUT="$(env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/sdf" status \
+    --health-file "$WORK/health.json")"
+case "$STATUS_OUT" in
+    *"status=ok heartbeat=2"*) ;;
+    *)
+        echo "test_wheel: status did not read health: $STATUS_OUT" >&2
+        exit 1
+        ;;
+esac
 
 cd "$WORK"
 env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/python" - <<'PY'

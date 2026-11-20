@@ -120,6 +120,30 @@ def test_wm_tick_attaches_and_publishes(monkeypatch: pytest.MonkeyPatch) -> None
             pass
 
 
+def test_cli_status_reads_health(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    health = tmp_path / "health.json"
+    health.write_text(
+        json.dumps(
+            {
+                "status": "ok",
+                "heartbeat": 7,
+                "config_dir": "/etc/sdf",
+                "controller_names": ["wm"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert main(["status", "--health-file", str(health)]) == 0
+    out = capsys.readouterr().out
+    assert "status=ok" in out and "heartbeat=7" in out and "controllers=wm" in out
+
+    assert main(["status", "--health-file", str(tmp_path / "missing.json")]) == 0
+    assert "no control-plane health file" in capsys.readouterr().out
+
+    health.write_text("{not json", encoding="utf-8")
+    assert main(["status", "--health-file", str(health)]) == 1
+
+
 def test_cli_serve_smoke(tmp_path: Path) -> None:
     health = tmp_path / "health.json"
     rc = main(

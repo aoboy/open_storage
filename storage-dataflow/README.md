@@ -58,8 +58,8 @@ when cargo/components are absent. Configure one functional Rust build with
 | CMake build | Working (libraries, 27-test suite, benches, fuzzers) |
 | Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
-| Control-plane service | **As-built (W6.17 partial)**: `sdf serve` loads TOML, ticks at `control_hz`, attaches WM via `SDF_WM_SHM`, writes atomic health JSON, handles SIGINT/SIGTERM, and runs from the installed wheel; RPM/Helm remain pending |
-| FLUID control plane | **As-built**: per-class epsilon policies, sender budget and cumulative-loss gate matching the C helpers, deterministic xxhash64 arm assignment, and Pareto tracking; pure-Python XXH64 fallback removed the undeclared `xxhash` import dependency (107 Python tests) |
+| Control-plane service | **As-built (W6.17 partial)**: `sdf serve` loads TOML, ticks at `control_hz`, attaches WM via `SDF_WM_SHM`, writes atomic health JSON, handles SIGINT/SIGTERM, exposes health through `sdf status`, and runs from the installed wheel; RPM/Helm remain pending |
+| FLUID control plane | **As-built**: per-class epsilon policies, sender budget and cumulative-loss gate matching the C helpers, deterministic xxhash64 arm assignment, and Pareto tracking; pure-Python XXH64 fallback removed the undeclared `xxhash` import dependency (108 Python tests) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Python simulators | **As-built**: `wm_sim` (plain spray, golden-validated), `fluid_sim` (budget/gate loss ladder), and `arc_sim` (ARC offset/E hysteresis) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |

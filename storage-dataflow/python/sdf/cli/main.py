@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import signal
+import sys
 import threading
 from pathlib import Path
 
@@ -16,8 +17,23 @@ from sdf.control.service import (
 )
 
 
-def _status() -> int:
-    print(f"sdf {__version__}: control-plane scaffold; no services are running.")
+def _status(health_file: str) -> int:
+    path = Path(health_file) if health_file else None
+    if path is not None and path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"sdf {__version__}: cannot read {path}: {exc}", file=sys.stderr)
+            return 1
+        controllers = ",".join(str(name) for name in payload.get("controller_names", []))
+        print(
+            f"sdf {__version__}: status={payload.get('status', 'unknown')} "
+            f"heartbeat={payload.get('heartbeat', '?')} "
+            f"config={payload.get('config_dir', '?')} "
+            f"controllers={controllers or 'none'}"
+        )
+        return 0
+    print(f"sdf {__version__}: no control-plane health file at {health_file or '(disabled)'}.")
     return 0
 
 
@@ -59,7 +75,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sdf", description="Storage dataflow control plane")
     parser.add_argument("--version", action="version", version=f"sdf {__version__}")
     commands = parser.add_subparsers(dest="command")
-    commands.add_parser("status", help="show control-plane status")
+    status = commands.add_parser("status", help="show control-plane status")
+    status.add_argument(
+        "--health-file",
+        default="out/control-plane-health.json",
+        help="health JSON written by sdf serve (empty disables)",
+    )
     serve = commands.add_parser("serve", help="run the control-plane service")
     serve.add_argument("--config", default="configs/dev", help="environment config directory")
     serve.add_argument(
@@ -76,8 +97,10 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--verbose", action="store_true", help="print every tick record")
     args = parser.parse_args(argv)
 
-    if args.command in (None, "status"):
-        return _status()
+    if args.command == "status":
+        return _status(args.health_file)
+    if args.command is None:
+        return _status("out/control-plane-health.json")
     if args.command == "serve":
         return _serve(args)
     parser.error(f"unknown command: {args.command}")
