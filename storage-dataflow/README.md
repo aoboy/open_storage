@@ -24,7 +24,7 @@ design and plan.
 ./scripts/lint.sh         # clang-format, clang-tidy, ruff, mypy (if installed)
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
 ./scripts/build_wheel.sh  # installable Python/CFFI wheel (see packaging/wheel)
-make ci                   # lint, C tests/sanitizers, install/deb/wheel, e2e, Rust gates
+make ci                   # lint, C tests/sanitizers, install/deb/wheel, e2e, Helm, Rust gates
 make e2e                  # cache-fill, repair, apply, and live SHM e2e harnesses
 make helm                 # helm lint + dev/staging/prod template render (requires helm)
 ```
@@ -69,7 +69,7 @@ when cargo/components are absent. Configure one functional Rust build with
 | Rust seam + LT | **As-built (W6.5/W6.8)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff; functional opt-in Rust LT with C dispatch/nanorq retained and exact archive symbols. Hosted rust-seam run 44774290565 at `0d6e60a` ran both variants against the current 28-test/1,410-golden tree |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
-| CI | **W6.5/W6.8/W6.16**: 9-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, isolated wheel, authoritative Rust quality + C/Rust functional A/B, full fuzz) + nightly p99 gate; hosted run 44774290565 at `0d6e60a` is green (10/10 matrix jobs); nightly history still pending |
+| CI | **W6.5/W6.8/W6.16/W6.17**: 11-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, isolated wheel, Helm lint/render, paired fountain bench, authoritative Rust quality + C/Rust functional A/B, full fuzz) + nightly p99 gate; hosted run 44774290565 at `0d6e60a` was green (10/10 at that revision); nightly history still pending |
 | Known gaps (owned) | Retained nightly CI history is still pending (the hosted matrix is green at `0d6e60a`, W6.5); Rust LT remains opt-in with C as the comparison-window default because paired performance and seven nightly samples are still missing (W6.8/W6.13) — [plan §14](/storage-dataflow/docs/design/08-implementation-plan.md#14-phase-w6--production-hardening--the-migration-begins). True ARC shadow scoring is no longer a gap: W6.10 runs the non-applying QG schedule with separate evidence and a non-vacuity promotion gate ([design 03](/storage-dataflow/docs/design/03-arc-pacing.md#implementation-note--true-shadow-scoring-w69w610)); W6.9 closes accepted-entry retention under pacer backpressure |
 | Golden-vector parity gate | Active: **1,410 comparisons, zero pending** — WM, both fountain arms, ARC §12.3 (W6.2/W6.11; ADR-0009) |
 | Origin driver seam | **As-built (Wave 1)**: loopback harness driver + HTTP reference driver + loadgen with 4 degradation profiles (ADR-0008) |

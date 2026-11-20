@@ -280,9 +280,10 @@ ADRs [0001–0009](../adr/).
                              versions, v16 acquired, 28 slots,
                              7 heartbeat ticks, scrape green.
   4. hosted CI             — CLOSED by W6.5 (07a7a18, e5141e2,
-                             cbc5bd9): the 9-job matrix (style/tidy,
+                             cbc5bd9): the matrix (style/tidy,
                              gcc+clang, sanitizers, e2e, bench gate,
-                             install, isolated wheel, authoritative
+                             install, isolated wheel, Helm,
+                             paired fountain bench, authoritative
                              rust seam, full fuzz) is hosted and
                              green: run 44774290565 at 0d6e60a,
                              10/10 jobs succeeded on 2026-11-20
@@ -304,8 +305,9 @@ ADRs [0001–0009](../adr/).
                                 workflow run 44774290565 at 0d6e60a,
                                 10/10 jobs succeeded on 2026-11-20
                                 (https://github.com/aoboy/open_storage/
-                                actions/runs/44774290565). ci.yml: 9
-                                jobs — style
+                                actions/runs/44774290565). ci.yml now
+                                has 11 jobs (the 0d6e60a run predates the
+                                Helm and paired-fountain additions): style
                                 (clang-format 23.1.5 + clang-tidy
                                 23.1.4, both pinned; format check +
                                 analyzer gate), build-and-test on
@@ -2087,8 +2089,9 @@ ARC mode and FLUID classes, and the installed-wheel smoke runs two service
 ticks and the status command outside the checkout. The control-plane Helm
 chart now exists with strict ConfigMap mounting, HTTP probes, security
 context, resources, and dev/staging/prod values; `make helm` passes Helm
-4.3.2 lint and rendering. RPM packaging and cluster deployment remain blocked
-on a named target distro and test cluster.
+4.3.2 lint and rendering, and ci.yml has a pinned-Helm job that uploads the
+rendered manifests. RPM packaging and cluster deployment remain blocked on a
+named target distro and test cluster.
 
 **Objective:** replace the RPM and Helm placeholders with tested distribution
 artifacts while preserving the existing static-library surface and the rule

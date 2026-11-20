@@ -281,6 +281,29 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  helm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pinned Helm
+        run: |
+          curl -fsSL https://get.helm.sh/helm-v4.3.2-linux-amd64.tar.gz -o /tmp/helm.tar.gz
+          tar -xzf /tmp/helm.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+
+      - name: Lint and render control-plane chart
+        run: make helm
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@v6
+        with:
+          name: sdf-helm-manifests
+          path: storage-dataflow/out/helm/
+          if-no-files-found: error
+          retention-days: 14
+
   fountain-bench:
     runs-on: ubuntu-latest
     timeout-minutes: 20
