@@ -11,6 +11,7 @@ pub struct Pacer {
     scheduler: Scheduler,
     slots: Vec<Option<Vec<u8>>>,
     free: Vec<u32>,
+    block_slots: Vec<u32>,
     entry_max: usize,
 }
 
@@ -25,6 +26,7 @@ impl Pacer {
             scheduler: Scheduler::new(params, capacity)?,
             slots: (0..capacity).map(|_| None).collect(),
             free,
+            block_slots: Vec::new(),
             entry_max,
         })
     }
@@ -36,13 +38,38 @@ impl Pacer {
         let slot = self.free.pop().ok_or("slab full")?;
         self.slots[slot as usize] = Some(entry.to_vec());
         match self.scheduler.submit_with_slot(s_n, a_n, entry.len(), slot) {
-            Ok(schedule) => Ok(schedule),
+            Ok(schedule) => {
+                let block_n = schedule.block_n as usize;
+                self.block_slots.resize(block_n + 1, u32::MAX);
+                self.block_slots[block_n] = slot;
+                Ok(schedule)
+            }
             Err(error) => {
                 self.slots[slot as usize] = None;
                 self.free.push(slot);
                 Err(error)
             }
         }
+    }
+
+    pub fn apply_immediate(
+        &mut self,
+        block_n: u64,
+        now_ns: u64,
+        apply: &mut impl FnMut(&[u8], u64),
+    ) -> Result<(), &'static str> {
+        let slot = *self
+            .block_slots
+            .get(block_n as usize)
+            .ok_or("unknown block")?;
+        if slot == u32::MAX {
+            return Err("unknown block");
+        }
+        let bytes = self.slots[slot as usize]
+            .as_ref()
+            .ok_or("released slot missing")?;
+        apply(bytes, now_ns);
+        Ok(())
     }
 
     pub fn apply_due(

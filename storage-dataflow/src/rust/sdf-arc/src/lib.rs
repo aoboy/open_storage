@@ -10,6 +10,7 @@
 pub mod heap;
 pub mod pacer;
 pub mod scheduler;
+pub mod sidecar;
 
 pub const ARC_SANE_NS: u64 = 10_000_000_000;
 
