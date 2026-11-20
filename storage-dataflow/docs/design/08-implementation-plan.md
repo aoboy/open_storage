@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of the W6.14 change set; earlier rows cite their landing commits)
+## IMPLEMENTATION STATUS (informative — judgement; as of the W6.11 local-conformance change set; earlier rows cite their landing commits)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -566,6 +566,47 @@ ADRs [0001–0009](../adr/).
                                 dependent Rust legs were skipped in
                                 this environment. No hosted, performance,
                                 or 24 h soak claim is made (3e25194).
+  W6.11 expanded conformance : partially done — local conformance has
+                                landed; the authoritative hosted matrix
+                                and nightly history remain externally
+                                gated (no remote/runner is configured,
+                                so no hosted run ID exists). Landed:
+                                WM rejection immutability and real
+                                residual-fairness hit/conservation
+                                assertions; a deterministic ARC replay
+                                tool with the W5 park/stranding and
+                                W6.9 saturation corpora (the park case
+                                was proven to fail the pre-fix `break`
+                                drain); input-derived fountain fuzz
+                                geometry for both codecs with directed
+                                boundary shapes; the 1,024-entry nanorq
+                                ESI bitmap fix; five additional
+                                public-ABI-extracted fountain golden
+                                geometries with every original value
+                                unchanged; and an installed-prefix CFFI
+                                consumer that complements the C harness
+                                and reports 1,376 applicable comparisons
+                                (WM 280, ARC 200, real-codec fountain
+                                896) plus 34 toy-only comparisons that
+                                shipped artifacts do not contain.
+                                Evidence: C parity validates 1,410
+                                comparisons with zero pending; 26/26
+                                CTest in default, ASan+UBSan, and TSan;
+                                Python 68/68; 200,000 expanded fountain
+                                streams; `scripts/test_install.sh`
+                                green including the installed-CFFI
+                                golden leg; clang-format/tidy clean.
+                                `make ci` is green: lint + ruff + mypy,
+                                26/26 C in default/ASan+UBSan/TSan,
+                                68/68 Python, install, Deb, and wheel
+                                legs. rust-seam and rust-fountain skip
+                                because cargo is absent. Hosted run IDs,
+                                nightly history, TLS/certificate legs,
+                                cargo-dependent Rust measurements, and
+                                every unexecuted external leg are not
+                                claimed
+                                (b05b0e0, 40e496f, bf9e88c, 5b0a87a,
+                                51b0c78, 502fadc).
   W6.14 executable observability: implemented — design 05 now carries the
                                 canonical `sdf_` naming/schema contract,
                                 exact 32-bucket histogram bounds, bounded
@@ -1613,7 +1654,9 @@ non-vacuity gate; both landed in this prompt.
 
 ### PROMPT W6.11 — Authoritative hosted and expanded conformance evidence
 
-**Status:** proposed; externally gated on a remote/runner.
+**Status:** partially implemented locally; the authoritative hosted matrix and
+nightly history remain externally gated on a remote/runner. The local
+conformance slices, counts, and honest skips are recorded in the ledger above.
 
 **Objective:** close M6's remaining hosted-evidence line and turn the current
 smoke/fixed-shape checks into a durable regression corpus without inflating
@@ -1634,7 +1677,8 @@ comparison counts or claiming unexecuted coverage.
 - Additional provenance-recorded fountain geometries extracted from the C
   implementation, without altering existing expected bytes by hand.
 - An installed-artifact CFFI golden consumer that complements, rather than
-  replaces, `tests/c/test_parity.c` and the existing 556-comparison C harness.
+  replaces, `tests/c/test_parity.c` and the existing C harness (1,410
+  comparisons at the time of this local slice).
 - Ledger entries with hosted run IDs, revisions, toolchains, exact comparison
   counts, skips, and failures.
 
@@ -2043,9 +2087,11 @@ byte-identical 556-comparison reports, including 76 fountain comparisons.
 The C/Rust comparison window is open with C still default; no cutover,
 C-removal or performance claim is made. W6.7 remains gated on an endpoint/
 stand-in decision. W6.9 and W6.10 have landed as the corrected ARC semantics
-change set (ledger above); W6.11 is the next package but remains externally
-gated on a hosted runner, followed by the dependency-ordered W6.12–W6.18
-packages.
+change set (ledger above). W6.11's local conformance slices have since landed
+(deterministic ARC replay, expanded fountain fuzzing and goldens, the installed
+CFFI golden consumer, and 1,410 zero-pending C comparisons), but its
+authoritative hosted matrix and nightly history remain externally gated on a
+runner. The dependency-ordered W6.12–W6.18 packages follow.
 
 ### Milestone M7 (proposed)
 
