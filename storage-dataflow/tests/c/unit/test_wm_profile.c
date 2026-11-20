@@ -127,6 +127,12 @@ static uint64_t t2_sum(const wm_profile_t *p) {
     return s;
 }
 
+static void assert_update_rejected(wm_profile_t *p, const uint32_t *e, int mode) {
+    wm_profile_t before = *p;
+    assert(wm_profile_update(p, e, mode) == -EINVAL);
+    assert(memcmp(p, &before, sizeof(*p)) == 0);
+}
+
 static void test_update_embodiments(void) {
     uint32_t b3[3] = {4, 2, 2};
 
@@ -145,7 +151,7 @@ static void test_update_embodiments(void) {
         wm_profile_t p;
         uint32_t e[3] = {1, 1, 0};
         t2_init(&p, 8, 3, b3);
-        assert(wm_profile_update(&p, e, 1) == -EINVAL);
+        assert_update_rejected(&p, e, 1);
     }
     /* mode 2: multi, e=[2,2,0] -> etot 4, x=1, y=1 */
     {
@@ -172,7 +178,7 @@ static void test_update_embodiments(void) {
         t2_init(&p, 8, 3, b3);
         assert(wm_profile_update(&p, e, 3) == 0); /* Kbar {0,1} */
         uint32_t e2[3] = {2, 2, 2};
-        assert(wm_profile_update(&p, e2, 3) == -EINVAL); /* no Kbar */
+        assert_update_rejected(&p, e2, 3); /* no Kbar */
     }
     /* mode 4: proportional renormalize, e=[4,0,0] */
     {
@@ -200,54 +206,55 @@ static void test_update_embodiments(void) {
         wm_profile_t p;
         uint32_t e[3] = {5, 0, 0};
         t2_init(&p, 8, 3, b3);
-        assert(wm_profile_update(&p, e, 1) == -EINVAL);
-        assert(wm_profile_update(&p, e, 2) == -EINVAL);
-        assert(wm_profile_update(&p, e, 3) == -EINVAL);
-        assert(wm_profile_update(&p, e, 4) == -EINVAL);
+        assert_update_rejected(&p, e, 1);
+        assert_update_rejected(&p, e, 2);
+        assert_update_rejected(&p, e, 3);
+        assert_update_rejected(&p, e, 4);
     }
     /* the last healthy path never goes to zero (n > 1) */
     {
         wm_profile_t p;
         uint32_t e[3] = {4, 2, 2};
         t2_init(&p, 8, 3, b3);
-        assert(wm_profile_update(&p, e, 1) == -EINVAL);
-        assert(wm_profile_update(&p, e, 2) == -EINVAL);
-        assert(wm_profile_update(&p, e, 3) == -EINVAL);
-        assert(wm_profile_update(&p, e, 4) == -EINVAL); /* etot >= m */
-        assert(t2_sum(&p) == 8);                        /* untouched on refusal */
+        assert_update_rejected(&p, e, 1);
+        assert_update_rejected(&p, e, 2);
+        assert_update_rejected(&p, e, 3);
+        assert_update_rejected(&p, e, 4); /* etot >= m */
+        assert(t2_sum(&p) == 8);          /* untouched on refusal */
     }
     /* unknown modes are refused (strict; wam no-ops these) */
     {
         wm_profile_t p;
         uint32_t e[3] = {1, 0, 0};
         t2_init(&p, 8, 3, b3);
-        assert(wm_profile_update(&p, e, 5) == -EINVAL);
-        assert(wm_profile_update(&p, e, 0) == -EINVAL);
+        assert_update_rejected(&p, e, 5);
+        assert_update_rejected(&p, e, 0);
     }
-    /* residual fairness: repeated single-ball removals cycle the walk */
+    /* residual fairness: every removed unit has exactly one recipient and
+     * repeated single-unit removals cycle that recipient across all paths. */
     {
         wm_profile_t p;
         uint32_t e[3] = {1, 0, 0};
         t2_init(&p, 64, 3, (uint32_t[3]){32, 16, 16});
         uint32_t hits[3] = {0, 0, 0};
         for (int k = 0; k < 30; k++) {
+            wm_profile_t before = p;
+            uint32_t recipient = before.residual_r;
+            assert(recipient < 3);
             assert(wm_profile_update(&p, e, 1) == 0);
-            /* the removed ball landed somewhere: count who grew */
+            hits[recipient]++;
             for (uint32_t i = 0; i < 3; i++) {
-                uint32_t grew = p.b[i] > (uint32_t[3]){32, 16, 16}[i]
-                                    ? p.b[i] - (uint32_t[3]){32, 16, 16}[i]
-                                    : 0;
-                (void)grew;
+                int64_t expected_delta = (recipient == i ? 1 : 0) - (i == 0 ? 1 : 0);
+                assert((int64_t)p.b[i] - (int64_t)before.b[i] == expected_delta);
             }
-            for (uint32_t i = 0; i < 3; i++) {
-                if (i != 0) {
-                    hits[i] += p.b[i] > 0 ? 0 : 0; /* placeholder */
-                }
-            }
+            assert(p.residual_r == (recipient + 1) % 3);
+            assert(t2_sum(&p) == 64);
         }
-        /* deterministic cursor: r advanced 30 mod 3 */
-        assert(p.residual_r == 30 % 3);
-        assert(t2_sum(&p) == 64);
+        for (uint32_t i = 0; i < 3; i++) {
+            assert(hits[i] == 10);
+        }
+        assert(p.b[0] == 12 && p.b[1] == 26 && p.b[2] == 26);
+        assert(p.residual_r == 0);
     }
 }
 

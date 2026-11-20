@@ -66,6 +66,7 @@ int main(void) {
             return 1; /* the harness built a bad base — invariant breach */
         }
 
+        wm_profile_t before = p;
         int rc = wm_profile_update(&p, e, mode);
         if (rc == 0) {
             /* invariants after every accepted update */
@@ -85,9 +86,13 @@ int main(void) {
                 fprintf(stderr, "FUZZ FAIL: fleet zeroed by mode %d\n", mode);
                 return 1;
             }
+        } else if (memcmp(&p, &before, sizeof(p)) != 0) {
+            fprintf(stderr,
+                    "FUZZ FAIL: rejected update mutated profile at iteration %ld "
+                    "(mode %d, rc %d)\n",
+                    it, mode, rc);
+            return 1;
         }
-        /* rc < 0: refused — the profile must be untouched for the
-         * validation-rejection paths (e[i] > b[i]) */
     }
     printf("fuzz_wm_profile: ok (%ld vectors)\n", (long)SDF_FUZZ_ITERS);
     return 0;
