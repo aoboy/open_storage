@@ -1,11 +1,13 @@
 name: docs
 
 on:
-  push:
-    paths:
-      - "storage-dataflow/docs/**"
-      - "storage-dataflow/scripts/build_doc.sh"
-      - ".github/workflows/docs.yml"
+  # Disabled with the render job below. Restore this push trigger when the
+  # PDF render is re-enabled.
+  # push:
+  #   paths:
+  #     - "storage-dataflow/docs/**"
+  #     - "storage-dataflow/scripts/build_doc.sh"
+  #     - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
@@ -17,22 +19,34 @@ defaults:
     working-directory: storage-dataflow
 
 jobs:
-  render:
+  # PDF rendering is intentionally disabled for now. Keep this block intact;
+  # uncomment it and restore the push trigger above when docs PDFs are wanted.
+  #
+  # render:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Install pandoc and XeLaTeX
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y pandoc texlive-xetex texlive-fonts-recommended
+  #
+  #     - name: Render design PDF
+  #       run: ./scripts/build_doc.sh
+  #
+  #     - name: Upload PDF
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: storage-dataflow-design
+  #         path: storage-dataflow/out/*.pdf
+  #         if-no-files-found: error
+  #
+  # A workflow must contain at least one job. This no-op stays skipped so the
+  # file remains valid without running any render steps.
+  render-disabled:
     runs-on: ubuntu-latest
+    if: ${{ false }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install pandoc and XeLaTeX
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pandoc texlive-xetex texlive-fonts-recommended
-
-      - name: Render design PDF
-        run: ./scripts/build_doc.sh
-
-      - name: Upload PDF
-        uses: actions/upload-artifact@v4
-        with:
-          name: storage-dataflow-design
-          path: storage-dataflow/out/*.pdf
-          if-no-files-found: error
+      - name: Docs render disabled
+        run: echo "docs PDF render is commented out"
