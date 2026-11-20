@@ -266,10 +266,11 @@ ADRs [0001–0009](../adr/).
                              7 heartbeat ticks, scrape green.
   4. hosted CI             — CLOSED for implementation by W6.5
                              (07a7a18, e5141e2, cbc5bd9): the
-                             placeholder is an 8-job matrix (style/
+                             placeholder is a 9-job matrix (style/
                              tidy, gcc+clang, sanitizers, e2e,
-                             bench gate, install, authoritative
-                             rust seam, full fuzz) plus the nightly
+                             bench gate, install, isolated wheel,
+                             authoritative rust seam, full fuzz)
+                             plus the nightly
                              p99 gate; actionlint 1.7.12 clean and
                              every leg locally mirrored green. The
                              one remaining evidence item is the
@@ -289,14 +290,15 @@ ADRs [0001–0009](../adr/).
   W6.5 hosted CI matrix      : done — implementation-complete; the
                                 FIRST HOSTED RUN is the one external
                                 evidence line (no remote in this
-                                environment). ci.yml: 8 jobs — style
+                                environment). ci.yml: 9 jobs — style
                                 (clang-format 23.1.5 + clang-tidy
                                 23.1.4, both pinned; format check +
                                 analyzer gate), build-and-test on
                                 gcc AND clang, ASan+UBSan + TSan, the
                                 four e2e harnesses, the seeded-spray
                                 bench gate, the W5.2 install leg, the
-                                rust seam with --require, and the
+                                W6.16 isolated wheel leg, the rust
+                                seam with --require, and the
                                 full fuzz budgets. bench.yml: the
                                 design-00 §11.3 nightly gate (p99 >
                                 5% vs the 7-day median; first two
@@ -1982,8 +1984,10 @@ comparisons that shipped artifacts do not contain. The
 offline runner creates that venv with `--system-site-packages` and installs
 with `--no-deps`, so this is payload/runtime evidence, not dependency-
 resolution evidence. The ON wheel was not executed because `cargo` is
-unavailable, and no hosted wheel evidence exists; W6.11 is required for the
-authoritative hosted legs.
+unavailable. ci.yml now has a wheel job that builds the artifact, runs the
+isolated venv and bundled-CFFI golden consumer, and uploads the wheel; that
+job has not executed on a runner, so no hosted wheel evidence exists, and
+W6.11 is still required for the authoritative hosted legs.
 
 **Objective:** ship the Python control plane and its compiled binding as one
 installable artifact, eliminating the current checkout/`PYTHONPATH`/

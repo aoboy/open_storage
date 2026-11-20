@@ -1,9 +1,9 @@
 name: ci
 
 # The full matrix (plan prompt W6.5): every leg mirrors a LOCAL gate that
-# is green in this tree — `make ci` plus the e2e, fuzz, bench-gate and
-# rust-seam legs. Style uses the shared first-party clang-format scope and
-# the curated .clang-tidy gate (analyzer and brace warnings fatal).
+# is green in this tree — `make ci` plus the e2e, fuzz, bench-gate, wheel
+# and rust-seam legs. Style uses the shared first-party clang-format scope
+# and the curated .clang-tidy gate (analyzer and brace warnings fatal).
 
 on:
   push:
@@ -233,6 +233,37 @@ jobs:
 
       - name: Package leg (Debian .deb build + dpkg install, W6.6)
         run: ./scripts/test_deb.sh
+
+  wheel:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install tools + build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils cmake
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" wheel
+
+      - name: Build the wheel artifact
+        run: ./scripts/build_wheel.sh --out build/wheel
+
+      - name: Isolated wheel + bundled-CFFI golden consumer
+        run: ./scripts/test_wheel.sh
+
+      - name: Upload the platform wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdf-wheel
+          path: build/wheel/*.whl
+          if-no-files-found: error
+          retention-days: 14
 
   rust-seam:
     runs-on: ubuntu-latest
