@@ -133,6 +133,20 @@ target_link_libraries(fuzz_fountain PRIVATE sdf_fountain sdf_common)
 add_test(NAME fuzz_fountain COMMAND fuzz_fountain)
 set_tests_properties(fuzz_fountain PROPERTIES ENVIRONMENT "SDF_FUZZ_ITERS=20000")
 
+# W6.11: persistent directed streams, replayed with exact ESIs and readiness
+# checked after every push. The nanorq K=512 repair-first case fails the old
+# 512-entry ESI bitmap with false readiness at rank 1.
+add_test(
+    NAME fountain_replay_corpus
+    COMMAND fuzz_fountain
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/lt-k1-t256-source-one.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/lt-k4-t4-truncated-record.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/lt-k8-t8-duplicates-and-repair.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/lt-k64-t1-source-set.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/nanorq-k1-t1024-header-only.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/nanorq-k257-t1-source-set.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/fountain/nanorq-k512-t1-repair-boundary.bin)
+
 add_executable(fuzz_wm_profile fuzz/fuzz_wm_profile.c)
 target_link_libraries(fuzz_wm_profile PRIVATE sdf_wm sdf_common)
 add_test(NAME fuzz_wm_profile COMMAND fuzz_wm_profile)

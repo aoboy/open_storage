@@ -585,24 +585,29 @@ ADRs [0001–0009](../adr/).
                                 repair counts, a nanorq readiness guard
                                 for missing backend storage, and unique
                                 applied-payload checks in the sidecar
-                                saturation test; five additional
-                                public-ABI-extracted fountain golden
-                                geometries with every original value
-                                unchanged; and an installed-prefix CFFI
-                                consumer that complements the C harness
+                                saturation test; a persistent fountain
+                                replay corpus that keeps exact ESIs,
+                                checks readiness after every push, and
+                                fails the historical 512-entry nanorq
+                                bitmap with false readiness at rank 1;
+                                five additional public-ABI-extracted
+                                fountain golden geometries with every
+                                original value unchanged; and an
+                                installed-prefix CFFI consumer that
+                                complements the C harness
                                 and reports 1,376 applicable comparisons
                                 (WM 280, ARC 200, real-codec fountain
                                 896) plus 34 toy-only comparisons that
                                 shipped artifacts do not contain.
                                 Evidence: C parity validates 1,410
-                                comparisons with zero pending; 26/26
+                                comparisons with zero pending; 27/27
                                 CTest in default, ASan+UBSan, and TSan;
                                 Python 68/68; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg; clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
-                                26/26 C in default/ASan+UBSan/TSan,
+                                27/27 C in default/ASan+UBSan/TSan,
                                 68/68 Python, install, Deb, and wheel
                                 legs. rust-seam and rust-fountain skip
                                 because cargo is absent. Hosted run IDs,
@@ -616,7 +621,7 @@ ADRs [0001–0009](../adr/).
                                 stays opt-in and no C is removed. ADR-0010
                                 records the incomplete evidence honestly:
                                 W6.8-era C/Rust parity predates the current
-                                26-test, 1,410-comparison tree, and neither a
+                                27-test, 1,410-comparison tree, and neither a
                                 hosted matrix nor paired same-runner Rust
                                 measurements exist because the runner and
                                 cargo are unavailable. Revisit criteria require

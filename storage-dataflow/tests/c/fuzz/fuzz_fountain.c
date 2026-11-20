@@ -9,6 +9,10 @@
  * operations do not mutate rank; readiness and decode agree; failed
  * decodes preserve the output buffer; duplicate accepts preserve the
  * first payload; a complete source set decodes to those payloads.
+ *
+ * With file arguments the target replays checked-in corpus streams with
+ * exact ESIs and checks readiness after every push (the persistent W6.11
+ * regression path); with no arguments it runs the generated budget.
  */
 
 #include "sdf/fountain.h"
@@ -56,7 +60,8 @@ static int failf(const char *fmt, ...) {
     return 1;
 }
 
-static int run_stream(const uint8_t *data, size_t size, long iteration) {
+static int run_stream(const uint8_t *data, size_t size, long iteration, int mutate_esi,
+                      int check_ready_each) {
     if (size < 5) {
         return 0;
     }
@@ -109,9 +114,10 @@ static int run_stream(const uint8_t *data, size_t size, long iteration) {
     size_t record_len = 4u + t;
     while (off <= size && size - off >= record_len) {
         uint32_t esi = read_u32(data + off);
-        if ((esi & 3u) == 0) {
+        if (mutate_esi && (esi & 3u) == 0) {
             /* one quarter of records target the decoder's valid window;
-             * the rest remain untrusted raw ESIs */
+             * the rest remain untrusted raw ESIs. Replay keeps exact
+             * corpus ESIs so boundary cases are not remapped. */
             esi = (esi >> 2) % (2u * k);
         }
         const uint8_t *payload = data + off + 4;
@@ -139,6 +145,11 @@ static int run_stream(const uint8_t *data, size_t size, long iteration) {
             }
         } else if (rank != before) {
             (void)failf("iteration %ld: refused ESI %u changed rank", iteration, esi);
+            goto fail;
+        }
+        if (check_ready_each && fd_ready(dec) && fd_rank(dec) < k) {
+            (void)failf("iteration %ld: ready at rank %u < K=%u after ESI %u", iteration,
+                        fd_rank(dec), k, esi);
             goto fail;
         }
         records++;
@@ -287,7 +298,34 @@ static int run_geometry(uint32_t codec, uint32_t k, uint32_t t, long marker) {
     return 0;
 }
 
-int main(void) {
+static int replay_file(const char *path, long marker) {
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) {
+        return failf("corpus %s: cannot open", path);
+    }
+    uint8_t buf[MAX_STREAM_BYTES];
+    size_t n = fread(buf, 1, sizeof(buf), f);
+    int read_error = ferror(f);
+    if (fclose(f) != 0 || read_error) {
+        return failf("corpus %s: read failed", path);
+    }
+    if (n < 5) {
+        return failf("corpus %s: stream shorter than the header", path);
+    }
+    return run_stream(buf, n, marker, 0, 1);
+}
+
+int main(int argc, char **argv) {
+    if (argc > 1) {
+        for (int i = 1; i < argc; i++) {
+            if (replay_file(argv[i], i - 1) != 0) {
+                return 1;
+            }
+        }
+        printf("fuzz_fountain: ok (%d corpus streams)\n", argc - 1);
+        return 0;
+    }
+
     long budget = fuzz_budget(SDF_FUZZ_ITERS);
 
     if (run_geometry(SDF_FOUNTAIN_LT, 64, 256, 1) != 0 ||
@@ -303,7 +341,7 @@ int main(void) {
         for (size_t i = 0; i < n; i++) {
             buf[i] = (uint8_t)rng();
         }
-        if (run_stream(buf, n, it) != 0) {
+        if (run_stream(buf, n, it, 1, 0) != 0) {
             return 1;
         }
     }
