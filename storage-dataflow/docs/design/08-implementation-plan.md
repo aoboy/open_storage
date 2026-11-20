@@ -2086,7 +2086,8 @@ cadence, attaches WM through `SDF_WM_SHM` and the ARC sidecar through
 FLUID class policy, serves optional `/healthz` and `/readyz` HTTP probes, and
 shuts down on SIGINT/SIGTERM. `sdf status` reads the health record including
 ARC mode and FLUID classes, and the installed-wheel smoke runs two service
-ticks and the status command outside the checkout. The control-plane Helm
+ticks, the status command, and live `/healthz`/`/readyz` probes outside the
+checkout. The control-plane Helm
 chart now exists with strict ConfigMap mounting, HTTP probes, security
 context, resources, and dev/staging/prod values; `make helm` passes Helm
 4.3.2 lint and rendering, and ci.yml has a pinned-Helm job that uploads the

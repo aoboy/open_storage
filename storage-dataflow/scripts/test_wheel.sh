@@ -151,6 +151,62 @@ case "$STATUS_OUT" in
         ;;
 esac
 
+# The installed service must also answer Kubernetes-style HTTP probes.
+env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/python" - \
+    "$WORK/venv/bin/sdf" "$WORK/configs" "$WORK" <<'PY'
+import json
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
+sdf, config, work = sys.argv[1:]
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+port = sock.getsockname()[1]
+sock.close()
+proc = subprocess.Popen(
+    [
+        sdf,
+        "serve",
+        "--config",
+        config,
+        "--iterations",
+        "0",
+        "--health-file",
+        f"{work}/health-http.json",
+        "--health-addr",
+        f"127.0.0.1:{port}",
+    ],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
+try:
+    body = None
+    for _ in range(100):
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=1) as response:
+                body = json.load(response)
+            break
+        except (urllib.error.URLError, TimeoutError):
+            time.sleep(0.05)
+    if body is None or body.get("status") != "ok":
+        raise SystemExit(f"HTTP health did not become ready: {body!r}")
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/readyz", timeout=1) as response:
+        assert response.status == 200
+        assert json.load(response)["status"] == "ok"
+finally:
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+print("installed wheel HTTP health: OK (/healthz + /readyz)")
+PY
+
 cd "$WORK"
 env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/python" - <<'PY'
 import os
@@ -263,4 +319,4 @@ if [[ "$OVERRIDE_SO" != "$ROOT/build/cffi/"* ]]; then
     exit 1
 fi
 
-echo "test_wheel: OK (variant=$VARIANT; $BASENAME; isolated venv ARC + LT/nanorq + goldens + service)"
+echo "test_wheel: OK (variant=$VARIANT; $BASENAME; isolated venv ARC + LT/nanorq + goldens + service + HTTP health)"
