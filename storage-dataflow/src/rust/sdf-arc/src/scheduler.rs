@@ -7,13 +7,18 @@
 use crate::heap::{Release, ReleaseQueue};
 use crate::{ArcMode, ArcParams, OffsetEstimator, Schedule};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SchedulerStats {
     pub releases: u64,
     pub guard_waits: u64,
     pub guard_timeouts: u64,
     pub idle_reanchors: u64,
     pub s_n_rejects: u64,
+    pub heap_depth: u32,
+    pub added_p50_ns: f64,
+    pub added_p95_ns: f64,
+    pub added_p99_ns: f64,
+    pub interval_error_max_ns: u64,
 }
 
 pub struct Scheduler {
@@ -25,6 +30,22 @@ pub struct Scheduler {
     order_initialized: bool,
     next_seq: u64,
     stats: SchedulerStats,
+    added_samples: [u64; 256],
+    added_n: usize,
+    added_pos: usize,
+    last_release_ts: u64,
+    last_release_s_ns: u64,
+    have_last_release: bool,
+}
+
+fn percentile(samples: &[u64; 256], n: usize, p: f64) -> f64 {
+    if n == 0 {
+        return 0.0;
+    }
+    let mut copy = *samples;
+    copy[..n].sort_unstable();
+    let index = (((n - 1) as f64) * p + 0.5) as usize;
+    copy[index.min(n - 1)] as f64
 }
 
 impl Scheduler {
@@ -42,6 +63,12 @@ impl Scheduler {
             order_initialized: false,
             next_seq: 0,
             stats: SchedulerStats::default(),
+            added_samples: [0; 256],
+            added_n: 0,
+            added_pos: 0,
+            last_release_ts: 0,
+            last_release_s_ns: 0,
+            have_last_release: false,
         })
     }
 
@@ -57,8 +84,35 @@ impl Scheduler {
         SchedulerStats {
             idle_reanchors: self.estimator.idle_reanchors(),
             s_n_rejects: self.estimator.s_n_rejects(),
+            heap_depth: self.queue.len() as u32,
+            added_p50_ns: percentile(&self.added_samples, self.added_n, 0.50),
+            added_p95_ns: percentile(&self.added_samples, self.added_n, 0.95),
+            added_p99_ns: percentile(&self.added_samples, self.added_n, 0.99),
             ..self.stats
         }
+    }
+
+    fn note_release(&mut self, release: &Release, now_ns: u64) {
+        let added = now_ns.saturating_sub(release.a_n);
+        if self.added_n < self.added_samples.len() {
+            self.added_samples[self.added_n] = added;
+            self.added_n += 1;
+        } else {
+            self.added_samples[self.added_pos] = added;
+            self.added_pos = (self.added_pos + 1) % self.added_samples.len();
+        }
+
+        if self.have_last_release {
+            let rel_gap = now_ns as i64 - self.last_release_ts as i64;
+            let prod_gap = release.s_n as i64 - self.last_release_s_ns as i64;
+            self.stats.interval_error_max_ns = self
+                .stats
+                .interval_error_max_ns
+                .max((rel_gap - prod_gap).unsigned_abs());
+        }
+        self.last_release_ts = now_ns;
+        self.last_release_s_ns = release.s_n;
+        self.have_last_release = true;
     }
 
     pub fn submit(&mut self, s_n: u64, a_n: u64, len: usize) -> Result<Schedule, &'static str> {
@@ -118,6 +172,7 @@ impl Scheduler {
             self.last_released_n = released_n;
             self.order_initialized = true;
             self.stats.releases += 1;
+            self.note_release(&release, now_ns);
             out.push(release);
             let _ = self.queue.wake_successor(released_n + 1, now_ns);
         }
@@ -217,6 +272,27 @@ mod tests {
             .push_test_release(release(100, 200, 0, false))
             .unwrap();
         assert_eq!(scheduler.drain(0).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn release_statistics_track_added_delay_and_interval_error() {
+        let mut scheduler = Scheduler::new(ArcParams::default(), 8).unwrap();
+        scheduler
+            .push_test_release(release(0, 100, 0, false))
+            .unwrap();
+        scheduler
+            .push_test_release(release(15, 100, 1, false))
+            .unwrap();
+        let first = scheduler.drain(10).unwrap();
+        assert_eq!(first.len(), 1);
+        let second = scheduler.drain(20).unwrap();
+        assert_eq!(second.len(), 1);
+        let stats = scheduler.stats();
+        assert_eq!(stats.releases, 2);
+        assert_eq!(stats.heap_depth, 0);
+        assert_eq!(stats.added_p50_ns, 20.0);
+        assert_eq!(stats.added_p99_ns, 20.0);
+        assert_eq!(stats.interval_error_max_ns, 10);
     }
 
     #[test]
