@@ -109,7 +109,6 @@ static int run_stream(const uint8_t *data, size_t size, long iteration, int muta
     memset(wrong_len, 0x3c, (size_t)t + 1u);
     uint32_t rank = fd_rank(dec);
     uint32_t source_count = 0;
-    uint32_t records = 0;
     size_t off = 5;
     size_t record_len = 4u + t;
     while (off <= size && size - off >= record_len) {
@@ -152,7 +151,6 @@ static int run_stream(const uint8_t *data, size_t size, long iteration, int muta
                         fd_rank(dec), k, esi);
             goto fail;
         }
-        records++;
         off += record_len;
     }
 
