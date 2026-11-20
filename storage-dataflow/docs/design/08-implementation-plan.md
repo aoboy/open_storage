@@ -148,7 +148,16 @@ ADRs [0001–0009](../adr/).
                                 eps sweep, byte-exact via exit-code
                                 gates, Pareto recorded; overhead grows
                                 past the slack, control retry cost
-                                visible at 50% loss (33806b3)
+                                visible at 50% loss (33806b3). The
+                                Python `fluid_coord` now mirrors the
+                                sender budget and cumulative-loss gate
+                                (C-parity tested), assigns control or
+                                class-primary arms by xxhash64 bucket,
+                                and tracks the Pareto frontier;
+                                `sdf.common.ab` carries a verified
+                                pure-Python XXH64 fallback so the
+                                control plane does not require the
+                                optional wheel at import time.
 
   WAVE 3 COMPLETE — milestone M3 reached: the P2 repair prototype is
   whole — both codec arms golden-pinned behind one ABI, the FLUID
@@ -604,7 +613,7 @@ ADRs [0001–0009](../adr/).
                                 Evidence: C parity validates 1,410
                                 comparisons with zero pending; 27/27
                                 CTest in default, ASan+UBSan, and TSan;
-                                Python 68/68; 200,000 expanded fountain
+                                Python 81/81; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg, and the isolated wheel now
@@ -613,7 +622,7 @@ ADRs [0001–0009](../adr/).
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
                                 27/27 C in default/ASan+UBSan/TSan,
-                                68/68 Python, install, Deb, and wheel
+                                81/81 Python, install, Deb, and wheel
                                 legs. rust-seam and rust-fountain skip
                                 because cargo is absent. Hosted run IDs,
                                 nightly history, TLS/certificate legs,
