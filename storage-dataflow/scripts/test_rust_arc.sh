@@ -13,4 +13,4 @@ fi
 (cd "$CRATE" && cargo fmt --check)
 (cd "$CRATE" && cargo clippy --all-targets -- -D warnings)
 (cd "$CRATE" && cargo test --locked)
-echo "test_rust_arc: OK (offset estimator parity slice)"
+echo "test_rust_arc: OK (offset estimator + release queue parity slices)"

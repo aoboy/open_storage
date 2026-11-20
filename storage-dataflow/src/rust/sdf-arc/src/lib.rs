@@ -7,6 +7,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod heap;
+
 pub const ARC_SANE_NS: u64 = 10_000_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
