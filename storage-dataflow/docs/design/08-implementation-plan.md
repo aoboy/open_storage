@@ -2142,7 +2142,8 @@ apply callback and slot reuse, and shadow/live/killed sidecar apply semantics.
 The crate now also builds a staticlib and declares the complete public ARC ABI
 v2 surface; cbindgen regenerates the Rust view and the gate diffs it against
 `include/sdf/arc.h` (20 functions, 7 typedefs, 4 structs, 1 enum, 1 function
-pointer identical). `make rust-arc` passes fmt/clippy/tests. The C pacer
+pointer identical), and a two-translation-unit probe compares 69 field/enum
+observations and 6 type sizes. `make rust-arc` passes fmt/clippy/tests. The C pacer
 remains the default; the opt-in definition swap, symbol parity, sidecar
 production parity, and installed consumer matrix are still pending.
 

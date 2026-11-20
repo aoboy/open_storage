@@ -31,4 +31,25 @@ if [[ ! -f "$CRATE/target/debug/libsdf_arc.a" ]]; then
     exit 1
 fi
 
-echo "test_rust_arc: OK (estimator + queue + drain + stats + slab/callback + sidecar + 20-function ABI seam + staticlib)"
+# W6.18 layout gate: compile one probe against each header in a separate
+# translation unit and compare sizeof/offsetof/enum values. The declaration
+# diff cannot catch an ABI shape the seam parser does not model.
+CC="${CC:-cc}"
+if command -v "$CC" >/dev/null 2>&1; then
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    "$CC" -std=c11 -Wall -Wextra -Werror -I"$ROOT/include" \
+        -DARC_HEADER='"sdf/arc.h"' -DARC_SUFFIX=_c \
+        -c "$ROOT/tests/c/abi/arc_layout_probe.c" -o "$TMP/probe_c.o"
+    "$CC" -std=c11 -Wall -Wextra -Werror -I"$CRATE" \
+        -DARC_HEADER='"sdf_arc_generated.h"' -DARC_SUFFIX=_rust \
+        -c "$ROOT/tests/c/abi/arc_layout_probe.c" -o "$TMP/probe_rust.o"
+    "$CC" -std=c11 -Wall -Wextra -Werror -I"$ROOT/tests/c/abi" \
+        "$ROOT/tests/c/abi/arc_layout_check.c" "$TMP/probe_c.o" "$TMP/probe_rust.o" \
+        -o "$TMP/arc_layout_check"
+    "$TMP/arc_layout_check"
+else
+    echo "test_rust_arc: no C compiler; skipping the C/Rust layout gate" >&2
+fi
+
+echo "test_rust_arc: OK (estimator + queue + drain + stats + slab/callback + sidecar + 20-function ABI seam + layout + staticlib)"

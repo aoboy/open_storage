@@ -6,6 +6,11 @@ include_guard = "SDF_GENERATED_H"
 style = "type"
 usize_is_size_t = true
 
+# arc_sidecar_render_metrics takes FILE *; the C header gets it from
+# <stdio.h>, so the Rust view must include it too (FILE itself is excluded
+# from the exported typedefs to keep the surface identical).
+sys_includes = ["stdio.h"]
+
 [export]
 # Only the public ARC ABI types (W6.18). Internal Rust types (ArcParams,
 # Schedule, Scheduler, ...) stay out of the declaration surface.

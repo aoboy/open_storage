@@ -20,7 +20,9 @@ The crate's only build dependency is pinned `cbindgen`; declarations are
 `extern "C"` with no Rust-side `unsafe` implementation yet. Its tests
 reproduce the alternating d_high/d_low fixed point from the C golden
 trajectory (~94.793 ms / ~93.802 ms). The seam gate reports 20 functions,
-7 typedefs, 4 structs, 1 enum, and the apply-callback signature identical.
+7 typedefs, 4 structs, 1 enum, and the apply-callback signature identical; a
+second gate compiles one probe against each header and compares 69
+`sizeof`/`offsetof`/enum/define observations plus 6 type sizes.
 Remaining W6.18 slices:
 
 - `SDF_USE_RUST_ARC=ON|OFF` definition swap and symbol parity
