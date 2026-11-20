@@ -483,7 +483,7 @@ ADRs [0001–0009](../adr/).
                                 fmt/clippy clean, cargo tests 4/4;
                                 cbindgen declarations 15 functions /
                                 5 typedefs / 2 structs / 1 enum
-                                identical; C and Rust ctest 27/27 each;
+                                identical; C and Rust ctest 28/28 each;
                                 complete parity reports byte-identical —
                                 1,410 comparisons, ZERO pending, of which
                                 930 are fountain (including the expanded
@@ -494,13 +494,13 @@ ADRs [0001–0009](../adr/).
                                 plus 13 internal symbols once each and
                                 no C LT objects; Rust-source rebuild/
                                 remerge/relink is green. Rust-backed
-                                ASan+UBSan is 27/27 (C callers and the
+                                ASan+UBSan is 28/28 (C callers and the
                                 allocator boundary instrumented, not a
                                 claim of Rust-internal ASan). Installed
                                 pkg-config, find_package, CFFI and dpkg
                                 consumers execute BOTH LT and nanorq in
                                 both variants. Full make ci is green:
-                                C default/ASan+UBSan/TSan 27/27 each,
+                                C default/ASan+UBSan/TSan 28/28 each,
                                 Python 108/108, plus the dual-variant
                                 gates above. The comparison window stays
                                 open: no C removal, default cutover or
@@ -607,6 +607,8 @@ ADRs [0001–0009](../adr/).
                                 checks readiness after every push, and
                                 fails the historical 512-entry nanorq
                                 bitmap with false readiness at rank 1;
+                                a WM profile-update corpus with exact
+                                return codes and post-update profiles;
                                 five additional public-ABI-extracted
                                 fountain golden geometries with every
                                 original value unchanged; and an
@@ -617,7 +619,7 @@ ADRs [0001–0009](../adr/).
                                 896) plus 34 toy-only comparisons that
                                 shipped artifacts do not contain.
                                 Evidence: C parity validates 1,410
-                                comparisons with zero pending; 27/27
+                                comparisons with zero pending; 28/28
                                 CTest in default, ASan+UBSan, and TSan;
                                 Python 108/108; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
@@ -627,7 +629,7 @@ ADRs [0001–0009](../adr/).
                                 through its bundled extension;
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
-                                27/27 C in default/ASan+UBSan/TSan,
+                                28/28 C in default/ASan+UBSan/TSan,
                                 108/108 Python, install, Deb, and wheel
                                 legs. Hosted run 44774290565 is green,
                                 including rust-seam and the isolated
@@ -657,7 +659,7 @@ ADRs [0001–0009](../adr/).
   W6.13 LT window decision   : decided — C remains the default LT arm; Rust LT
                                 stays opt-in and no C is removed. ADR-0010
                                 records the incomplete evidence honestly:
-                                the current 27-test, 1,410-comparison tree
+                                the current 28-test, 1,410-comparison tree
                                 and hosted matrix are green, but no paired
                                 same-runner performance measurements or
                                 seven nightly samples exist. Revisit criteria require
@@ -1587,7 +1589,7 @@ stand-in decision).
 landed as 77e0292, 568c30c and 180f025. Local and hosted acceptance are
 green; the comparison window remains open with C as the default because
 paired performance and nightly history are still missing. Hosted rust-seam
-run 44774290565 at 0d6e60a passed the current 27-test/1,410-comparison tree.
+run 44774290565 at 0d6e60a passed the then-current 27-test/1,410-comparison tree.
 
 **Objective:** begin ADR-0003's migration for real — the internal LT arm
 in Rust, exporting the same `lt_*`/`lt_prng_next` `extern "C"` symbols
@@ -2180,7 +2182,7 @@ goldens complete, the matrix wired and hosted green. Run 44774290565 at
 0d6e60a completed 10/10 jobs on 2026-11-20. W6.6 (the release) has since
 landed as v1.0.0 (ef737b9 plus its documentation/tag commits). W6.8 has
 landed the functional Rust LT arm (77e0292, 568c30c, 180f025): the hosted
-rust-seam leg now runs the current 27-test suites and byte-identical 1,410-
+rust-seam leg now runs the current 28-test suites and byte-identical 1,410-
 comparison reports. Nightly history remains the one outstanding external
 evidence line.
 The C/Rust comparison window is open with C still default; no cutover,

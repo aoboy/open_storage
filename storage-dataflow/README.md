@@ -55,7 +55,7 @@ when cargo/components are absent. Configure one functional Rust build with
 |---|---|
 | Latest release | **v1.0.0 (W6.6)** — [release notes](/storage-dataflow/docs/releases/v1.0.0.md), ledger-derived evidence, source tag and Debian development package |
 | Public C ABI headers | Defined |
-| CMake build | Working (libraries, 27-test suite, benches, fuzzers) |
+| CMake build | Working (libraries, 28-test suite, benches, fuzzers) |
 | Whack-a-Mole dispatch (P1) | **As-built (Wave 2)**: seeded spray (280/280 goldens), embodiments + controller, SHM publication + Python loop, proxy + e2e gates |
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Control-plane service | **As-built (W6.17 partial)**: `sdf serve` loads TOML, ticks at `control_hz`, attaches WM via `SDF_WM_SHM`, writes atomic health JSON, handles SIGINT/SIGTERM, exposes health through `sdf status`, and runs from the installed wheel; RPM/Helm remain pending |
@@ -64,7 +64,7 @@ when cargo/components are absent. Configure one functional Rust build with
 | Python simulators | **As-built**: `wm_sim` (plain spray, golden-validated), `fluid_sim` (budget/gate loss ladder), and `arc_sim` (ARC offset/E hysteresis) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
 | Packaging | **As-built (Wave 5/W6.4/W6.6/W6.8/W6.16)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested with both C and Rust LT; the isolated Python/CFFI wheel is built and exercised in a fresh venv locally for both OFF and Rust-ON variants, and the OFF wheel also passed hosted run 44774290565; the hosted wheel job now has an OFF/ON matrix, with the ON leg not yet executed (rpm/Helm remain placeholders) |
-| Rust seam + LT | **As-built (W6.5/W6.8)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff; functional opt-in Rust LT with C dispatch/nanorq retained and exact archive symbols. Hosted rust-seam run 44774290565 at `0d6e60a` ran both variants against the current 27-test/1,410-golden tree |
+| Rust seam + LT | **As-built (W6.5/W6.8)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff; functional opt-in Rust LT with C dispatch/nanorq retained and exact archive symbols. Hosted rust-seam run 44774290565 at `0d6e60a` ran both variants against the current 28-test/1,410-golden tree |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |
 | CI | **W6.5/W6.8/W6.16**: 9-job matrix (style/tidy, gcc+clang, sanitizers, e2e, bench gate, install, isolated wheel, authoritative Rust quality + C/Rust functional A/B, full fuzz) + nightly p99 gate; hosted run 44774290565 at `0d6e60a` is green (10/10 matrix jobs); nightly history still pending |

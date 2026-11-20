@@ -152,6 +152,18 @@ target_link_libraries(fuzz_wm_profile PRIVATE sdf_wm sdf_common)
 add_test(NAME fuzz_wm_profile COMMAND fuzz_wm_profile)
 set_tests_properties(fuzz_wm_profile PROPERTIES ENVIRONMENT "SDF_FUZZ_ITERS=20000")
 
+# W6.11: directed update vectors with exact return codes and post-update b[].
+add_test(
+    NAME wm_profile_replay_corpus
+    COMMAND fuzz_wm_profile
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/last-path-zeroed.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/mode1-single-hot.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/mode2-multi.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/mode3-kbar.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/mode4-proportional.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/reject-oversized-e.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/wm/reject-unknown-mode.bin)
+
 add_executable(fuzz_arc_stream fuzz/fuzz_arc_stream.c)
 target_link_libraries(fuzz_arc_stream PRIVATE sdf_arc sdf_common)
 add_test(NAME fuzz_arc_stream COMMAND fuzz_arc_stream)
