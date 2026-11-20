@@ -126,6 +126,22 @@ if [[ "$VERSION_OUT" != "sdf 1.0.0" ]]; then
     exit 1
 fi
 
+# The installed service must load config and write health outside the checkout.
+cp -R "$ROOT/configs/dev" "$WORK/configs"
+env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/sdf" serve \
+    --config "$WORK/configs" --iterations 2 --health-file "$WORK/health.json"
+python3 - "$WORK/health.json" <<'PY'
+import json
+import sys
+
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+assert payload["status"] == "ok"
+assert payload["heartbeat"] == 2
+assert payload["controller_names"] == []
+assert payload["config_dir"].endswith("/configs")
+print("installed wheel service: OK (2 ticks, atomic health)")
+PY
+
 cd "$WORK"
 env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/python" - <<'PY'
 import os
@@ -238,4 +254,4 @@ if [[ "$OVERRIDE_SO" != "$ROOT/build/cffi/"* ]]; then
     exit 1
 fi
 
-echo "test_wheel: OK (variant=$VARIANT; $BASENAME; isolated venv ARC + LT/nanorq + goldens)"
+echo "test_wheel: OK (variant=$VARIANT; $BASENAME; isolated venv ARC + LT/nanorq + goldens + service)"

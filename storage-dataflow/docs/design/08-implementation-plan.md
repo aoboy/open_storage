@@ -2074,7 +2074,8 @@ installable artifact, eliminating the current checkout/`PYTHONPATH`/
 **Status:** partially implemented locally — the long-running `sdf serve`
 entry point loads the strict TOML environment, ticks controllers at the WM
 cadence, attaches WM through `SDF_WM_SHM`, writes atomic health JSON, and
-shuts down on SIGINT/SIGTERM. RPM and Helm remain blocked on a named target
+shuts down on SIGINT/SIGTERM. The installed-wheel smoke also runs two service
+ticks outside the checkout. RPM and Helm remain blocked on a named target
 distro and test cluster.
 
 **Objective:** replace the RPM and Helm placeholders with tested distribution
