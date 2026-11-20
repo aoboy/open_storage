@@ -92,6 +92,25 @@ if [[ -z "$SO" ]]; then
     exit 1
 fi
 
+# The wheel links the SDF archives statically, so a runtime search path is
+# never needed. Some setuptools/pip combinations add one for library_dirs;
+# strip it before packaging or the installed wheel would point outside itself.
+if command -v readelf >/dev/null 2>&1 &&
+    readelf -d "$SO" | grep -E 'RPATH|RUNPATH' >/dev/null; then
+    if command -v patchelf >/dev/null 2>&1; then
+        patchelf --remove-rpath "$SO"
+    elif command -v chrpath >/dev/null 2>&1; then
+        chrpath -d "$SO"
+    else
+        echo "build_wheel: bundled extension has RPATH/RUNPATH and neither patchelf nor chrpath is installed" >&2
+        exit 1
+    fi
+    if readelf -d "$SO" | grep -E 'RPATH|RUNPATH' >/dev/null; then
+        echo "build_wheel: failed to strip RPATH/RUNPATH from $SO" >&2
+        exit 1
+    fi
+fi
+
 VERSION="$(sed -n 's/#define SDF_VERSION_STRING "\(.*\)"/\1/p' include/sdf/version.h)"
 if [[ -z "$VERSION" ]]; then
     echo "build_wheel: cannot read SDF_VERSION_STRING" >&2

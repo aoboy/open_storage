@@ -10,6 +10,8 @@ Prerequisites:
 
 - CMake >= 3.24 and a C17 compiler for the staged install prefix.
 - Python >= 3.10 with `pip`, `setuptools`, `wheel`, and `cffi`.
+- `readelf` (binutils) for the wheel test; `patchelf` or `chrpath` when the
+  toolchain emits an RPATH/RUNPATH, which is stripped before packaging.
 - `cargo` only for `--variant ON` (the opt-in Rust LT fountain arm). The
   nanorq arm stays C in both variants.
 

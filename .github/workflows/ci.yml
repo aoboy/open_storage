@@ -254,7 +254,7 @@ jobs:
       - name: Install tools + build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y binutils cmake
+          sudo apt-get install -y binutils cmake patchelf
           python3 -m pip install --upgrade pip
           python3 -m pip install "cffi>=1.16" "pycparser>=2.22" "setuptools>=68" wheel
 

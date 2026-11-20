@@ -104,7 +104,8 @@ if ! command -v readelf >/dev/null 2>&1; then
 fi
 readelf -d "$SO" > "$WORK/readelf.txt"
 if grep -Eq 'RPATH|RUNPATH' "$WORK/readelf.txt"; then
-    echo "test_wheel: bundled extension carries an RPATH/RUNPATH" >&2
+    echo "test_wheel: bundled extension carries an RPATH/RUNPATH:" >&2
+    grep -E 'RPATH|RUNPATH' "$WORK/readelf.txt" >&2
     exit 1
 fi
 if grep -E '\(NEEDED\)' "$WORK/readelf.txt" | grep -Eq '/home/|/tmp/|/build|third_party'; then

@@ -1995,7 +1995,9 @@ build/variant/limitation documentation. On this runner the OFF wheel is
 checkout with `PYTHONPATH` and `SDF_CFFI_DIR` unset, copies the golden consumer
 outside `bindings/cffi` so only the wheel-bundled extension can satisfy the
 import, and reports WM/ARC/real-codec fountain coverage plus the 34 toy-only
-comparisons that shipped artifacts do not contain. The
+comparisons that shipped artifacts do not contain. A hosted setuptools link
+can add an RPATH/RUNPATH; the build strips it before packaging (patchelf or
+chrpath) and re-checks the result. The
 offline runner creates that venv with `--system-site-packages` and installs
 with `--no-deps`, so this is payload/runtime evidence, not dependency-
 resolution evidence. The ON wheel was not executed because `cargo` is
