@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install cffi pyyaml xxhash
+          python3 -m pip install cffi pyyaml xxhash "setuptools>=68" wheel
 
       - name: Run benchmark (C gate + control-plane microbench)
         run: ./scripts/run_bench.sh --iterations 20000

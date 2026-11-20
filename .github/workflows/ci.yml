@@ -85,7 +85,8 @@ jobs:
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" mypy pytest ruff xxhash pyyaml prometheus-client
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" "setuptools>=68" wheel \
+            mypy pytest ruff xxhash pyyaml prometheus-client
 
       - name: Build + C tests
         run: |
@@ -171,7 +172,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake
           python3 -m pip install --upgrade pip
-          python3 -m pip install cffi pytest pyyaml xxhash ruff mypy prometheus-client
+          python3 -m pip install cffi pytest pyyaml xxhash ruff mypy prometheus-client \
+            "setuptools>=68" wheel
 
       - name: Build once
         run: ./scripts/build.sh
@@ -201,7 +203,7 @@ jobs:
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install cffi pyyaml xxhash
+          python3 -m pip install cffi pyyaml xxhash "setuptools>=68" wheel
 
       # The C bench records the seeded spray; the script fails past
       # 30 cyc/decision (2x the 15-cyc target) — the W2.6 gate.
@@ -231,7 +233,7 @@ jobs:
       - name: Install cffi (installed-artifact leg)
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install "cffi>=1.16" "pycparser>=2.22"
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" "setuptools>=68" wheel
 
       - name: Install leg (pkg-config + find_package + installed CFFI)
         run: ./scripts/test_install.sh
@@ -254,7 +256,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binutils cmake
           python3 -m pip install --upgrade pip
-          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" wheel
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" "setuptools>=68" wheel
 
       - name: Build the wheel artifact
         run: ./scripts/build_wheel.sh --out build/wheel
@@ -275,6 +277,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python/CFFI dependencies for the installed leg
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "cffi>=1.16" "pycparser>=2.22" "setuptools>=68" wheel
 
       - uses: dtolnay/rust-toolchain@1.100.0
         with:
