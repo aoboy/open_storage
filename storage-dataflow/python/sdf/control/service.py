@@ -27,6 +27,12 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib
 
 from sdf.common.shm import WmShm
+from sdf.control.arc_deploy import (
+    ArcDeployConfig,
+    ArcDeployLoop,
+    ArcMode,
+    CffiSidecarTransport,
+)
 from sdf.control.wm_control import WmControlLoop
 
 
@@ -160,12 +166,48 @@ class WmTick:
         self.shm.close()
 
 
+class ArcTick:
+    """Tick the ARC deploy controller and its C sidecar."""
+
+    name = "arc"
+
+    def __init__(self, config: ServiceConfig) -> None:
+        arc = config.arc
+        self.transport = CffiSidecarTransport(
+            capacity=int(arc.get("batch_max", 256)),
+            entry_max=248,
+            batch_max=int(arc.get("batch_max", 256)),
+            batch_deadline_ns=int(arc.get("batch_deadline_ns", 2_000_000)),
+            budget_ns=int(float(arc.get("budget_ms", 0)) * 1_000_000),
+            mode=ArcMode.SHADOW,
+        )
+        self.loop = ArcDeployLoop(
+            self.transport,
+            ArcDeployConfig(
+                added_latency_budget_ns=int(float(arc.get("budget_ms", 10)) * 1_000_000),
+                poll_interval_s=config.interval_s,
+                auto_kill=False,
+            ),
+        )
+        self.loop.start()
+        if bool(arc.get("kill_switch", False)):
+            self.loop.kill()
+
+    def step(self) -> Mapping[str, object]:
+        return self.loop.step()
+
+    def close(self) -> None:
+        self.transport.close()
+
+
 def build_tickables(config: ServiceConfig) -> list[Tickable]:
     """Attach controllers whose runtime surface is configured."""
     tickables: list[Tickable] = []
     shm_name = os.environ.get("SDF_WM_SHM")
     if shm_name:
         tickables.append(WmTick(shm_name, config))
+    if os.environ.get("SDF_ARC_SIDECAR") == "1":
+        tickables.append(ArcTick(config))
     return tickables
 
 
@@ -207,6 +249,11 @@ class ControlPlaneService:
             "config_dir": str(self.config.directory),
             "control_hz": self.config.control_hz,
             "controller_names": [tickable.name for tickable in self.tickables],
+            "arc_mode": self.config.arc["mode"],
+            "fluid_classes": [
+                {"name": item["name"], "epsilon": item["eps"], "codec": item["codec"]}
+                for item in self.config.fluid_classes
+            ],
             **record,
         }
         temp = path.with_name(path.name + ".tmp")

@@ -501,7 +501,7 @@ ADRs [0001–0009](../adr/).
                                 consumers execute BOTH LT and nanorq in
                                 both variants. Full make ci is green:
                                 C default/ASan+UBSan/TSan 28/28 each,
-                                Python 108/108, plus the dual-variant
+                                Python 109/109, plus the dual-variant
                                 gates above. The comparison window stays
                                 open: no C removal, default cutover or
                                 performance claim. The hosted rust-seam
@@ -621,7 +621,7 @@ ADRs [0001–0009](../adr/).
                                 Evidence: C parity validates 1,410
                                 comparisons with zero pending; 28/28
                                 CTest in default, ASan+UBSan, and TSan;
-                                Python 108/108; 200,000 expanded fountain
+                                Python 109/109; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg, and the isolated wheel now
@@ -630,7 +630,7 @@ ADRs [0001–0009](../adr/).
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
                                 28/28 C in default/ASan+UBSan/TSan,
-                                108/108 Python, install, Deb, and wheel
+                                109/109 Python, install, Deb, and wheel
                                 legs. Hosted run 44774290565 is green,
                                 including rust-seam and the isolated
                                 wheel artifact. Nightly history,
@@ -2075,8 +2075,9 @@ installable artifact, eliminating the current checkout/`PYTHONPATH`/
 
 **Status:** partially implemented locally — the long-running `sdf serve`
 entry point loads the strict TOML environment, ticks controllers at the WM
-cadence, attaches WM through `SDF_WM_SHM`, writes atomic health JSON, and
-shuts down on SIGINT/SIGTERM. `sdf status` reads the health record, and the
+cadence, attaches WM through `SDF_WM_SHM` and the ARC sidecar through
+`SDF_ARC_SIDECAR`, writes atomic health JSON including ARC mode and
+FLUID class policy, and shuts down on SIGINT/SIGTERM. `sdf status` reads the health record, and the
 installed-wheel smoke runs two service ticks and the status command outside
 the checkout. RPM and Helm remain blocked on a named target distro and test
 cluster.

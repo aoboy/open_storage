@@ -83,6 +83,11 @@ def test_service_step_and_health(tmp_path: Path) -> None:
     assert payload["heartbeat"] == 2
     assert payload["controller_names"] == ["fake"]
     assert payload["controllers"] == {"fake": {"value": 2}}
+    assert payload["arc_mode"] == "arc_qg"
+    assert [item["name"] for item in payload["fluid_classes"]] == [
+        "hot-metadata",
+        "cold-checkpoint",
+    ]
 
 
 def test_stop_event_prevents_ticks() -> None:
@@ -97,9 +102,22 @@ def test_stop_event_prevents_ticks() -> None:
     assert tick.steps == 0
 
 
-def test_build_tickables_without_shm(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_tickables_without_runtime_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SDF_WM_SHM", raising=False)
+    monkeypatch.delenv("SDF_ARC_SIDECAR", raising=False)
     assert build_tickables(load_service_config(CONFIG_DIR)) == []
+
+
+def test_arc_tick_attaches(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SDF_WM_SHM", raising=False)
+    monkeypatch.setenv("SDF_ARC_SIDECAR", "1")
+    tickables = build_tickables(load_service_config(CONFIG_DIR))
+    assert [tick.name for tick in tickables] == ["arc"]
+    try:
+        record = tickables[0].step()
+        assert record["mode"] == "shadow"
+    finally:
+        tickables[0].close()
 
 
 def test_wm_tick_attaches_and_publishes(monkeypatch: pytest.MonkeyPatch) -> None:
