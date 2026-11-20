@@ -18,6 +18,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Repair count for a percentage of K, in uint64 so the multiply cannot
+ * wrap. False when K + repairs would overflow the public uint32 count. */
+static inline bool fountain_overhead_count(uint32_t k, uint32_t overhead_pct, uint32_t *out) {
+    uint64_t repairs = (uint64_t)k * overhead_pct / 100u;
+    if (repairs > UINT32_MAX - k) {
+        return false;
+    }
+    *out = (uint32_t)repairs;
+    return true;
+}
+
 /* ---- LT arm (plan W3.3, in-repo reference codec) ----------------------- */
 
 size_t lt_enc_sizeof(void);

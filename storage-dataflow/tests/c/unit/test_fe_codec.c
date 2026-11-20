@@ -266,6 +266,52 @@ static void test_lt(void) {
     lt_run(1, 100); /* one dropped source, recovered via the repairs */
 }
 
+/* An unknown arm is a configuration error, never an implicit LT fallback,
+ * and the repair count must not wrap the public uint32 symbol count. */
+static void test_codec_selection_fail_closed(void) {
+    fe_cfg_t bad_arm = {
+        .block_len = K * T,
+        .k = K,
+        .overhead_pct = 10,
+        .codec = 2, /* neither LT nor NANORQ */
+    };
+    CHECK(fe_sizeof(&bad_arm) == 0);
+    bad_arm.codec = UINT32_MAX;
+    CHECK(fe_sizeof(&bad_arm) == 0);
+
+    fd_cfg_t dcfg = {.k = K, .sym_len = T};
+    size_t dsz = fd_sizeof(&dcfg);
+    CHECK(dsz > 0);
+    void *dmem = malloc(dsz);
+    CHECK(dmem != NULL);
+    CHECK(fd_init_codec(dmem, &dcfg, 2) == -EINVAL);
+    CHECK(!fd_ready(dmem));
+    CHECK(fd_rank(dmem) == 0);
+    uint8_t sym[T] = {0};
+    CHECK(fd_push(dmem, 0, sym, T) == -EINVAL);
+    uint8_t out[K * T];
+    CHECK(fd_decode(dmem, out, sizeof(out)) == -EINVAL);
+    fd_destroy(dmem);
+    free(dmem);
+
+    /* K=512 plus UINT32_MAX percent of K overflows uint32 in 32-bit
+     * arithmetic; init must reject it before exposing a wrapped count. */
+    fe_cfg_t overflow = {
+        .block_len = 512,
+        .k = 512,
+        .overhead_pct = UINT32_MAX,
+        .codec = SDF_FOUNTAIN_NANORQ,
+    };
+    size_t esz = fe_sizeof(&overflow);
+    CHECK(esz > 0);
+    void *emem = malloc(esz);
+    CHECK(emem != NULL);
+    uint8_t block[512] = {0};
+    CHECK(fe_init_in(emem, &overflow, block) == -EINVAL);
+    fe_destroy(emem);
+    free(emem);
+}
+
 int main(void) {
     test_validation();
     test_roundtrip();
@@ -273,12 +319,13 @@ int main(void) {
     test_repair_window_bounds();
     test_insufficient_is_the_arq_condition();
     test_lt();
+    test_codec_selection_fail_closed();
 
     test_roundtrip();
     test_lossy_recovery();
     test_repair_window_bounds();
     test_insufficient_is_the_arq_condition();
     printf("test_fe_codec: ok (nanorq: roundtrip, 20%% loss, ARQ condition; "
-           "LT: roundtrip, repairs, peel recovery)\n");
+           "LT: roundtrip, repairs, peel recovery; unknown arms rejected)\n");
     return 0;
 }

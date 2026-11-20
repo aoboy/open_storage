@@ -11,6 +11,8 @@
  * pins the W6.9 pending-entry retention path.
  */
 
+#include "arc_internal.h"
+
 #include "sdf/arc.h"
 #include "sdf/common/timer.h"
 
@@ -65,6 +67,35 @@ static uint64_t metric_value(const char *body, const char *series) {
     const char *p = strstr(body, series);
     CHECK(p != NULL);
     return strtoull(p + strlen(series), NULL, 10);
+}
+
+typedef struct {
+    uint8_t bytes[8][64];
+    size_t lens[8];
+    uint32_t count;
+    uint32_t unexpected;
+} apply_observer_t;
+
+static void observe_apply(void *ctx, const void *entry, size_t len, uint64_t release_ts) {
+    apply_observer_t *obs = ctx;
+    (void)release_ts;
+    if (len != 64 || obs->count >= 8) {
+        obs->unexpected++;
+        return;
+    }
+    memcpy(obs->bytes[obs->count], entry, len);
+    obs->lens[obs->count] = len;
+    obs->count++;
+}
+
+static uint32_t observer_count(const apply_observer_t *obs, uint8_t value) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < obs->count; i++) {
+        if (obs->lens[i] == 64 && obs->bytes[i][0] == value) {
+            count++;
+        }
+    }
+    return count;
 }
 
 static void test_modes(void) {
@@ -409,24 +440,34 @@ static void test_saturation_retention(void) {
     cfg.batch_max = 1;
     CHECK(arc_sidecar_start(&cfg, 1) == 0);
 
+    apply_observer_t obs;
+    memset(&obs, 0, sizeof(obs));
+    arc_sidecar_set_apply_observer(observe_apply, &obs);
+
     char entry[64];
-    memset(entry, 5, sizeof(entry));
     uint64_t future = sdf_now_ns() + 50000000ull;
 
+    memset(entry, 0x50, sizeof(entry));
     CHECK(arc_sidecar_submit(entry, sizeof(entry), future) == 0);
+    memset(entry, 0x51, sizeof(entry));
     CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 1) == 0);
     /* the ring is full: this caller still owns the refused entry */
+    memset(entry, 0x52, sizeof(entry));
     CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 2) == -EAGAIN);
     CHECK(arc_sidecar_pump_once() >= 2);
     CHECK(arc_sidecar_applied() == 0);
     CHECK(arc_sidecar_stats().in_flight == 2);
+    CHECK(obs.count == 0);
 
     /* two more ring-accepted entries; the pacer is full */
+    memset(entry, 0x53, sizeof(entry));
     CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 3) == 0);
+    memset(entry, 0x54, sizeof(entry));
     CHECK(arc_sidecar_submit(entry, sizeof(entry), future + 4) == 0);
     CHECK(arc_sidecar_pump_once() >= 0);
     CHECK(arc_sidecar_applied() == 0);
     CHECK(arc_sidecar_stats().in_flight == 2);
+    CHECK(obs.count == 0);
 
     /* kill drains the old backlog first; the pending entry is retried
      * on the next pump and nothing is lost or duplicated */
@@ -440,6 +481,15 @@ static void test_saturation_retention(void) {
     CHECK(arc_sidecar_pump_once() >= 0);
     CHECK(arc_sidecar_applied() == 4);
     CHECK(arc_sidecar_stats().releases == 4);
+    /* Payload identity, not just counts: the caller-refused 0x52 was
+     * never applied, and each accepted identity applied exactly once. */
+    CHECK(obs.unexpected == 0);
+    CHECK(obs.count == 4);
+    CHECK(observer_count(&obs, 0x50) == 1);
+    CHECK(observer_count(&obs, 0x51) == 1);
+    CHECK(observer_count(&obs, 0x52) == 0);
+    CHECK(observer_count(&obs, 0x53) == 1);
+    CHECK(observer_count(&obs, 0x54) == 1);
     char *metrics = render_metrics();
     CHECK(metric_value(metrics, "sdf_arc_accepted_total ") == 4);
     CHECK(metric_value(metrics, "sdf_arc_caller_refused_total{reason=\"ring_full\"} ") == 1);

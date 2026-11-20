@@ -21,6 +21,9 @@ size_t fe_sizeof(const fe_cfg_t *cfg) {
     if (cfg == NULL || cfg->k == 0 || cfg->block_len == 0) {
         return 0;
     }
+    if (cfg->codec != SDF_FOUNTAIN_LT && cfg->codec != SDF_FOUNTAIN_NANORQ) {
+        return 0; /* fail closed: an unknown arm is not LT */
+    }
     if (cfg->block_len % cfg->k != 0) {
         return 0;
     }

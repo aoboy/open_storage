@@ -123,6 +123,13 @@ arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len, 
 int arc_submit_at(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts,
                   uint64_t arrival_ts);
 
+/* Test-only apply observer: lets the sidecar integration test verify that
+ * every released payload identity is applied exactly once. Not a public
+ * ABI; production callers leave it unset. */
+typedef void (*arc_sidecar_apply_observer_fn)(void *ctx, const void *entry, size_t len,
+                                              uint64_t release_ts);
+void arc_sidecar_set_apply_observer(arc_sidecar_apply_observer_fn fn, void *ctx);
+
 /* arc_heap.c: the release queue. */
 int arc_heap_push(arc_state_t *a, const arc_rel_t *rel);
 int arc_heap_pop(arc_state_t *a, arc_rel_t *out);

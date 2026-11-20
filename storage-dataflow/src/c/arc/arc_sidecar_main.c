@@ -51,6 +51,8 @@ typedef struct {
     int applied_mode; /* last mode pushed into the pacer (pump-owned) */
     uint32_t entry_max;
     uint64_t applied;
+    arc_sidecar_apply_observer_fn observer;
+    void *observer_ctx;
 
     /* W6.9: an entry the ring accepted but the pacer has not yet
      * accepted. Retried before any further ring pop. */
@@ -80,6 +82,12 @@ typedef struct {
 } sidecar_t;
 
 static sidecar_t g_sidecar;
+
+/* Test-only seam (arc_internal.h): no public caller sets this. */
+void arc_sidecar_set_apply_observer(arc_sidecar_apply_observer_fn fn, void *ctx) {
+    g_sidecar.observer = fn;
+    g_sidecar.observer_ctx = ctx;
+}
 
 /* Shadow and live both run the exact QG schedule; killed is the
  * IMMEDIATE oracle. */
@@ -172,8 +180,6 @@ static void shadow_note_schedule_release(const arc_rel_t *rel, uint64_t now_ns) 
 
 static int apply_trampoline(void *ctx, const void *entry, size_t len, uint64_t release_ts) {
     (void)ctx;
-    (void)entry;
-    (void)len;
     if (g_sidecar.applied_mode == 0) {
         /* The shadow path already applied this entry immediately. The
          * QG callback only records the schedule release; a second
@@ -189,12 +195,18 @@ static int apply_trampoline(void *ctx, const void *entry, size_t len, uint64_t r
         uint64_t added = release_ts > a_n ? release_ts - a_n : 0;
         sdf_histogram_observe(&g_sidecar.live_added_latency, added);
     }
+    if (g_sidecar.observer != NULL) {
+        g_sidecar.observer(g_sidecar.observer_ctx, entry, len, release_ts);
+    }
     g_sidecar.applied++;
     return 0;
 }
 
-static void sidecar_apply_immediate(void) {
+static void sidecar_apply_immediate(const sidecar_slot_t *slot) {
     uint64_t now = sdf_now_ns();
+    if (g_sidecar.observer != NULL) {
+        g_sidecar.observer(g_sidecar.observer_ctx, slot->bytes, slot->len, now);
+    }
     g_sidecar.applied++;
     if (g_sidecar.pacer != NULL && g_sidecar.pacer->st.last_sched_valid) {
         shadow_note_immediate(&g_sidecar.pacer->st.last_sched, now);
@@ -219,7 +231,7 @@ static int sidecar_submit_one(const sidecar_slot_t *slot) {
         return rc;
     }
     if (g_sidecar.applied_mode == 0) {
-        sidecar_apply_immediate();
+        sidecar_apply_immediate(slot);
     }
     return 0;
 }

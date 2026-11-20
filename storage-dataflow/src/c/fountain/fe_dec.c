@@ -105,6 +105,10 @@ int fd_init_codec(fountain_dec_t *d, const fd_cfg_t *cfg, uint32_t codec) {
     }
     struct fountain_dec *fd = (struct fountain_dec *)d;
     memset(fd, 0, sizeof(*fd));
+    if (codec != SDF_FOUNTAIN_LT && codec != SDF_FOUNTAIN_NANORQ) {
+        fd->codec = 0xffff; /* poisoned: only destroy is valid */
+        return -EINVAL;
+    }
     fd->codec = codec;
     int rc = codec == SDF_FOUNTAIN_NANORQ ? nrq_dec_init(fd->arm, cfg) : lt_dec_init(fd->arm, cfg);
     if (rc != 0) {

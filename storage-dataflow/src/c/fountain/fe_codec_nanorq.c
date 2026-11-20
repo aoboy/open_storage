@@ -67,9 +67,11 @@ int nrq_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
 
     nrq_enc_t *e = mem;
     memset(e, 0, sizeof(*e));
+    if (!fountain_overhead_count(cfg->k, cfg->overhead_pct, &e->overhead)) {
+        return -EINVAL;
+    }
     e->k = cfg->k;
     e->sym_len = sym_len;
-    e->overhead = cfg->k * cfg->overhead_pct / 100u;
 
     e->io = ioctx_from_mem_ro(block, cfg->block_len);
     if (e->io == NULL) {
@@ -197,7 +199,7 @@ int nrq_dec_init(void *mem, const fd_cfg_t *cfg) {
 
 int nrq_push(void *dec, uint32_t esi, const uint8_t *sym, size_t len) {
     nrq_dec_t *d = dec;
-    if (d == NULL || d->rq == NULL || sym == NULL || len != d->sym_len) {
+    if (d == NULL || d->rq == NULL || d->io == NULL || sym == NULL || len != d->sym_len) {
         return -EINVAL;
     }
     if (esi >= d->k + d->k) { /* sources + repair window we track */
@@ -228,8 +230,8 @@ int nrq_push(void *dec, uint32_t esi, const uint8_t *sym, size_t len) {
 
 bool nrq_ready(const void *dec) {
     nrq_dec_t *d = (nrq_dec_t *)dec; /* repair_block mutates scratch */
-    if (d == NULL || d->rq == NULL) {
-        return false;
+    if (d == NULL || d->rq == NULL || d->scratch == NULL || d->io == NULL) {
+        return false; /* never report readiness without backend storage */
     }
     if (d->repaired) {
         return true;
@@ -252,7 +254,8 @@ uint32_t nrq_rank(const void *dec) {
 
 int nrq_decode(void *dec, uint8_t *out, size_t block_len) {
     nrq_dec_t *d = dec;
-    if (d == NULL || d->rq == NULL || out == NULL || block_len != (size_t)d->k * d->sym_len) {
+    if (d == NULL || d->rq == NULL || d->scratch == NULL || d->io == NULL || out == NULL ||
+        block_len != (size_t)d->k * d->sym_len) {
         return -EINVAL;
     }
     if (!nrq_ready(dec)) {

@@ -132,9 +132,11 @@ int lt_enc_init(void *mem, const fe_cfg_t *cfg, const uint8_t *block) {
 
     lt_enc_t *e = mem;
     memset(e, 0, sizeof(*e));
+    if (!fountain_overhead_count(cfg->k, cfg->overhead_pct, &e->overhead)) {
+        return -EINVAL;
+    }
     e->k = cfg->k;
     e->sym_len = sym_len;
-    e->overhead = cfg->k * cfg->overhead_pct / 100u;
     e->block = block;
     return 0;
 }
