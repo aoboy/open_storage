@@ -580,7 +580,12 @@ ADRs [0001–0009](../adr/).
                                 drain); input-derived fountain fuzz
                                 geometry for both codecs with directed
                                 boundary shapes; the 1,024-entry nanorq
-                                ESI bitmap fix; five additional
+                                ESI bitmap fix; fail-closed rejection of
+                                unknown codec selectors, overflow-checked
+                                repair counts, a nanorq readiness guard
+                                for missing backend storage, and unique
+                                applied-payload checks in the sidecar
+                                saturation test; five additional
                                 public-ABI-extracted fountain golden
                                 geometries with every original value
                                 unchanged; and an installed-prefix CFFI
@@ -606,7 +611,7 @@ ADRs [0001–0009](../adr/).
                                 every unexecuted external leg are not
                                 claimed
                                 (b05b0e0, 40e496f, bf9e88c, 5b0a87a,
-                                51b0c78, 502fadc).
+                                51b0c78, 502fadc, ce17588).
   W6.14 executable observability: implemented — design 05 now carries the
                                 canonical `sdf_` naming/schema contract,
                                 exact 32-bucket histogram bounds, bounded
