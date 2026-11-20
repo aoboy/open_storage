@@ -25,6 +25,7 @@ design and plan.
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
 ./scripts/build_wheel.sh  # installable Python/CFFI wheel (see packaging/wheel)
 make ci                   # lint, C tests/sanitizers, install/deb/wheel, Rust C/Rust A/B gates
+make e2e                  # cache-fill, repair, apply, and live SHM e2e harnesses
 ```
 
 Requirements: CMake >= 3.24, a C17 compiler, and Python >= 3.10. The FFI,

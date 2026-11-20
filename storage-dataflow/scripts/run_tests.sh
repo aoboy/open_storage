@@ -23,8 +23,4 @@ else
     echo "pytest not installed; skipping Python tests" >&2
 fi
 
-if [[ -x tests/system/e2e_cache_fill.sh ]] && command -v docker >/dev/null 2>&1; then
-    echo "system tests are placeholders; skipping" >&2
-else
-    echo "system tests not configured; skipping" >&2
-fi
+echo "system/e2e harnesses are separate from ctest; run 'make e2e' to execute them" >&2
