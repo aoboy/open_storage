@@ -214,6 +214,19 @@ target_compile_definitions(bench_arc PRIVATE
     SDF_BENCH_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
     SDF_BENCH_REVISION="${SDF_BENCH_REVISION}")
 
+# W6.12 paired C/Rust LT fountain micro-bench (recorded, not ctest-gated).
+add_executable(bench_fountain bench/bench_fountain.c)
+target_link_libraries(bench_fountain PRIVATE sdf_fountain sdf_common)
+if(SDF_USE_RUST_FOUNTAIN)
+    set(_sdf_fountain_bench_variant "rust")
+else()
+    set(_sdf_fountain_bench_variant "c")
+endif()
+target_compile_definitions(bench_fountain PRIVATE
+    SDF_BENCH_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    SDF_BENCH_REVISION="${SDF_BENCH_REVISION}"
+    SDF_BENCH_FOUNTAIN_VARIANT="${_sdf_fountain_bench_variant}")
+
 # W6.15 measured HTTP transport leg (recorded, not ctest-gated).
 add_executable(bench_origin bench/bench_origin.c)
 target_link_libraries(bench_origin PRIVATE sdf_origin_http sdf_common)

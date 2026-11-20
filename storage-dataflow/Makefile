@@ -1,4 +1,4 @@
-.PHONY: all build test bench format lint doc clean asan tsan ci install deb wheel wheel-test rust-seam rust-fountain
+.PHONY: all build test bench bench-paired format lint doc clean asan tsan ci install deb wheel wheel-test rust-seam rust-fountain
 
 # Gates run serially (plan W0.5): a gate that races another gate is not
 # a gate.
@@ -14,6 +14,9 @@ test:
 
 bench:
 	./scripts/run_bench.sh
+
+bench-paired:
+	./scripts/bench_fountain_paired.sh
 
 format:
 	./scripts/format_c.sh --write

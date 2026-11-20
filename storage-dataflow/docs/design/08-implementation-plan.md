@@ -637,6 +637,21 @@ ADRs [0001–0009](../adr/).
                                 external legs are not claimed
                                 (b05b0e0, 40e496f, bf9e88c, 5b0a87a,
                                 51b0c78, 502fadc, ce17588).
+  W6.12 paired fountain bench: partially done — bench_fountain records
+                                init/generate/push/decode, p99, and
+                                throughput for the same binary built
+                                with C and Rust LT. bench-paired builds
+                                both variants, runs identical K/symbol/
+                                loss configurations, writes
+                                out/bench/fountain_paired.txt, and the
+                                comparator rejects missing, duplicate,
+                                or mixed-runner pairs. Local 8-record
+                                run covered K=16/32/64 at 0/10/20/30%
+                                loss; these are single-runner
+                                observations, not a baseline. CI now
+                                has a --require fountain-bench job.
+                                Still open: a stable named reference
+                                runner and seven nightly paired samples.
   W6.13 LT window decision   : decided — C remains the default LT arm; Rust LT
                                 stays opt-in and no C is removed. ADR-0010
                                 records the incomplete evidence honestly:
@@ -1766,15 +1781,19 @@ separately, and enforces the 400 ns/block limit only when
 `SDF_BENCH_REFERENCE_RUNNER` names the runner (or `--reference-runner` is
 passed). Negative tests cover those paths, and the existing synthetic
 nightly-history selftest exercises the >5% rule and insufficient-history skip.
+`bench_fountain` records init/generate/push/decode, p99, and throughput;
+`make bench-paired` builds the same binary with C and Rust LT, runs identical
+configurations, validates the pairs, and writes
+`out/bench/fountain_paired.txt`.
 Local single-runner records put canonical batch-64 QG at roughly 115–170
 ns/block and immediate at roughly 115–170 ns/block; batch 1024 reached roughly
 220–290 ns/block in the same runs, so the 200 ns target is not universal across
 queue depths. These are local observations, not a baseline or a cross-machine
-claim. Still open: reference-runner activation on a stable named runner (the
-hosted matrix is green, but no benchmark runner is designated), paired
-same-runner C/Rust LT encode/generate/push/peel/decode/repair measurements
-(hosted CI has cargo, but no paired run is recorded), and the later C/Rust ARC
-comparison hooks. No hosted or cross-machine performance evidence is claimed.
+claim. Paired same-runner C/Rust LT measurements now exist locally
+(`out/bench/fountain_paired.txt`) and CI has a dedicated `fountain-bench` job.
+Still open: a stable named reference runner, seven nightly paired samples,
+and the later C/Rust ARC comparison hooks. No hosted or cross-machine
+performance evidence is claimed yet.
 
 **Objective:** implement the missing performance evidence before using ARC's
 200 ns/block target or Rust LT results as a gate, baseline, or cutover argument.
