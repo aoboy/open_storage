@@ -1790,11 +1790,15 @@ full production-transport gate. Landed: explicit origin-class selection for WM
 and FLUID (loopback and HTTP drivers, clear `-EINVAL`/`-ENOTSUP` failures for
 mixed/unknown/S3/peer sets), strict `[[origin]]` materialization in both
 coordinators, retained harness modes, controlled in-process HTTP tests for WM
-fill/drain and multi-block FLUID repair, and bounded rejection of an overlong
-HTTP body. Still open: HTTPS with CA/hostname verification, allocation-free
-post-warmup transport, TLS certificate-failure tests, saturation/backpressure
-measurement, and `bench_origin` A/B evidence. No hosted, TLS, performance, or
-soak evidence has been produced. Does not include W6.7 S3/NVMe-peer drivers.
+fill/drain and multi-block FLUID repair, bounded rejection of overlong bodies,
+and a reusable grow-on-demand per-origin HTTP body buffer (no body allocation
+after warmup, verified by transport-buffer counters). Controlled HTTP coverage
+now also includes chunked partial responses, truncated-body recovery, and
+queue saturation returning the documented `-EAGAIN` without blocking. Still
+open: HTTPS with CA/hostname verification, TLS certificate-failure tests,
+saturation/backpressure measurement, and `bench_origin` p99/goodput/allocation
+A/B evidence. No hosted, TLS, performance, or soak evidence has been produced.
+Does not include W6.7 S3/NVMe-peer drivers.
 
 **Objective:** move WM and FLUID beyond forced-loopback harness origins and
 turn the reference HTTP driver into a measured, bounded production candidate

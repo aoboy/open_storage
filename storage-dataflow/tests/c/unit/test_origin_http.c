@@ -8,7 +8,9 @@
  * URL validation, ranged fetch correctness + stats exactness, 404
  * mapping with reconnect, socket timeouts surfacing as failed units
  * within bound, connect-refused latching hard_down, drain/restore,
- * close flushing in-flight as -ECANCELED.
+ * close flushing in-flight as -ECANCELED, reusable transport-buffer
+ * growth/reuse, chunked partial responses, truncated-body recovery,
+ * and queue saturation returning -EAGAIN without blocking.
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -43,6 +45,8 @@
 #define SRV_POLL_MS 100
 
 static _Atomic int g_overlong_body;
+static _Atomic int g_chunked_body;
+static _Atomic int g_short_body;
 
 /* ---- in-process HTTP/1.1 server ---------------------------------------- */
 
@@ -122,7 +126,10 @@ static void *conn_serve(void *argp) {
         if (strcmp(path, "/obj") == 0 && rng != NULL && a <= b && b < OBJ_BYTES) {
             unsigned long long len = b - a + 1;
             unsigned long long body_len = len;
-            if (atomic_load_explicit(&g_overlong_body, memory_order_relaxed)) {
+            int overlong = atomic_load_explicit(&g_overlong_body, memory_order_relaxed);
+            int chunked = atomic_load_explicit(&g_chunked_body, memory_order_relaxed);
+            int short_body = atomic_load_explicit(&g_short_body, memory_order_relaxed);
+            if (overlong) {
                 /* Malformed-response leg: more body bytes than the declared
                  * Content-Length, delivered with the header in one write. */
                 body_len += 4096;
@@ -133,20 +140,50 @@ static void *conn_serve(void *argp) {
                      "Content-Length: %llu\r\n"
                      "Connection: keep-alive\r\n\r\n",
                      a, b, (unsigned)OBJ_BYTES, len);
-            /* Send header and body as one contiguous write so the overlong
-             * leg deterministically exercises the excess-body check. */
-            size_t head_len = strlen(head);
-            size_t resp_len = head_len + (size_t)body_len;
-            uint8_t *resp = malloc(resp_len);
-            CHECK(resp != NULL);
-            memcpy(resp, head, head_len);
-            for (size_t i = 0; i < (size_t)body_len; i++) {
-                resp[head_len + i] = s->obj[(size_t)(a + i) % OBJ_BYTES];
-            }
-            int send_rc = send_all_fd(c, resp, resp_len);
-            free(resp);
-            if (send_rc != 0) {
-                goto conn_done;
+            if (chunked) {
+                /* Header first, then short body writes: exercises the
+                 * body_pre == 0 and partial-recv paths deterministically. */
+                if (send_all_fd(c, (const uint8_t *)head, strlen(head)) != 0) {
+                    goto conn_done;
+                }
+                size_t sent = 0;
+                while (sent < (size_t)body_len) {
+                    size_t n = (size_t)body_len - sent;
+                    if (n > 137u) {
+                        n = 137u;
+                    }
+                    uint8_t piece[137];
+                    for (size_t i = 0; i < n; i++) {
+                        piece[i] = s->obj[(size_t)(a + sent + i) % OBJ_BYTES];
+                    }
+                    if (send_all_fd(c, piece, n) != 0) {
+                        goto conn_done;
+                    }
+                    sent += n;
+                    if ((sent / 137u) % 8u == 0u) {
+                        struct timespec ts = {.tv_sec = 0, .tv_nsec = 500000};
+                        nanosleep(&ts, NULL);
+                    }
+                }
+            } else {
+                size_t head_len = strlen(head);
+                size_t send_len = head_len + (size_t)body_len;
+                if (short_body && body_len > 1u) {
+                    /* Declare the full range but close after half the body:
+                     * the unit must fail, then the next fetch recovers. */
+                    send_len = head_len + (size_t)(body_len / 2u);
+                }
+                uint8_t *resp = malloc(send_len);
+                CHECK(resp != NULL);
+                memcpy(resp, head, head_len);
+                for (size_t i = 0; head_len + i < send_len; i++) {
+                    resp[head_len + i] = s->obj[(size_t)(a + i) % OBJ_BYTES];
+                }
+                int send_rc = send_all_fd(c, resp, send_len);
+                free(resp);
+                if (send_rc != 0 || short_body) {
+                    goto conn_done;
+                }
             }
         } else {
             snprintf(head, sizeof(head),
@@ -446,6 +483,152 @@ static void test_inflight_covers_callback(void) {
     o.ops->close(&o);
 }
 
+static void test_buffer_reuse_and_growth(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    sdf_http_transport_stats_t ts;
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.body_cap == 0 && ts.body_allocs == 0);
+    CHECK(sdf_http_transport_stats(&o, 1, &ts) == -EINVAL);
+    CHECK(sdf_http_transport_stats(NULL, 0, &ts) == -EINVAL);
+    CHECK(sdf_http_transport_stats(&o, 0, NULL) == -EINVAL);
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 0, .len = 1024};
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    uint32_t cap_small = ts.body_cap;
+    CHECK(cap_small >= req.len && ts.body_allocs == 1);
+
+    /* Same-size unit: the warmed buffer is reused, no new allocation. */
+    req.obj_offset = 2048;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.body_cap == cap_small && ts.body_allocs == 1);
+
+    /* Larger unit: one grow event covers it. */
+    req.obj_offset = 4096;
+    req.len = 32768;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    uint32_t cap_large = ts.body_cap;
+    CHECK(cap_large >= req.len && ts.body_allocs == 2);
+
+    /* Smaller unit afterwards: neither shrink nor allocate. */
+    req.obj_offset = 0;
+    req.len = 512;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.body_cap == cap_large && ts.body_allocs == 2);
+
+    CHECK(atomic_load(&g_t.ok) == 4);
+    CHECK(atomic_load(&g_t.bytes_ok) == 1024 + 1024 + 32768 + 512);
+    o.ops->close(&o);
+}
+
+static void test_partial_body(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    atomic_store_explicit(&g_chunked_body, 1, memory_order_relaxed);
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 777, .len = 4096};
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 1); /* header/body split and partial recv exact */
+    CHECK(atomic_load(&g_t.bytes_ok) == req.len);
+
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.reqs_done == 1 && st.reqs_failed == 0 && st.bytes_rx == req.len);
+    o.ops->close(&o);
+    atomic_store_explicit(&g_chunked_body, 0, memory_order_relaxed);
+}
+
+static void test_truncated_body_recovers(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    atomic_store_explicit(&g_short_body, 1, memory_order_relaxed);
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 1024, .len = 4096};
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.bad_response) == 1); /* short body fails the unit */
+
+    /* Recovery: the driver dropped the socket and the next unit succeeds. */
+    atomic_store_explicit(&g_short_body, 0, memory_order_relaxed);
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 1);
+
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.reqs_done == 1 && st.reqs_failed == 1 && st.bytes_rx == req.len);
+    o.ops->close(&o);
+}
+
+static void test_saturation_backpressure(void) {
+    test_srv_t bh;
+    srv_start(&bh, blackhole_main);
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", bh.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 120);
+    c.max_inflight = 1; /* qcap 2: one running + two queued before backpressure */
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 0, .len = 32};
+    uint64_t accepted = 0;
+    int saw_eagain = 0;
+    for (int i = 0; i < 16; i++) {
+        int rc = o.ops->fetch(&o, &req, cb, NULL);
+        if (rc == -EAGAIN) {
+            saw_eagain = 1;
+            break;
+        }
+        CHECK(rc == 0);
+        accepted++;
+    }
+    CHECK(saw_eagain && accepted >= 1);
+
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.in_flight >= 1 && st.in_flight <= accepted);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.timeout) == accepted);
+
+    /* Backpressure is transient: draining the queue restores acceptance. */
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.timeout) == accepted + 1);
+    o.ops->close(&o);
+    srv_stop(&bh);
+}
+
 static void test_timeout_and_refused(void) {
     /* blackhole server: accept, never respond */
     test_srv_t bh;
@@ -563,11 +746,16 @@ int main(void) {
     test_open_validation();
     test_fetch_and_stats();
     test_inflight_covers_callback();
+    test_buffer_reuse_and_growth();
+    test_partial_body();
+    test_truncated_body_recovers();
+    test_saturation_backpressure();
     test_timeout_and_refused();
     test_malformed_overlong_body();
     test_drain_and_close_flush();
     srv_stop(&g_srv);
     printf("test_origin_http: ok (ranged data, stats, 404, timeout, "
-           "refused, overlong body, drain, close flush)\n");
+           "refused, overlong/truncated body, buffer reuse/growth, "
+           "partial response, saturation, drain, close flush)\n");
     return 0;
 }

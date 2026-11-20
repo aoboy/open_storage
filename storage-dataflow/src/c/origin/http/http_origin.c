@@ -13,9 +13,12 @@
  * Response mapping: 200/206 -> success (Content-Length body);
  * 404 -> -ENOENT; 416 -> -ERANGE; other non-2xx -> -EIO; socket
  * errors -> -ECONNREFUSED (hard_down latched until a connect
- * succeeds) / -ETIMEDOUT. Bodies are malloc'd per unit and freed
- * after the callback returns — documented: this is the reference
- * smoke leg, the hot-path gates run on loopback (risk S8).
+ * succeeds) / -ETIMEDOUT. Each origin keeps one grow-on-demand body
+ * buffer and reuses it across units; after the largest unit seen the
+ * fetch/completion path performs no allocation. The buffer is freed
+ * only at close, bounded by SDF_ORIGIN_UNIT_MAX per origin. This is
+ * the reference smoke leg; the hot-path gates run on loopback
+ * (risk S8).
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -42,6 +45,7 @@
 #define HTTP_HDR_MAX 8192u
 #define HTTP_DEFAULT_TIMEOUT_MS 2000u
 #define HTTP_HOST_MAX 128u
+#define HTTP_BODY_MIN 4096u
 
 typedef struct {
     sdf_fetch_req_t req;
@@ -82,7 +86,10 @@ typedef struct {
     struct http_impl *owner; /* quit flag + open timestamp */
 
     /* worker-thread-only */
-    int sock; /* -1 = not connected */
+    int sock;                 /* -1 = not connected */
+    uint8_t *rbuf;            /* reusable response-body storage */
+    _Atomic uint32_t rcap;    /* rbuf bytes reserved */
+    _Atomic uint32_t rallocs; /* buffer allocation events since open */
 } http_origin_t;
 
 struct http_impl {
@@ -222,9 +229,38 @@ static int64_t header_value(const char *hdr, const char *name) {
     return -1;
 }
 
-/* One attempt: returns 0 / negative errno. On success *out and *out_len
- * carry the malloc'd body (caller frees). On any socket error the
- * connection drops and the next unit reconnects. */
+/* Reserve the reusable response-body buffer for `need` bytes. The
+ * buffer only grows: a steady unit mix reuses the largest allocation
+ * already paid for, so no allocation occurs after warmup. Returns the
+ * buffer, or NULL when realloc fails (the previous buffer stays
+ * valid). */
+static uint8_t *resp_reserve(http_origin_t *og, uint32_t need) {
+    uint32_t cap = atomic_load_explicit(&og->rcap, memory_order_relaxed);
+    if (cap >= need) {
+        return og->rbuf;
+    }
+    uint32_t want = cap != 0 ? cap : HTTP_BODY_MIN;
+    while (want < need) {
+        if (want > SDF_ORIGIN_UNIT_MAX / 2u) {
+            want = need;
+            break;
+        }
+        want <<= 1;
+    }
+    uint8_t *nb = realloc(og->rbuf, want);
+    if (nb == NULL) {
+        return NULL;
+    }
+    og->rbuf = nb;
+    atomic_store_explicit(&og->rcap, want, memory_order_relaxed);
+    atomic_fetch_add_explicit(&og->rallocs, 1, memory_order_relaxed);
+    return nb;
+}
+
+/* One attempt: returns 0 / negative errno. On success *out points at
+ * the origin's reusable body buffer and *out_len carries the body
+ * length; both are valid until the completion callback returns. On
+ * any socket error the connection drops and the next unit reconnects. */
 static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint32_t *out_len) {
     *out = NULL;
     *out_len = 0;
@@ -316,7 +352,7 @@ static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint3
                 drop_sock(og);
                 return -EIO;
             }
-            uint8_t *body = malloc(j->req.len);
+            uint8_t *body = resp_reserve(og, j->req.len);
             if (body == NULL) {
                 drop_sock(og);
                 return -ENOMEM;
@@ -327,12 +363,10 @@ static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint3
             while (need > 0) {
                 ssize_t n2 = recv(og->sock, body + off, need, 0);
                 if (n2 < 0) {
-                    free(body);
                     drop_sock(og);
                     return -ETIMEDOUT;
                 }
                 if (n2 == 0) {
-                    free(body);
                     drop_sock(og);
                     return -EIO;
                 }
@@ -360,7 +394,6 @@ static void *worker_main(void *arg) {
             uint32_t len = 0;
             int status = do_fetch(og, &j, &out, &len);
             complete(og, &j, out, len, status);
-            free(out);
         }
         if (atomic_load_explicit(&og->owner->quit, memory_order_relaxed) &&
             spsc_count(og->queue) == 0) {
@@ -448,8 +481,11 @@ fail_threads:
     }
 fail:
     for (uint32_t i = 0; i < n; i++) {
-        if (d->origins != NULL && d->origins[i].qmem != NULL) {
-            free(d->origins[i].qmem);
+        if (d->origins != NULL) {
+            free(d->origins[i].rbuf);
+            if (d->origins[i].qmem != NULL) {
+                free(d->origins[i].qmem);
+            }
         }
     }
     free(d->origins);
@@ -537,6 +573,21 @@ static int http_set_enable(sdf_origin_t *o, uint32_t origin_id, int up) {
     return 0;
 }
 
+int sdf_http_transport_stats(const sdf_origin_t *o, uint32_t origin_id,
+                             sdf_http_transport_stats_t *out) {
+    if (o == NULL || o->impl == NULL || out == NULL) {
+        return -EINVAL;
+    }
+    const http_impl_t *d = o->impl;
+    if (origin_id >= d->n) {
+        return -EINVAL;
+    }
+    const http_origin_t *og = &d->origins[origin_id];
+    out->body_cap = atomic_load_explicit(&og->rcap, memory_order_acquire);
+    out->body_allocs = atomic_load_explicit(&og->rallocs, memory_order_acquire);
+    return 0;
+}
+
 static void http_close(sdf_origin_t *o) {
     if (o == NULL || o->impl == NULL) {
         return;
@@ -548,6 +599,7 @@ static void http_close(sdf_origin_t *o) {
             pthread_join(d->origins[i].worker, NULL);
         }
         drop_sock(&d->origins[i]);
+        free(d->origins[i].rbuf);
         free(d->origins[i].qmem);
     }
     free(d->origins);
