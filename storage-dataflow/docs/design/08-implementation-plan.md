@@ -1864,10 +1864,16 @@ now also includes chunked partial responses, truncated-body recovery, and
 queue saturation returning the documented `-EAGAIN` without blocking. The
 driver enables `TCP_NODELAY` on its persistent connection; without it the
 measured sequential p50 was dominated by a ~41 ms Nagle/delayed-ACK stall.
-`bench_origin` now records issue-to-completion p50/p99, goodput, connection
-reuse, post-warmup allocation, and saturation behavior against a deterministic
-in-process Range server, naming the driver, server, runner, build, flags, and
-sample counts. These are single-runner loopback measurements, not a production
+A keep-alive peer may also close an idle connection before sending any response
+byte; the driver now reopens and resends the idempotent Range GET once instead
+of surfacing a transient `-EIO`. Controlled tests add that stale-connection
+reconnect, a slow-but-in-timeout response with latency-estimator evidence, and
+a malformed 206 without `Content-Length`, alongside the exact-stat checks.
+`bench_origin` now records issue-to-completion p50/p99, goodput,
+connection reuse, post-warmup allocation, and saturation behavior against a
+deterministic in-process Range server, naming the driver, server, runner,
+build, flags, and sample counts. These are single-runner loopback
+measurements, not a production
 or hosted baseline, and no improvement is claimed. Still open: HTTPS with
 CA/hostname verification, TLS certificate-failure tests, repeated named-runner
 baselines before any nightly gate, and the optional `SDF_HAVE_CURL` A/B (the

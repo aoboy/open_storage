@@ -47,6 +47,9 @@
 static _Atomic int g_overlong_body;
 static _Atomic int g_chunked_body;
 static _Atomic int g_short_body;
+static _Atomic int g_drop_next_request;
+static _Atomic int g_slow_ms;
+static _Atomic int g_missing_length;
 
 /* ---- in-process HTTP/1.1 server ---------------------------------------- */
 
@@ -116,6 +119,19 @@ static void *conn_serve(void *argp) {
             goto conn_done;
         }
 
+        /* Stale keep-alive race: close before writing any response byte.
+         * A GET is idempotent, so the driver's one reconnect may retry. */
+        if (atomic_exchange_explicit(&g_drop_next_request, 0, memory_order_relaxed)) {
+            goto conn_done;
+        }
+
+        int slow_ms = atomic_load_explicit(&g_slow_ms, memory_order_relaxed);
+        if (slow_ms > 0) {
+            struct timespec delay = {.tv_sec = slow_ms / 1000,
+                                     .tv_nsec = (long)(slow_ms % 1000) * 1000000L};
+            nanosleep(&delay, NULL);
+        }
+
         const char *rng = ci_find(buf, "range: bytes=");
         unsigned long long a = 0, b = 0;
         if (rng != NULL) {
@@ -133,6 +149,17 @@ static void *conn_serve(void *argp) {
                 /* Malformed-response leg: more body bytes than the declared
                  * Content-Length, delivered with the header in one write. */
                 body_len += 4096;
+            }
+            if (atomic_load_explicit(&g_missing_length, memory_order_relaxed)) {
+                /* Malformed response: a 206 without Content-Length cannot
+                 * describe a bounded range unit, so the driver must reject it. */
+                snprintf(head, sizeof(head),
+                         "HTTP/1.1 206 Partial Content\r\n"
+                         "Content-Range: bytes %llu-%llu/%u\r\n"
+                         "Connection: keep-alive\r\n\r\n",
+                         a, b, (unsigned)OBJ_BYTES);
+                send_all_fd(c, (const uint8_t *)head, strlen(head));
+                continue;
             }
             snprintf(head, sizeof(head),
                      "HTTP/1.1 206 Partial Content\r\n"
@@ -593,6 +620,97 @@ static void test_truncated_body_recovers(void) {
     o.ops->close(&o);
 }
 
+static void test_dropped_idle_connection_recovers(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 0, .len = 128};
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 1);
+
+    /* The server drops the next keep-alive connection before any response
+     * byte. This is an idempotent GET, so the unit must reconnect and
+     * succeed rather than surface a transient -EIO. */
+    atomic_store_explicit(&g_drop_next_request, 1, memory_order_relaxed);
+    req.obj_offset = 1024;
+    req.len = 256;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 2);
+    CHECK(atomic_load(&g_t.bad_response) == 0);
+
+    sdf_http_transport_stats_t ts;
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.connects == 2); /* the dropped connection was replaced once */
+
+    req.obj_offset = 4096;
+    req.len = 512;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 3);
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.connects == 2); /* the replacement connection is reused */
+
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.reqs_out == 3 && st.reqs_done == 3 && st.reqs_failed == 0);
+    CHECK(st.bytes_tx == 128 + 256 + 512);
+    CHECK(st.bytes_rx == 128 + 256 + 512);
+    o.ops->close(&o);
+}
+
+static void test_slow_server_and_missing_length(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    /* Slow but within the socket timeout: the unit succeeds and the
+     * latency estimator reflects the server delay. */
+    atomic_store_explicit(&g_slow_ms, 60, memory_order_relaxed);
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 0, .len = 256};
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 1);
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.reqs_done == 1 && st.reqs_failed == 0);
+    CHECK(st.bytes_rx == req.len);
+    CHECK(st.ewma_lat_ns > 1000000.0); /* one 60 ms sample pulls the EWMA up */
+    atomic_store_explicit(&g_slow_ms, 0, memory_order_relaxed);
+
+    /* Malformed response: a 206 with no Content-Length is rejected. */
+    atomic_store_explicit(&g_missing_length, 1, memory_order_relaxed);
+    req.obj_offset = 1024;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.bad_response) == 1);
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.reqs_failed == 1 && st.bytes_rx == 256);
+    atomic_store_explicit(&g_missing_length, 0, memory_order_relaxed);
+
+    /* The malformed response dropped the connection; recovery reconnects. */
+    req.obj_offset = 2048;
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.ok) == 2);
+    sdf_http_transport_stats_t ts;
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.connects == 2);
+    o.ops->close(&o);
+}
+
 static void test_saturation_backpressure(void) {
     test_srv_t bh;
     srv_start(&bh, blackhole_main);
@@ -754,13 +872,16 @@ int main(void) {
     test_buffer_reuse_and_growth();
     test_partial_body();
     test_truncated_body_recovers();
+    test_dropped_idle_connection_recovers();
+    test_slow_server_and_missing_length();
     test_saturation_backpressure();
     test_timeout_and_refused();
     test_malformed_overlong_body();
     test_drain_and_close_flush();
     srv_stop(&g_srv);
-    printf("test_origin_http: ok (ranged data, stats, 404, timeout, "
-           "refused, overlong/truncated body, buffer reuse/growth, "
-           "partial response, saturation, drain, close flush)\n");
+    printf("test_origin_http: ok (ranged data, stats, 404, timeout, refused, "
+           "stale-connection reconnect, slow server, malformed/missing-length/"
+           "overlong/truncated body, buffer reuse/growth, partial response, "
+           "saturation, drain, close flush)\n");
     return 0;
 }

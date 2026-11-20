@@ -272,12 +272,6 @@ static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint3
     *out = NULL;
     *out_len = 0;
 
-    int rc = ensure_sock(og);
-    if (rc != 0) {
-        atomic_store_explicit(&og->hard_down, 1, memory_order_relaxed);
-        return rc;
-    }
-
     char req[HTTP_HDR_MAX];
     int rlen = snprintf(req, sizeof(req),
                         "GET %s HTTP/1.1\r\n"
@@ -291,98 +285,109 @@ static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint3
         return -EINVAL;
     }
 
-    if (send(og->sock, req, (size_t)rlen, 0) != (ssize_t)rlen) {
-        drop_sock(og);
-        rc = ensure_sock(og); /* one reconnect attempt per unit */
+    /* One transparent reconnect per unit. A keep-alive peer may close the
+     * idle connection at any time; before any response byte arrives the GET
+     * is idempotent, so a stale socket is retried rather than failed. */
+    int retried = 0;
+    for (;;) {
+        int rc = ensure_sock(og);
         if (rc != 0) {
             atomic_store_explicit(&og->hard_down, 1, memory_order_relaxed);
             return rc;
         }
         if (send(og->sock, req, (size_t)rlen, 0) != (ssize_t)rlen) {
             drop_sock(og);
-            return -EIO;
-        }
-    }
-
-    /* read the header block */
-    char hdr[HTTP_HDR_MAX];
-    size_t got = 0;
-    for (;;) {
-        if (got >= sizeof(hdr) - 1) {
-            drop_sock(og);
-            return -EIO;
-        }
-        ssize_t n = recv(og->sock, hdr + got, sizeof(hdr) - 1 - got, 0);
-        if (n < 0) {
-            drop_sock(og);
-            return -ETIMEDOUT;
-        }
-        if (n == 0) {
-            drop_sock(og);
-            return -EIO;
-        }
-        got += (size_t)n;
-        hdr[got] = '\0';
-        char *sep = strstr(hdr, "\r\n\r\n");
-        if (sep != NULL) {
-            size_t hdr_len = (size_t)(sep - hdr) + 4;
-            /* keep any body bytes that arrived with the header */
-            size_t body_pre = got - hdr_len;
-            int code = 0;
-            if (sscanf(hdr, "HTTP/1.%*d %d", &code) != 1) {
-                code = 0;
-            }
-
-            if (code != 200 && code != 206) {
-                drop_sock(og); /* error pages may close; reconnect is cheap */
-                if (code == 404) {
-                    return -ENOENT;
-                }
-                if (code == 416) {
-                    return -ERANGE;
-                }
+            if (retried) {
                 return -EIO;
             }
+            retried = 1;
+            continue;
+        }
 
-            int64_t clen = header_value(hdr, "Content-Length");
-            if (clen < 0 || (uint64_t)clen != j->req.len) {
-                /* server disagrees about the body: unacceptable for a
-                 * range unit (the loopback driver is byte-exact; the
-                 * reference driver must be too) */
+        /* read the header block */
+        char hdr[HTTP_HDR_MAX];
+        size_t got = 0;
+        for (;;) {
+            if (got >= sizeof(hdr) - 1) {
                 drop_sock(og);
                 return -EIO;
             }
-            if (body_pre > j->req.len) {
-                /* More bytes than Content-Length arrived in the first read:
-                 * the connection is desynchronized and the body must not
-                 * overflow the bounded request-sized allocation. */
+            ssize_t n = recv(og->sock, hdr + got, sizeof(hdr) - 1 - got, 0);
+            if (n < 0) {
                 drop_sock(og);
+                return -ETIMEDOUT;
+            }
+            if (n == 0) {
+                drop_sock(og);
+                if (got == 0 && !retried) {
+                    retried = 1;
+                    break; /* stale keep-alive: reopen and resend once */
+                }
                 return -EIO;
             }
-            uint8_t *body = resp_reserve(og, j->req.len);
-            if (body == NULL) {
-                drop_sock(og);
-                return -ENOMEM;
-            }
-            memcpy(body, sep + 4, body_pre);
-            size_t need = j->req.len - body_pre;
-            size_t off = body_pre;
-            while (need > 0) {
-                ssize_t n2 = recv(og->sock, body + off, need, 0);
-                if (n2 < 0) {
-                    drop_sock(og);
-                    return -ETIMEDOUT;
+            got += (size_t)n;
+            hdr[got] = '\0';
+            char *sep = strstr(hdr, "\r\n\r\n");
+            if (sep != NULL) {
+                size_t hdr_len = (size_t)(sep - hdr) + 4;
+                /* keep any body bytes that arrived with the header */
+                size_t body_pre = got - hdr_len;
+                int code = 0;
+                if (sscanf(hdr, "HTTP/1.%*d %d", &code) != 1) {
+                    code = 0;
                 }
-                if (n2 == 0) {
+
+                if (code != 200 && code != 206) {
+                    drop_sock(og); /* error pages may close; reconnect is cheap */
+                    if (code == 404) {
+                        return -ENOENT;
+                    }
+                    if (code == 416) {
+                        return -ERANGE;
+                    }
+                    return -EIO;
+                }
+
+                int64_t clen = header_value(hdr, "Content-Length");
+                if (clen < 0 || (uint64_t)clen != j->req.len) {
+                    /* server disagrees about the body: unacceptable for a
+                     * range unit (the loopback driver is byte-exact; the
+                     * reference driver must be too) */
                     drop_sock(og);
                     return -EIO;
                 }
-                off += (size_t)n2;
-                need -= (size_t)n2;
+                if (body_pre > j->req.len) {
+                    /* More bytes than Content-Length arrived in the first read:
+                     * the connection is desynchronized and the body must not
+                     * overflow the bounded request-sized allocation. */
+                    drop_sock(og);
+                    return -EIO;
+                }
+                uint8_t *body = resp_reserve(og, j->req.len);
+                if (body == NULL) {
+                    drop_sock(og);
+                    return -ENOMEM;
+                }
+                memcpy(body, sep + 4, body_pre);
+                size_t need = j->req.len - body_pre;
+                size_t off = body_pre;
+                while (need > 0) {
+                    ssize_t n2 = recv(og->sock, body + off, need, 0);
+                    if (n2 < 0) {
+                        drop_sock(og);
+                        return -ETIMEDOUT;
+                    }
+                    if (n2 == 0) {
+                        drop_sock(og);
+                        return -EIO;
+                    }
+                    off += (size_t)n2;
+                    need -= (size_t)n2;
+                }
+                *out = body;
+                *out_len = j->req.len;
+                return 0;
             }
-            *out = body;
-            *out_len = j->req.len;
-            return 0;
         }
     }
 }
