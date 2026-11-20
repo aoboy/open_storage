@@ -24,7 +24,7 @@ design and plan.
 ./scripts/lint.sh         # clang-format, clang-tidy, ruff, mypy (if installed)
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
 ./scripts/build_wheel.sh  # installable Python/CFFI wheel (see packaging/wheel)
-make ci                   # lint, C tests/sanitizers, install/deb/wheel, Rust C/Rust A/B gates
+make ci                   # lint, C tests/sanitizers, install/deb/wheel, e2e, Rust gates
 make e2e                  # cache-fill, repair, apply, and live SHM e2e harnesses
 ```
 

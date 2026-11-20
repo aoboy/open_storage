@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Fetch recent wm-control-bench artifacts for the nightly regression gate.
 
-The nightly job uploads out/bench/ as the `wm-control-bench` artifact.
-This script queries the GitHub Actions artifacts API for the last N days,
-downloads each zip, and writes its wm_control_microbench.json into
---out. The current run is excluded by --exclude-run so a night's result is
-never compared against itself.
+The nightly job uploads named artifacts such as `wm-control-bench` and
+`fountain-paired`. This script queries the GitHub Actions artifacts API for
+the last N days, downloads each zip, extracts the requested file, and writes
+it into --out. The current run is excluded by --exclude-run so a night's
+result is never compared against itself.
 
 Usage:
     GITHUB_TOKEN=... fetch_bench_history.py --repo OWNER/REPO \
@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 API = "https://api.github.com"
-BENCH_FILE = "wm_control_microbench.json"
+DEFAULT_FILE = "wm_control_microbench.json"
 PER_PAGE = 100
 
 
@@ -53,11 +53,11 @@ def select_artifacts(
     return selected
 
 
-def extract_bench(blob: bytes) -> bytes:
+def extract_bench(blob: bytes, filename: str = DEFAULT_FILE) -> bytes:
     with zipfile.ZipFile(io.BytesIO(blob)) as zf:
-        names = [n for n in zf.namelist() if n.endswith(BENCH_FILE)]
+        names = [n for n in zf.namelist() if n.endswith(filename)]
         if not names:
-            raise ValueError(f"artifact contains no {BENCH_FILE}")
+            raise ValueError(f"artifact contains no {filename}")
         return zf.read(names[0])
 
 
@@ -146,10 +146,15 @@ def selftest() -> int:
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr(f"out/bench/{BENCH_FILE}", '{"step_ns": {"p99": 123}}')
+        zf.writestr(f"out/bench/{DEFAULT_FILE}", '{"step_ns": {"p99": 123}}')
+        zf.writestr("out/bench/fountain_paired.txt", "BENCH fountain variant=c\n")
     doc = json.loads(extract_bench(buf.getvalue()))
     if doc["step_ns"]["p99"] != 123:
         print("selftest FAIL: zip extraction", file=sys.stderr)
+        return 1
+    text = extract_bench(buf.getvalue(), "fountain_paired.txt").decode()
+    if not text.startswith("BENCH fountain"):
+        print("selftest FAIL: named extraction", file=sys.stderr)
         return 1
 
     print("fetch_bench_history: selftest ok (window/expiry/exclusion/extraction)")
@@ -162,6 +167,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--days", type=int, default=7)
     ap.add_argument("--out", type=Path, default=Path("bench-history"))
     ap.add_argument("--name", default="wm-control-bench")
+    ap.add_argument("--file", default=DEFAULT_FILE, help="file to extract from each artifact")
     ap.add_argument("--exclude-run", default=None)
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv[1:])
@@ -189,11 +195,12 @@ def main(argv: list[str]) -> int:
     for art in selected:
         run_id = art.get("workflow_run", {}).get("id", "run")
         try:
-            payload = extract_bench(download(art["archive_download_url"], token))
+            payload = extract_bench(download(art["archive_download_url"], token), args.file)
         except (urllib.error.URLError, ValueError, zipfile.BadZipFile) as exc:
             print(f"fetch_bench_history: artifact {art.get('id')}: {exc}", file=sys.stderr)
             return 1
-        path = args.out / f"{run_id}-{art['id']}.json"
+        suffix = Path(args.file).suffix
+        path = args.out / f"{run_id}-{art['id']}{suffix}"
         path.write_bytes(payload)
         written += 1
 

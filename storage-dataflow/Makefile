@@ -49,8 +49,8 @@ tsan:
 # Local CI gate (plan W0.5, mirroring the wack_a_mole `make ci` shape):
 # format/tidy where installed (lint.sh skips cleanly), build + full
 # suite, then both sanitizer legs.
-ci: lint test asan tsan install deb wheel-test rust-seam rust-fountain
-	@echo "ci gate green: lint(+skips) test asan tsan install deb wheel-test rust-seam rust-fountain(+skips)"
+ci: lint test asan tsan install deb wheel-test e2e rust-seam rust-fountain
+	@echo "ci gate green: lint(+skips) test asan tsan install deb wheel-test e2e rust-seam rust-fountain(+skips)"
 
 # Plan W5.3 — the Rust seam leg (advisory without cargo; see the script).
 rust-seam:
