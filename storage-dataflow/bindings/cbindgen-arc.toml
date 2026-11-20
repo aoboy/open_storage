@@ -1,0 +1,25 @@
+language = "C"
+include_guard = "SDF_GENERATED_H"
+
+# Emit the C header's shapes, not cbindgen's defaults: anonymous-style
+# typedefs (style = "type") and size_t (not uintptr_t).
+style = "type"
+usize_is_size_t = true
+
+[export]
+# Only the public ARC ABI types (W6.18). Internal Rust types (ArcParams,
+# Schedule, Scheduler, ...) stay out of the declaration surface.
+include = [
+  "arc_mode_t",
+  "arc_cfg_t",
+  "arc_apply_fn",
+  "arc_stats_t",
+  "arc_pacer",
+  "arc_pacer_t",
+  "arc_shadow_record_t",
+  "arc_shadow_stats_t",
+]
+
+# stdio's opaque handle: the C header includes <stdio.h> instead of
+# declaring it, so excluding FILE keeps the typedef surface identical.
+exclude = ["FILE"]

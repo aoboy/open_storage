@@ -3,6 +3,12 @@ name = "sdf-arc"
 version = "1.0.0"
 edition = "2021"
 publish = false
+build = "build.rs"
 
 [lib]
-crate-type = ["rlib"]
+# rlib for cargo test; staticlib for a future opt-in CMake swap (W6.18).
+crate-type = ["rlib", "staticlib"]
+
+[build-dependencies]
+# pinned per the plan's vendoring discipline
+cbindgen = "=0.27.0"

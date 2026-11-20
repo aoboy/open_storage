@@ -4,8 +4,10 @@
 is functional behind `SDF_USE_RUST_FOUNTAIN=ON`; the C arm remains the default
 and nanorq remains C. `src/rust/sdf-arc` now has the offset-estimator,
 stable release-queue ordering, QG guard/deadline drain, release statistics, and
-slab/callback storage and sidecar-mode slices with parity tests; FFI/public-ABI
-integration and consumer parity are still pending.
+slab/callback storage and sidecar-mode slices with parity tests, and the
+staticlib/public-ABI declaration seam against `include/sdf/arc.h` (20
+functions identical); the opt-in definition swap and consumer parity remain
+pending.
 **Related:** [Overview §9, §12](00-overview.md#9-language-strategy-c-python-rust),
 [ADR-0003](../adr/0003-rust-migration-order.md).
 

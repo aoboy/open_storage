@@ -31,6 +31,7 @@ class Surface:
     typedefs: set[str] = field(default_factory=set)
     structs: dict[str, list[str]] = field(default_factory=dict)
     enums: dict[str, list[str]] = field(default_factory=dict)
+    fnptrs: dict[str, str] = field(default_factory=dict)
 
     def canonical(self) -> list[str]:
         lines: list[str] = []
@@ -42,6 +43,8 @@ class Surface:
             lines.append(f"struct {name} {{ {'; '.join(self.structs[name])} }}")
         for name in sorted(self.enums):
             lines.append(f"enum {name} {{ {'; '.join(self.enums[name])} }}")
+        for name in sorted(self.fnptrs):
+            lines.append(f"fnptr {name}: {self.fnptrs[name]}")
         return lines
 
 
@@ -117,7 +120,9 @@ def param_type(param: str) -> str:
     p = norm_type(param)
     if p in ("void", ""):
         return "void"
-    # remove a trailing parameter identifier (types keep their pointers)
+    # remove a trailing parameter identifier; pointer declarators glue the
+    # name to the star ("void *ctx"), value types keep a space ("size_t len")
+    p = re.sub(r"\*\s*[A-Za-z_]\w*$", "*", p)
     p = re.sub(r"\s+[A-Za-z_]\w*$", "", p)
     return p.strip()
 
@@ -128,11 +133,22 @@ def parse_fields(body: str) -> list[str]:
         raw = norm_type(raw)
         if not raw:
             continue
-        m = re.match(r"^(.*?)\s*([A-Za-z_]\w*)$", raw)
-        if m:
-            fields.append(f"{m.group(1)} {m.group(2)}")
-        else:
-            fields.append(raw)
+        # "double p50, p95, p99;" shares one base type across declarators
+        base = ""
+        for part in split_top_level(raw):
+            part = part.strip()
+            if not part:
+                continue
+            m = re.match(r"^(.*?)\s*([A-Za-z_]\w*)$", part)
+            if not m:
+                fields.append(part)
+                continue
+            if m.group(1).strip():
+                base = m.group(1).strip()
+            if base:
+                fields.append(f"{base} {m.group(2)}")
+            else:
+                fields.append(part)
     return fields
 
 
@@ -180,6 +196,20 @@ def parse(text: str) -> Surface:
             surface.enums[name] = consts
             continue
 
+        # function-pointer typedef: typedef int (*cb)(void *, size_t);
+        m = re.match(
+            r"^typedef\s+(.+?)\s*\(\s*\*\s*([A-Za-z_]\w*)\s*\)\s*\((.*)\)$",
+            d,
+            flags=re.DOTALL,
+        )
+        if m:
+            ret = norm_type(m.group(1))
+            name = m.group(2)
+            args = ", ".join(param_type(p) for p in split_top_level(m.group(3)))
+            surface.typedefs.add(name)
+            surface.fnptrs[name] = f"{ret} ({args})"
+            continue
+
         d = re.sub(r"^extern\s+", "", d)
         m = re.match(r"^(.+?)\s+([A-Za-z_]\w*)\s*\((.*)\)$", d, flags=re.DOTALL)
         if m:
@@ -200,13 +230,18 @@ def parse(text: str) -> Surface:
     return surface
 
 
-def diff_surfaces(a: Surface, b: Surface) -> list[str]:
+def diff_surfaces(
+    a: Surface,
+    b: Surface,
+    fromfile: str = "include/sdf/fountain.h",
+    tofile: str = "cbindgen-generated header",
+) -> list[str]:
     return list(
         difflib.unified_diff(
             a.canonical(),
             b.canonical(),
-            fromfile="include/sdf/fountain.h",
-            tofile="cbindgen-generated header",
+            fromfile=fromfile,
+            tofile=tofile,
             lineterm="",
         )
     )
@@ -280,7 +315,7 @@ def main(argv: list[str]) -> int:
         return 2
     a = parse(Path(argv[1]).read_text(encoding="utf-8"))
     b = parse(Path(argv[2]).read_text(encoding="utf-8"))
-    diff = diff_surfaces(a, b)
+    diff = diff_surfaces(a, b, argv[1], argv[2])
     if diff:
         print("\n".join(diff), file=sys.stderr)
         print(
@@ -292,7 +327,8 @@ def main(argv: list[str]) -> int:
     print(
         "check_rust_seam: OK "
         f"({len(a.functions)} functions, {len(a.typedefs)} typedefs, "
-        f"{len(a.structs)} structs, {len(a.enums)} enums identical)"
+        f"{len(a.structs)} structs, {len(a.enums)} enums, "
+        f"{len(a.fnptrs)} function pointers identical)"
     )
     return 0
 

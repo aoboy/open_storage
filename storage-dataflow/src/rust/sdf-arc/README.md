@@ -6,19 +6,23 @@ Algorithm-2 E hysteresis, the stable `(T_n, seq)` release-queue ordering, and
 the QG guard/deadline drain (predecessor re-queue, park timeout, successor
 wake), and release statistics (heap depth, added-delay percentiles, interval
 error), slab storage with an apply callback and slot reuse, and the
-shadow/live/killed sidecar apply semantics. It is **not** wired into the public
-ABI; the C pacer remains the default and owns the remaining FFI/production
-integration.
+shadow/live/killed sidecar apply semantics. `ffi.rs` declares the complete
+public ARC ABI v2 surface; cbindgen regenerates the Rust view and the gate
+diffs it against `include/sdf/arc.h`. The crate builds a staticlib for a
+future opt-in CMake swap, but the exported symbols are still C-owned: the C
+pacer remains the default.
 
 ```sh
 make rust-arc
 ```
 
-The crate has no dependencies and no `unsafe` code yet. Its tests reproduce
-the alternating d_high/d_low fixed point from the C golden trajectory
-(~94.793 ms / ~93.802 ms). Remaining W6.18 slices:
+The crate's only build dependency is pinned `cbindgen`; declarations are
+`extern "C"` with no Rust-side `unsafe` implementation yet. Its tests
+reproduce the alternating d_high/d_low fixed point from the C golden
+trajectory (~94.793 ms / ~93.802 ms). The seam gate reports 20 functions,
+7 typedefs, 4 structs, 1 enum, and the apply-callback signature identical.
+Remaining W6.18 slices:
 
-- FFI/public-ABI staticlib integration and consumer parity
-- `SDF_USE_RUST_ARC=ON|OFF` staticlib integration and symbol parity
-- sidecar parity and installed consumer matrix
-- panic containment at the future FFI boundary
+- `SDF_USE_RUST_ARC=ON|OFF` definition swap and symbol parity
+- sidecar production parity and installed consumer matrix
+- panic containment at the Rust implementation boundary

@@ -7,12 +7,13 @@
 
 #![forbid(unsafe_code)]
 
+pub mod ffi;
 pub mod heap;
 pub mod pacer;
 pub mod scheduler;
 pub mod sidecar;
 
-pub const ARC_SANE_NS: u64 = 10_000_000_000;
+pub(crate) const ARC_SANE_NS: u64 = 10_000_000_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ArcMode {
