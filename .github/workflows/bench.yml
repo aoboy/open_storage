@@ -60,6 +60,27 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Fetch paired fountain history
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/fetch_bench_history.py \
+            --repo "$GITHUB_REPOSITORY" --days 7 \
+            --out fountain-history --name fountain-paired \
+            --file fountain_paired.txt --exclude-run "$GITHUB_RUN_ID"
+
+      - name: Validate paired fountain history
+        run: |
+          shopt -s nullglob
+          files=(fountain-history/*.txt)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "fountain history: no prior paired artifact yet"
+          else
+            for file in "${files[@]}"; do
+              python3 scripts/bench_fountain_compare.py "$file"
+            done
+          fi
+
       - name: Fetch the 7-day history
         env:
           GITHUB_TOKEN: ${{ github.token }}

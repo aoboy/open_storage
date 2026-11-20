@@ -1798,8 +1798,9 @@ queue depths. These are local observations, not a baseline or a cross-machine
 claim. Paired same-runner C/Rust LT measurements now exist locally
 (`out/bench/fountain_paired.txt`); CI has a dedicated `fountain-bench` job,
 and the nightly bench workflow records and uploads a `fountain-paired`
-artifact. Still open: a stable named reference runner, seven retained nightly
-samples, and the later C/Rust ARC comparison hooks. No hosted or cross-machine
+artifact, fetches the prior seven days, and validates each historical file as
+a complete C/Rust pair. Still open: a stable named reference runner, seven
+retained nightly samples, and the later C/Rust ARC comparison hooks. No hosted or cross-machine
 performance evidence is claimed yet.
 
 **Objective:** implement the missing performance evidence before using ARC's
