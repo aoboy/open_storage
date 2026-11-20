@@ -3,8 +3,8 @@
 #
 # Builds the wheel against a staged installed prefix, inspects its
 # contents and dynamic linking, then installs it into a fresh venv
-# outside the checkout and exercises ARC plus both fountain codecs with
-# PYTHONPATH and SDF_CFFI_DIR unset.
+# outside the checkout and exercises ARC plus both fountain codecs and
+# the golden-vector consumer with PYTHONPATH and SDF_CFFI_DIR unset.
 #
 # The runner may be offline, so the venv inherits the base interpreter's
 # dependency set (--system-site-packages) and the wheel is installed
@@ -210,6 +210,14 @@ roundtrip(lib.SDF_FOUNTAIN_NANORQ)
 print("isolated wheel: OK (ARC sidecar + LT/nanorq fountain roundtrips)")
 PY
 
+# 3b. The same golden consumer used by the installed-prefix leg, run from
+# outside the checkout so only the wheel's bundled extension can satisfy
+# the import. Copy the script first: executing it from bindings/cffi would
+# put that source directory on sys.path.
+cp "$ROOT/bindings/cffi/check_goldens.py" "$WORK/check_goldens.py"
+env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/python" \
+    "$WORK/check_goldens.py" --golden-dir "$ROOT/golden_vectors"
+
 # 4. Development overrides remain explicit: with the source tree and
 # build/cffi supplied, the same interpreter binds the build extension.
 OVERRIDE_SO="$(
@@ -222,4 +230,4 @@ if [[ "$OVERRIDE_SO" != "$ROOT/build/cffi/"* ]]; then
     exit 1
 fi
 
-echo "test_wheel: OK (variant=$VARIANT; $BASENAME; isolated venv ARC + LT/nanorq)"
+echo "test_wheel: OK (variant=$VARIANT; $BASENAME; isolated venv ARC + LT/nanorq + goldens)"
