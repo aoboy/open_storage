@@ -14,7 +14,7 @@ ADRs [0001–0009](../adr/).
 
 ---
 
-## IMPLEMENTATION STATUS (informative — judgement; as of the W6.11 local-conformance change set; earlier rows cite their landing commits)
+## IMPLEMENTATION STATUS (informative — judgement; as of the first green hosted run at 0d6e60a; earlier rows cite their landing commits)
 
   W0.1 repo + discipline     : done — delivered with this plan (git init,
                                 ignore rules, CONTRIBUTING.md, this backlog)
@@ -260,8 +260,8 @@ ADRs [0001–0009](../adr/).
   to the last seam.
 
   KNOWN GAPS (owned — recorded at the M5 truth-pass; Wave 6 closes
-  all five; one external evidence line remains — the first hosted run,
-  which needs a remote this environment does not have):
+  all five. The first hosted run is now green; only retained nightly
+  history remains external evidence):
   1. live scrape endpoint  — CLOSED by W6.1 (8942d34..b029aec): the
                              K.1b endpoint behind
                              SDF_METRICS_ENDPOINT serves the proxy
@@ -279,19 +279,17 @@ ADRs [0001–0009](../adr/).
                              driver) closed it live — 16 published
                              versions, v16 acquired, 28 slots,
                              7 heartbeat ticks, scrape green.
-  4. hosted CI             — CLOSED for implementation by W6.5
-                             (07a7a18, e5141e2, cbc5bd9): the
-                             placeholder is a 9-job matrix (style/
-                             tidy, gcc+clang, sanitizers, e2e,
-                             bench gate, install, isolated wheel,
-                             authoritative rust seam, full fuzz)
-                             plus the nightly
-                             p99 gate; actionlint 1.7.12 clean and
-                             every leg locally mirrored green. The
-                             one remaining evidence item is the
-                             FIRST HOSTED RUN itself: this repo has
-                             no remote, so no runner can be
-                             dispatched from here. Not a code gap.
+  4. hosted CI             — CLOSED by W6.5 (07a7a18, e5141e2,
+                             cbc5bd9): the 9-job matrix (style/tidy,
+                             gcc+clang, sanitizers, e2e, bench gate,
+                             install, isolated wheel, authoritative
+                             rust seam, full fuzz) is hosted and
+                             green: run 44774290565 at 0d6e60a,
+                             10/10 jobs succeeded on 2026-11-20
+                             (https://github.com/aoboy/open_storage/
+                             actions/runs/44774290565). The nightly
+                             history line is still open because
+                             bench.yml has no retained baseline yet.
   5. Rust seam             — CLOSED by W6.5 (9599843): cargo 1.100
                              ran the declaration diff for the first
                              time and found a real divergence (8 of
@@ -302,10 +300,12 @@ ADRs [0001–0009](../adr/).
                              parsed surface with a selftest; CI runs
                              --require (missing cargo is a failure).
 
-  W6.5 hosted CI matrix      : done — implementation-complete; the
-                                FIRST HOSTED RUN is the one external
-                                evidence line (no remote in this
-                                environment). ci.yml: 9 jobs — style
+  W6.5 hosted CI matrix      : done — first hosted run is green:
+                                workflow run 44774290565 at 0d6e60a,
+                                10/10 jobs succeeded on 2026-11-20
+                                (https://github.com/aoboy/open_storage/
+                                actions/runs/44774290565). ci.yml: 9
+                                jobs — style
                                 (clang-format 23.1.5 + clang-tidy
                                 23.1.4, both pinned; format check +
                                 analyzer gate), build-and-test on
@@ -483,29 +483,29 @@ ADRs [0001–0009](../adr/).
                                 fmt/clippy clean, cargo tests 4/4;
                                 cbindgen declarations 15 functions /
                                 5 typedefs / 2 structs / 1 enum
-                                identical; C and Rust ctest 23/23 each;
+                                identical; C and Rust ctest 27/27 each;
                                 complete parity reports byte-identical —
-                                556 comparisons, ZERO pending, of which
-                                76 are fountain (17 roundtrip + 17
-                                lossy-repair + 21 nanorq + 21 LT). The
-                                prompt-era 356-fountain figure is
-                                superseded, not current harness evidence.
+                                1,410 comparisons, ZERO pending, of which
+                                930 are fountain (including the expanded
+                                LT and nanorq geometries). The W6.8-era
+                                556 figure is superseded, not current
+                                harness evidence.
                                 The merged archive has exactly 15 public
                                 plus 13 internal symbols once each and
                                 no C LT objects; Rust-source rebuild/
                                 remerge/relink is green. Rust-backed
-                                ASan+UBSan is 23/23 (C callers and the
+                                ASan+UBSan is 27/27 (C callers and the
                                 allocator boundary instrumented, not a
                                 claim of Rust-internal ASan). Installed
                                 pkg-config, find_package, CFFI and dpkg
                                 consumers execute BOTH LT and nanorq in
                                 both variants. Full make ci is green:
-                                C default/ASan+UBSan/TSan 23/23 each,
-                                Python 19/19, plus the dual-variant
+                                C default/ASan+UBSan/TSan 27/27 each,
+                                Python 87/87, plus the dual-variant
                                 gates above. The comparison window stays
                                 open: no C removal, default cutover or
-                                performance claim; the first hosted run
-                                still requires a remote/runner.
+                                performance claim. The hosted rust-seam
+                                leg at 0d6e60a ran the current tree green.
   W6.9 ARC entry retention   : done — arc_submit() now reserves the slab
                                 slot before the arrival path mutates the
                                 estimator, sequence, or auto windows, so
@@ -583,11 +583,11 @@ ADRs [0001–0009](../adr/).
                                 dependent Rust legs were skipped in
                                 this environment. No hosted, performance,
                                 or 24 h soak claim is made (3e25194).
-  W6.11 expanded conformance : partially done — local conformance has
-                                landed; the authoritative hosted matrix
-                                and nightly history remain externally
-                                gated (no remote/runner is configured,
-                                so no hosted run ID exists). Landed:
+  W6.11 expanded conformance : partially done — local conformance and
+                                the authoritative hosted matrix have
+                                landed; run 44774290565 at 0d6e60a is
+                                green (10/10 jobs). Nightly history is
+                                still absent. Landed:
                                 WM rejection immutability and real
                                 residual-fairness hit/conservation
                                 assertions; a deterministic ARC replay
@@ -629,22 +629,21 @@ ADRs [0001–0009](../adr/).
                                 `make ci` is green: lint + ruff + mypy,
                                 27/27 C in default/ASan+UBSan/TSan,
                                 87/87 Python, install, Deb, and wheel
-                                legs. rust-seam and rust-fountain skip
-                                because cargo is absent. Hosted run IDs,
-                                nightly history, TLS/certificate legs,
-                                cargo-dependent Rust measurements, and
-                                every unexecuted external leg are not
-                                claimed
+                                legs. Hosted run 44774290565 is green,
+                                including rust-seam and the isolated
+                                wheel artifact. Nightly history,
+                                TLS/certificate legs, paired performance
+                                measurements, and other unexecuted
+                                external legs are not claimed
                                 (b05b0e0, 40e496f, bf9e88c, 5b0a87a,
                                 51b0c78, 502fadc, ce17588).
   W6.13 LT window decision   : decided — C remains the default LT arm; Rust LT
                                 stays opt-in and no C is removed. ADR-0010
                                 records the incomplete evidence honestly:
-                                W6.8-era C/Rust parity predates the current
-                                27-test, 1,410-comparison tree, and neither a
-                                hosted matrix nor paired same-runner Rust
-                                measurements exist because the runner and
-                                cargo are unavailable. Revisit criteria require
+                                the current 27-test, 1,410-comparison tree
+                                and hosted matrix are green, but no paired
+                                same-runner performance measurements or
+                                seven nightly samples exist. Revisit criteria require
                                 both variants passing the current suites and
                                 parity, a green hosted matrix, seven paired
                                 nightly samples within the >5% noise rule,
@@ -1530,8 +1529,8 @@ W6.8.
 
 **Status:** done — see the ledger and
 [docs/releases/v1.0.0.md](../releases/v1.0.0.md) (ef737b9). The tag is
-`v1.0.0`; the first hosted run remains an external evidence item, not a
-claimed acceptance.
+`v1.0.0`; the later hosted run 44774290565 at 0d6e60a is green, while
+retained nightly history remains an external evidence item.
 
 **Objective:** the wam release pattern: the honest changelog is
 already written — it is the ledger.
@@ -1568,9 +1567,10 @@ stand-in decision).
 ### PROMPT W6.8 — Functional Rust: `sdf-fountain` behind the goldens
 
 **Status:** done — implementation, build/gates and design documentation
-landed as 77e0292, 568c30c and 180f025. Local acceptance is green; the
-comparison window remains open with C as the default. The first hosted run
-still requires a remote/runner and is not claimed here.
+landed as 77e0292, 568c30c and 180f025. Local and hosted acceptance are
+green; the comparison window remains open with C as the default because
+paired performance and nightly history are still missing. Hosted rust-seam
+run 44774290565 at 0d6e60a passed the current 27-test/1,410-comparison tree.
 
 **Objective:** begin ADR-0003's migration for real — the internal LT arm
 in Rust, exporting the same `lt_*`/`lt_prng_next` `extern "C"` symbols
@@ -1701,9 +1701,10 @@ non-vacuity gate; both landed in this prompt.
 
 ### PROMPT W6.11 — Authoritative hosted and expanded conformance evidence
 
-**Status:** partially implemented locally; the authoritative hosted matrix and
-nightly history remain externally gated on a remote/runner. The local
-conformance slices, counts, and honest skips are recorded in the ledger above.
+**Status:** partially implemented — the authoritative hosted matrix is green
+at `0d6e60a` (run 44774290565, 10/10 matrix jobs); retained nightly history is
+still pending. The local conformance slices, counts, and honest skips are
+recorded in the ledger above.
 
 **Objective:** close M6's remaining hosted-evidence line and turn the current
 smoke/fixed-shape checks into a durable regression corpus without inflating
@@ -1725,16 +1726,17 @@ comparison counts or claiming unexecuted coverage.
   implementation, without altering existing expected bytes by hand.
 - An installed-artifact CFFI golden consumer that complements, rather than
   replaces, `tests/c/test_parity.c` and the existing C harness (1,410
-  comparisons at the time of this local slice).
+  comparisons).
 - Ledger entries with hosted run IDs, revisions, toolchains, exact comparison
   counts, skips, and failures.
 
 **Acceptance:**
 
-- One actual full-matrix hosted run is green at a recorded revision; W6.11
-  remains open until that run exists.
+- One actual full-matrix hosted run is green at a recorded revision. Met by
+  run 44774290565 at `0d6e60a`; W6.11 remains open only for retained nightly
+  history.
 - Nightly execution is observed, and first-baseline/insufficient-history skips
-  are reported exactly as executed.
+  are reported exactly as executed. This line is not met yet.
 - Every checked-in regression input reproduces its intended invariant in the
   replay leg; smoke and full fuzz budgets pass.
 - New fountain tests cover multiple supported shapes and both codecs; the WM
@@ -1768,10 +1770,11 @@ Local single-runner records put canonical batch-64 QG at roughly 115–170
 ns/block and immediate at roughly 115–170 ns/block; batch 1024 reached roughly
 220–290 ns/block in the same runs, so the 200 ns target is not universal across
 queue depths. These are local observations, not a baseline or a cross-machine
-claim. Still open: reference-runner activation on a stable named runner
-(W6.11), paired same-runner C/Rust LT encode/generate/push/peel/decode/repair
-measurements (`cargo` is unavailable here), and the later C/Rust ARC comparison
-hooks. No hosted or cross-machine performance evidence is claimed.
+claim. Still open: reference-runner activation on a stable named runner (the
+hosted matrix is green, but no benchmark runner is designated), paired
+same-runner C/Rust LT encode/generate/push/peel/decode/repair measurements
+(hosted CI has cargo, but no paired run is recorded), and the later C/Rust ARC
+comparison hooks. No hosted or cross-machine performance evidence is claimed.
 
 **Objective:** implement the missing performance evidence before using ARC's
 200 ns/block target or Rust LT results as a gate, baseline, or cutover argument.
@@ -1856,7 +1859,8 @@ decision grounded in hosted correctness and same-runner performance evidence.
 
 ### PROMPT W6.14 — Executable metrics, dashboards, alerts, and Python export
 
-**Status:** implemented — local gate green; no hosted Grafana or hosted CI claim.
+**Status:** implemented — local gate and hosted CI are green; no hosted
+Grafana import claim.
 
 **Objective:** reconcile the documented metric inventory, actual C/Python
 series, and dashboard queries so every rollout guardrail is backed by an
@@ -1925,7 +1929,8 @@ or hosted baseline, and no improvement is claimed. Still open: HTTPS with
 CA/hostname verification, TLS certificate-failure tests, repeated named-runner
 baselines before any nightly gate, and the optional `SDF_HAVE_CURL` A/B (the
 decision is recorded in design 09 §9; it stays out of the default build). No
-hosted, TLS, production-network, or soak evidence has been produced. Does not
+hosted TLS, production-network, or soak evidence has been produced, and the
+hosted CI pass does not exercise HTTPS. Does not
 include W6.7 S3/NVMe-peer drivers.
 
 **Objective:** move WM and FLUID beyond forced-loopback harness origins and
@@ -1981,8 +1986,10 @@ production rollout telemetry, but core implementation may proceed in parallel.
 
 ### PROMPT W6.16 — Isolated-installable Python/CFFI wheel
 
-**Status:** implemented locally for the C (LT + nanorq) variant; the opt-in
-Rust-ON wheel and authoritative hosted installs remain open. Landed: one CFFI
+**Status:** implemented locally and hosted for the C (LT + nanorq) variant;
+the opt-in Rust-ON wheel remains open. Hosted run 44774290565 at 0d6e60a
+built the cp312 Linux wheel, ran the isolated venv and bundled-CFFI golden
+consumer, and uploaded the `sdf-wheel` artifact. Landed: one CFFI
 loader (`sdf._cffi`, re-exported by `sdf_cffi`) resolving `SDF_CFFI_DIR`, the
 in-tree `build/cffi`, the wheel-bundled extension, then a top-level
 `_sdf_cffi`; a staged-prefix wheel build that folds the static archives and
@@ -2000,11 +2007,9 @@ can add an RPATH/RUNPATH; the build strips it before packaging (patchelf or
 chrpath) and re-checks the result. The
 offline runner creates that venv with `--system-site-packages` and installs
 with `--no-deps`, so this is payload/runtime evidence, not dependency-
-resolution evidence. The ON wheel was not executed because `cargo` is
-unavailable. ci.yml now has a wheel job that builds the artifact, runs the
-isolated venv and bundled-CFFI golden consumer, and uploads the wheel; that
-job has not executed on a runner, so no hosted wheel evidence exists, and
-W6.11 is still required for the authoritative hosted legs.
+resolution evidence. The ON wheel was not executed because the wheel job
+currently builds only OFF. The hosted wheel job is green at 0d6e60a; no
+Rust-ON wheel evidence is claimed.
 
 **Objective:** ship the Python control plane and its compiled binding as one
 installable artifact, eliminating the current checkout/`PYTHONPATH`/
@@ -2141,25 +2146,24 @@ precedent; W6.16/W6.17 for the complete installed-consumer matrix.
 
 Implementation-complete at W6.1 + W6.2 + W6.5: **the production chain
 closed end to end** — scrape live, telemetry driving a live proxy, the
-goldens complete, the matrix wired with every advisory leg real and
-locally mirrored green (including the rust seam). The milestone's one
-remaining evidence line is the first hosted run itself: no remote is
-configured in this environment, so a runner cannot be dispatched from
-here. Reported as implementation-complete, not as a fabricated hosted
-run. W6.6 (the release) has since landed as v1.0.0 (ef737b9 plus its
-documentation/tag commits). W6.8 has landed the functional Rust LT arm
-(77e0292, 568c30c, 180f025): both variants pass the same 23-test suites and
-byte-identical 556-comparison reports, including 76 fountain comparisons.
+goldens complete, the matrix wired and hosted green. Run 44774290565 at
+0d6e60a completed 10/10 jobs on 2026-11-20. W6.6 (the release) has since
+landed as v1.0.0 (ef737b9 plus its documentation/tag commits). W6.8 has
+landed the functional Rust LT arm (77e0292, 568c30c, 180f025): the hosted
+rust-seam leg now runs the current 27-test suites and byte-identical 1,410-
+comparison reports. Nightly history remains the one outstanding external
+evidence line.
 The C/Rust comparison window is open with C still default; no cutover,
 C-removal or performance claim is made. W6.7 remains gated on an endpoint/
 stand-in decision. W6.9 and W6.10 have landed as the corrected ARC semantics
 change set (ledger above). W6.11's local conformance slices have since landed
 (deterministic ARC replay, expanded fountain fuzzing and goldens, the installed
-CFFI golden consumer, and 1,410 zero-pending C comparisons), but its
-authoritative hosted matrix and nightly history remain externally gated on a
-runner. W6.13 is decided: ADR-0010 retains the C default and keeps Rust LT
-opt-in because the hosted and paired-performance evidence is still missing.
-The remaining W6.12 and W6.14–W6.18 packages follow.
+CFFI golden consumer, and 1,410 zero-pending C comparisons). Its authoritative
+hosted matrix is green at 0d6e60a (run 44774290565); retained nightly history
+remains externally gated on time and runner scheduling. W6.13 is decided:
+ADR-0010 retains the C default and keeps Rust LT opt-in because paired
+performance and nightly evidence are still missing. The remaining W6.12 and
+W6.14–W6.18 packages follow.
 
 ### Milestone M7 (proposed)
 
@@ -2169,8 +2173,9 @@ implementation-complete only when:
 - W6.9 proves exactly-once retention under backpressure and W6.10 makes shadow
   promotion evidence non-vacuous. Both are implemented and locally proven (see
   the ledger); this bullet does not claim a hosted or production-soak run.
-- W6.11 records an actual hosted full-matrix run and durable conformance
-  corpora; W6.12 supplies reference-runner benchmark artifacts.
+- W6.11's hosted full-matrix run is green at `0d6e60a` (run 44774290565)
+  and the durable conformance corpora landed; retained nightly history and
+  W6.12's reference-runner benchmark artifacts remain.
 - W6.13 records an explicit LT decision (ADR-0010 retains the C default while
   evidence is insufficient) without implying automatic C removal.
 - Metrics/dashboards, production HTTP, and distribution artifacts have their

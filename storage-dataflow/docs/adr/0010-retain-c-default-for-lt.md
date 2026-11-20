@@ -29,11 +29,10 @@ The available evidence is incomplete:
 - The W6.8 landing recorded C/Rust parity, identical public declarations,
   both-variant installed consumers, and matching test suites at that revision.
 - The current tree has since grown to 27 C tests, 87 Python tests, and 1,410
-  zero-pending golden comparisons. Those newer LT geometries and fail-closed
-  codec checks have not been executed against the Rust arm because `cargo` is
-  unavailable in this environment.
-- W6.11's authoritative hosted matrix and nightly history do not exist; no
-  remote/runner is configured.
+  zero-pending golden comparisons. Hosted rust-seam run 44774290565 at
+  `0d6e60a` executed both variants against that current tree successfully.
+- The authoritative hosted matrix is green at that revision. Nightly history
+  does not exist yet.
 - W6.12 has local single-runner C measurements only. No paired same-runner
   C/Rust LT measurements exist, and no stable named reference runner has been
   activated.

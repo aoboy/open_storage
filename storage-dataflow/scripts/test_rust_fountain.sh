@@ -120,4 +120,4 @@ ctest --test-dir "$ASAN" --output-on-failure
 SDF_USE_RUST_FOUNTAIN=ON ./scripts/test_install.sh
 SDF_USE_RUST_FOUNTAIN=ON ./scripts/test_deb.sh
 
-echo "test_rust_fountain: OK (C/Rust 23/23 each, identical 556 goldens, symbols exact, Rust ASan+UBSan, install + deb)"
+echo "test_rust_fountain: OK (C/Rust 27/27 each, identical 1,410 goldens, symbols exact, Rust ASan+UBSan, install + deb)"
