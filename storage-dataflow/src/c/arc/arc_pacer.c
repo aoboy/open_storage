@@ -152,7 +152,8 @@ int arc_init(arc_pacer_t *p, const arc_cfg_t *cfg, arc_apply_fn fn, void *ctx) {
     return 0;
 }
 
-int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts) {
+int arc_submit_at(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts,
+                  uint64_t arrival_ts) {
     if (p == NULL || (len > 0 && entry == NULL)) {
         return -EINVAL;
     }
@@ -178,7 +179,7 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
     }
 
     int how = 0;
-    arc_sched_t sched = arc_arrival(s, producer_ts, (uint64_t)sdf_now_ns(), len, &how);
+    arc_sched_t sched = arc_arrival(s, producer_ts, arrival_ts, len, &how);
 
     if (len > 0) {
         memcpy(s->slab + (size_t)slot * s->entry_max, entry, len);
@@ -219,6 +220,10 @@ int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_
     s->last_sched = sched;
     s->last_sched_valid = 1;
     return how == 0 ? 0 : 1;
+}
+
+int arc_submit(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts) {
+    return arc_submit_at(p, entry, len, producer_ts, (uint64_t)sdf_now_ns());
 }
 
 int arc_poll(arc_pacer_t *p, uint64_t now_ns) {

@@ -141,6 +141,18 @@ add_executable(fuzz_arc_stream fuzz/fuzz_arc_stream.c)
 target_link_libraries(fuzz_arc_stream PRIVATE sdf_arc sdf_common)
 add_test(NAME fuzz_arc_stream COMMAND fuzz_arc_stream)
 set_tests_properties(fuzz_arc_stream PROPERTIES ENVIRONMENT "SDF_FUZZ_ITERS=5000")
+
+# W6.11: exact-timestamp corpus replay for the W5 park/stranding and W6.9
+# saturation regressions. These are deterministic and separate from the
+# generated fuzz budget.
+add_executable(replay_arc_stream fuzz/replay_arc_stream.c)
+target_link_libraries(replay_arc_stream PRIVATE sdf_arc)
+target_include_directories(replay_arc_stream PRIVATE ${CMAKE_SOURCE_DIR}/src/c/arc)
+add_test(
+    NAME arc_replay_park_632
+    COMMAND replay_arc_stream
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/arc/qg-park-632.bin
+            ${CMAKE_CURRENT_SOURCE_DIR}/fuzz/corpus/arc/saturation-retry.bin)
 #
 # add_executable(test_arc_pacer unit/test_arc_offset.c unit/test_arc_heap.c)
 # target_link_libraries(test_arc_pacer PRIVATE sdf_arc)

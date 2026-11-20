@@ -119,6 +119,10 @@ struct arc_pacer {
 
 arc_sched_t arc_arrival(arc_state_t *a, uint64_t S_n, uint64_t A_n, size_t len, int *scheduled_now);
 
+/* Deterministic replay seam: the public arc_submit wrapper samples A_n. */
+int arc_submit_at(arc_pacer_t *p, const void *entry, size_t len, uint64_t producer_ts,
+                  uint64_t arrival_ts);
+
 /* arc_heap.c: the release queue. */
 int arc_heap_push(arc_state_t *a, const arc_rel_t *rel);
 int arc_heap_pop(arc_state_t *a, arc_rel_t *out);
