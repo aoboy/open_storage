@@ -221,6 +221,13 @@ env -u PYTHONPATH -u SDF_CFFI_DIR "$WORK/venv/bin/python" \
 
 # 4. Development overrides remain explicit: with the source tree and
 # build/cffi supplied, the same interpreter binds the build extension.
+# A clean runner has no in-tree extension yet; build it so this check is
+# self-contained rather than silently depending on a previous make build.
+IN_TREE_SO="$(find "$ROOT/build/cffi" -maxdepth 1 -name '_sdf_cffi*.so' -print -quit 2>/dev/null || true)"
+if [[ -z "$IN_TREE_SO" ]]; then
+    echo "test_wheel: in-tree CFFI absent; building it for the override check" >&2
+    "$ROOT/scripts/build.sh" >/dev/null
+fi
 OVERRIDE_SO="$(
     cd "$WORK"
     env -u SDF_CFFI_DIR PYTHONPATH="$ROOT/python:$ROOT/bindings/cffi" \
