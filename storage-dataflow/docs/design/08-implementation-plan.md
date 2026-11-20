@@ -648,10 +648,12 @@ ADRs [0001–0009](../adr/).
                                 or mixed-runner pairs. Local 8-record
                                 run covered K=16/32/64 at 0/10/20/30%
                                 loss; these are single-runner
-                                observations, not a baseline. CI now
-                                has a --require fountain-bench job.
-                                Still open: a stable named reference
-                                runner and seven nightly paired samples.
+                                observations, not a baseline. CI has a
+                                --require fountain-bench job, and
+                                bench.yml now records a nightly
+                                fountain-paired artifact. Still open:
+                                a stable named reference runner and
+                                seven retained nightly samples.
   W6.13 LT window decision   : decided — C remains the default LT arm; Rust LT
                                 stays opt-in and no C is removed. ADR-0010
                                 records the incomplete evidence honestly:
@@ -1790,9 +1792,10 @@ ns/block and immediate at roughly 115–170 ns/block; batch 1024 reached roughly
 220–290 ns/block in the same runs, so the 200 ns target is not universal across
 queue depths. These are local observations, not a baseline or a cross-machine
 claim. Paired same-runner C/Rust LT measurements now exist locally
-(`out/bench/fountain_paired.txt`) and CI has a dedicated `fountain-bench` job.
-Still open: a stable named reference runner, seven nightly paired samples,
-and the later C/Rust ARC comparison hooks. No hosted or cross-machine
+(`out/bench/fountain_paired.txt`); CI has a dedicated `fountain-bench` job,
+and the nightly bench workflow records and uploads a `fountain-paired`
+artifact. Still open: a stable named reference runner, seven retained nightly
+samples, and the later C/Rust ARC comparison hooks. No hosted or cross-machine
 performance evidence is claimed yet.
 
 **Objective:** implement the missing performance evidence before using ARC's

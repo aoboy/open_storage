@@ -29,6 +29,8 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: dtolnay/rust-toolchain@1.100.0
+
       - name: Install dependencies
         run: |
           python3 -m pip install --upgrade pip
@@ -44,6 +46,17 @@ jobs:
         with:
           name: wm-control-bench
           path: storage-dataflow/out/bench/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Paired C/Rust LT fountain benchmark
+        run: ./scripts/bench_fountain_paired.sh --require
+
+      - name: Upload the paired fountain record
+        uses: actions/upload-artifact@v4
+        with:
+          name: fountain-paired
+          path: storage-dataflow/out/bench/fountain_paired.txt
           if-no-files-found: error
           retention-days: 14
 
