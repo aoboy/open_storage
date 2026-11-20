@@ -116,6 +116,9 @@ static void test_steady_discrepancy_bound(void) {
     sdf_wm_proxy_stats_t st;
     base_cfg(&pc, 8192);
     pc.rollout_pct = 100;
+    /* This leg tests spray discrepancy, not controller updates: keep the
+     * in-process controller from whacking a transiently slow loopback. */
+    pc.control_hz = 0;
     CHECK(sdf_wm_proxy_run(&pc, &st) == 0);
 
     uint64_t total_ok = 0;
@@ -173,6 +176,7 @@ static void test_control_arm_and_kill_switch(void) {
     /* rollout 0: pure control, exact round-robin */
     base_cfg(&pc, 8192);
     pc.rollout_pct = 0;
+    pc.control_hz = 0;
     CHECK(sdf_wm_proxy_run(&pc, &st) == 0);
     for (uint32_t i = 0; i < N_ORIGINS; i++) {
         CHECK(st.dispatched[i] == 8192 / N_ORIGINS);
@@ -183,6 +187,7 @@ static void test_control_arm_and_kill_switch(void) {
     base_cfg(&pc, 8192);
     pc.rollout_pct = 100;
     pc.kill_switch = 1;
+    pc.control_hz = 0;
     CHECK(sdf_wm_proxy_run(&pc, &st) == 0);
     CHECK(st.dispatch_control == 8192 && st.dispatch_treatment == 0);
     for (uint32_t i = 0; i < N_ORIGINS; i++) {
@@ -195,6 +200,7 @@ static void test_ab_split(void) {
     sdf_wm_proxy_stats_t st;
     base_cfg(&pc, 8192);
     pc.rollout_pct = 50;
+    pc.control_hz = 0;
     CHECK(sdf_wm_proxy_run(&pc, &st) == 0);
     /* deterministic xxhash64 buckets: both arms carry traffic */
     CHECK(st.dispatch_treatment > 0);
@@ -210,7 +216,7 @@ static void test_midrun_degradation_redistributes(void) {
     /* Stretch the run with the harness pacing knob. The controller is
      * rate-limited to one update per 125 ms at control_hz=8; a full-speed
      * run finishes first and cannot exercise a post-disable whack. */
-    pc.dispatch_pace_ns = 100000;
+    pc.dispatch_pace_ns = 200000;
     /* origin 2 dies at half-run: the controller must whack it and the
      * healthy paths must absorb — within one control interval */
     pc.steps[0].at_unit = 2048;
@@ -227,9 +233,13 @@ static void test_midrun_degradation_redistributes(void) {
         if (i == 2) {
             continue;
         }
+        CHECK(st.end_profile_b[i] > 0);
         absorb += st.end_profile_b[i];
-        CHECK(st.end_profile_b[i] > 256); /* and the healthy grew */
     }
+    /* The whacked path's released units must reappear on the healthy
+     * paths. Do not require each one to grow: the same controller may
+     * whack a transiently slow healthy path under sanitizer timing. */
+    CHECK(absorb > 3u * 256u);
     CHECK(absorb + (uint64_t)st.end_profile_b[2] == 1024);
     /* every unit is accounted: completed or refused-with-enolink */
     uint64_t total = 0;
