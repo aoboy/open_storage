@@ -495,7 +495,7 @@ static void test_buffer_reuse_and_growth(void) {
 
     sdf_http_transport_stats_t ts;
     CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
-    CHECK(ts.body_cap == 0 && ts.body_allocs == 0);
+    CHECK(ts.body_cap == 0 && ts.body_allocs == 0 && ts.connects == 0);
     CHECK(sdf_http_transport_stats(&o, 1, &ts) == -EINVAL);
     CHECK(sdf_http_transport_stats(NULL, 0, &ts) == -EINVAL);
     CHECK(sdf_http_transport_stats(&o, 0, NULL) == -EINVAL);
@@ -505,7 +505,7 @@ static void test_buffer_reuse_and_growth(void) {
     wait_quiet(&o, 1);
     CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
     uint32_t cap_small = ts.body_cap;
-    CHECK(cap_small >= req.len && ts.body_allocs == 1);
+    CHECK(cap_small >= req.len && ts.body_allocs == 1 && ts.connects == 1);
 
     /* Same-size unit: the warmed buffer is reused, no new allocation. */
     req.obj_offset = 2048;
@@ -533,6 +533,8 @@ static void test_buffer_reuse_and_growth(void) {
 
     CHECK(atomic_load(&g_t.ok) == 4);
     CHECK(atomic_load(&g_t.bytes_ok) == 1024 + 1024 + 32768 + 512);
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.connects == 1); /* the persistent connection was reused throughout */
     o.ops->close(&o);
 }
 
@@ -585,6 +587,9 @@ static void test_truncated_body_recovers(void) {
     sdf_origin_stats_t st;
     CHECK(o.ops->stats(&o, 0, &st) == 0);
     CHECK(st.reqs_done == 1 && st.reqs_failed == 1 && st.bytes_rx == req.len);
+    sdf_http_transport_stats_t ts;
+    CHECK(sdf_http_transport_stats(&o, 0, &ts) == 0);
+    CHECK(ts.connects == 2); /* failure dropped the socket; recovery reconnected */
     o.ops->close(&o);
 }
 

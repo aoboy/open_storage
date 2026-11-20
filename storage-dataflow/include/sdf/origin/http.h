@@ -29,12 +29,15 @@ const sdf_origin_ops_t *sdf_http_ops(void);
  * The worker keeps one response-body buffer per origin and only grows
  * it. `body_allocs` counts allocation events since open; once it
  * stops increasing, fetches at or below `body_cap` perform no body
- * allocation. Snapshot semantics: safe to call at any time; values
- * are per-origin worker state, not dispatch telemetry.
+ * allocation. `connects` counts successful socket establishes, so a
+ * steady run with one persistent connection reports one connect.
+ * Snapshot semantics: safe to call at any time; values are per-origin
+ * worker state, not dispatch telemetry.
  */
 typedef struct {
     uint32_t body_cap;    /* bytes reserved for a response body */
     uint32_t body_allocs; /* buffer allocation events since open */
+    uint64_t connects;    /* successful socket connects since open */
 } sdf_http_transport_stats_t;
 
 /** Snapshot one HTTP origin's transport-buffer state. Returns 0 or -EINVAL. */

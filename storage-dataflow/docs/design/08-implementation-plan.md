@@ -1794,11 +1794,19 @@ fill/drain and multi-block FLUID repair, bounded rejection of overlong bodies,
 and a reusable grow-on-demand per-origin HTTP body buffer (no body allocation
 after warmup, verified by transport-buffer counters). Controlled HTTP coverage
 now also includes chunked partial responses, truncated-body recovery, and
-queue saturation returning the documented `-EAGAIN` without blocking. Still
-open: HTTPS with CA/hostname verification, TLS certificate-failure tests,
-saturation/backpressure measurement, and `bench_origin` p99/goodput/allocation
-A/B evidence. No hosted, TLS, performance, or soak evidence has been produced.
-Does not include W6.7 S3/NVMe-peer drivers.
+queue saturation returning the documented `-EAGAIN` without blocking. The
+driver enables `TCP_NODELAY` on its persistent connection; without it the
+measured sequential p50 was dominated by a ~41 ms Nagle/delayed-ACK stall.
+`bench_origin` now records issue-to-completion p50/p99, goodput, connection
+reuse, post-warmup allocation, and saturation behavior against a deterministic
+in-process Range server, naming the driver, server, runner, build, flags, and
+sample counts. These are single-runner loopback measurements, not a production
+or hosted baseline, and no improvement is claimed. Still open: HTTPS with
+CA/hostname verification, TLS certificate-failure tests, repeated named-runner
+baselines before any nightly gate, and the optional `SDF_HAVE_CURL` A/B (the
+decision is recorded in design 09 §9; it stays out of the default build). No
+hosted, TLS, production-network, or soak evidence has been produced. Does not
+include W6.7 S3/NVMe-peer drivers.
 
 **Objective:** move WM and FLUID beyond forced-loopback harness origins and
 turn the reference HTTP driver into a measured, bounded production candidate

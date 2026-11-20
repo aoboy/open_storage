@@ -182,6 +182,12 @@ target_link_libraries(fluid-repair PRIVATE sdf_fluid)
 add_executable(bench_wm bench/bench_wm.c)
 target_link_libraries(bench_wm PRIVATE sdf_wm sdf_common)
 
+# W6.15 measured HTTP transport leg (recorded, not ctest-gated).
+add_executable(bench_origin bench/bench_origin.c)
+target_link_libraries(bench_origin PRIVATE sdf_origin_http sdf_common)
+target_compile_definitions(bench_origin PRIVATE
+    SDF_BENCH_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
+
 # --- Tools (plan W1.4: origin loadgen, degradation harness) --------------
 add_executable(origin_loadgen tools/loadgen/origin_loadgen.c)
 target_link_libraries(origin_loadgen PRIVATE sdf_origin_loopback sdf_wm

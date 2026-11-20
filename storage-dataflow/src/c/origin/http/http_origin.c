@@ -31,6 +31,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
@@ -90,6 +91,7 @@ typedef struct {
     uint8_t *rbuf;            /* reusable response-body storage */
     _Atomic uint32_t rcap;    /* rbuf bytes reserved */
     _Atomic uint32_t rallocs; /* buffer allocation events since open */
+    _Atomic uint64_t conns;   /* successful socket connects since open */
 } http_origin_t;
 
 struct http_impl {
@@ -192,6 +194,10 @@ static int ensure_sock(http_origin_t *og) {
     struct timeval tv = {.tv_sec = tmo / 1000u, .tv_usec = (long)(tmo % 1000u) * 1000};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    /* One request/response per unit: Nagle would add delayed-ACK stalls
+     * (~40 ms) to every fetch on a persistent connection. */
+    int one = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
 
     if (connect(fd, res->ai_addr, res->ai_addrlen) != 0) {
         freeaddrinfo(res);
@@ -200,6 +206,7 @@ static int ensure_sock(http_origin_t *og) {
     }
     freeaddrinfo(res);
     og->sock = fd;
+    atomic_fetch_add_explicit(&og->conns, 1, memory_order_relaxed);
     atomic_store_explicit(&og->hard_down, 0, memory_order_relaxed);
     return 0;
 }
@@ -585,6 +592,7 @@ int sdf_http_transport_stats(const sdf_origin_t *o, uint32_t origin_id,
     const http_origin_t *og = &d->origins[origin_id];
     out->body_cap = atomic_load_explicit(&og->rcap, memory_order_acquire);
     out->body_allocs = atomic_load_explicit(&og->rallocs, memory_order_acquire);
+    out->connects = atomic_load_explicit(&og->conns, memory_order_acquire);
     return 0;
 }
 

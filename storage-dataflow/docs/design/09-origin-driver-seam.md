@@ -171,3 +171,15 @@ inherits live origin health.
   TOML blocks, ADR-0005 schema) is drafted in the W1.1 prompt.
 - Whether `set_enable` needs a drain timeout knob (WAM's `drain_path`
   semantics) — decide at W2.2 when the controller import lands.
+- **`SDF_HAVE_CURL` (W6.15 decision): not admitted for now.** The POSIX
+  driver remains the only HTTP implementation, so libcurl stays out of the
+  default and optional builds. `bench_origin` records the POSIX arm's p99,
+  goodput, connection reuse, allocation, and saturation behavior; a curl A/B
+  becomes worth the dependency only when a named-runner baseline exists and
+  the TLS development surface is available. If admitted later, it must build
+  OFF by default behind the same vtable and keep POSIX as the fallback.
+- **HTTPS/TLS: deferred, fail-closed.** `https://` destinations are rejected
+  at open rather than downgraded to HTTP. Certificate/hostname verification,
+  explicit CA configuration, and certificate-failure tests need a TLS
+  development dependency that was not present in the verification
+  environment; no TLS evidence is claimed until that leg runs.

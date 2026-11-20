@@ -14,7 +14,7 @@ RESULTS="build/bench_results.txt"
 mkdir -p build
 {
     echo "# recorded $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-    for b in bench_wm; do
+    for b in bench_wm bench_origin; do
         if [[ -x "build/$b" ]]; then
             "build/$b"
         else
