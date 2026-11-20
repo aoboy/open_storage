@@ -612,6 +612,23 @@ ADRs [0001–0009](../adr/).
                                 claimed
                                 (b05b0e0, 40e496f, bf9e88c, 5b0a87a,
                                 51b0c78, 502fadc, ce17588).
+  W6.13 LT window decision   : decided — C remains the default LT arm; Rust LT
+                                stays opt-in and no C is removed. ADR-0010
+                                records the incomplete evidence honestly:
+                                W6.8-era C/Rust parity predates the current
+                                26-test, 1,410-comparison tree, and neither a
+                                hosted matrix nor paired same-runner Rust
+                                measurements exist because the runner and
+                                cargo are unavailable. Revisit criteria require
+                                both variants passing the current suites and
+                                parity, a green hosted matrix, seven paired
+                                nightly samples within the >5% noise rule,
+                                both-variant installed consumers, and a
+                                separate reviewed landing with an exercised
+                                rollback. No code, ABI, golden vector, or
+                                default switched; no performance claim is
+                                made. W6.13 does not close the comparison
+                                window and does not authorize deletion.
   W6.14 executable observability: implemented — design 05 now carries the
                                 canonical `sdf_` naming/schema contract,
                                 exact 32-bucket histogram bounds, bounded
@@ -1770,7 +1787,12 @@ hooks. No hosted or cross-machine performance evidence is claimed.
 
 ### PROMPT W6.13 — Fountain comparison-window evidence review and decision
 
-**Status:** proposed — decision package, not authorization to delete C.
+**Status:** decided locally — C remains the default LT arm; Rust LT stays
+opt-in; no C is removed and no default changes. ADR-0010 records the retention
+decision, explicit revisit criteria, and rollback plan. The accompanying
+[review](w6.13-lt-comparison-review.md) records the available W6.8 and local
+evidence plus the missing hosted/paired measurements. This is the prompt's
+status-quo branch, not a cutover recommendation.
 
 **Objective:** close the W6.8 LT comparison window with an explicit per-module
 decision grounded in hosted correctness and same-runner performance evidence.
@@ -2102,7 +2124,9 @@ change set (ledger above). W6.11's local conformance slices have since landed
 (deterministic ARC replay, expanded fountain fuzzing and goldens, the installed
 CFFI golden consumer, and 1,410 zero-pending C comparisons), but its
 authoritative hosted matrix and nightly history remain externally gated on a
-runner. The dependency-ordered W6.12–W6.18 packages follow.
+runner. W6.13 is decided: ADR-0010 retains the C default and keeps Rust LT
+opt-in because the hosted and paired-performance evidence is still missing.
+The remaining W6.12 and W6.14–W6.18 packages follow.
 
 ### Milestone M7 (proposed)
 
@@ -2114,7 +2138,8 @@ implementation-complete only when:
   the ledger); this bullet does not claim a hosted or production-soak run.
 - W6.11 records an actual hosted full-matrix run and durable conformance
   corpora; W6.12 supplies reference-runner benchmark artifacts.
-- W6.13 records an explicit LT decision without implying automatic C removal.
+- W6.13 records an explicit LT decision (ADR-0010 retains the C default while
+  evidence is insufficient) without implying automatic C removal.
 - Metrics/dashboards, production HTTP, and distribution artifacts have their
   executable local and available-hosted acceptance legs.
 - W6.18 provides an opt-in Rust ARC comparison candidate while C remains the
