@@ -2090,8 +2090,8 @@ ticks, the status command, and live `/healthz`/`/readyz` probes outside the
 checkout. The control-plane Helm
 chart now exists with strict ConfigMap mounting, HTTP probes, security
 context, resources, and dev/staging/prod values; `make helm` passes Helm
-4.3.2 lint and rendering, and ci.yml has a pinned-Helm job that uploads the
-rendered manifests. RPM packaging and cluster deployment remain blocked on a
+4.3.2 lint/rendering and kubeconform schema validation, and ci.yml has a
+pinned-Helm/kubeconform job that uploads the rendered manifests. RPM packaging and cluster deployment remain blocked on a
 named target distro and test cluster.
 
 **Objective:** replace the RPM and Helm placeholders with tested distribution

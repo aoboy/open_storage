@@ -8,8 +8,7 @@ configuration from an existing ConfigMap.
 HELM=/path/to/helm make helm
 ```
 
-The local gate runs `helm lint --strict` and renders default plus
-dev/staging/prod values. It is not cluster deployment evidence; the chart
+The local gate runs `helm lint --strict`, renders default plus dev/staging/prod values, and schema-validates them with kubeconform when available. It is not cluster deployment evidence; the chart
 still needs an available kind/cluster plus a real image and environment
 ConfigMap before readiness, rollback, or control-operation claims are made.
 
