@@ -25,7 +25,7 @@ jobs:
   # render:
   #   runs-on: ubuntu-latest
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v5
   #
   #     - name: Install pandoc and XeLaTeX
   #       run: |
@@ -36,7 +36,7 @@ jobs:
   #       run: ./scripts/build_doc.sh
   #
   #     - name: Upload PDF
-  #       uses: actions/upload-artifact@v4
+  #       uses: actions/upload-artifact@v6
   #       with:
   #         name: storage-dataflow-design
   #         path: storage-dataflow/out/*.pdf
