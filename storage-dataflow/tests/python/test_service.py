@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import threading
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -12,6 +14,7 @@ import pytest
 
 from sdf.cli.main import main
 from sdf.common.shm import WmShm
+from sdf.control.health import HealthServer, HealthState
 from sdf.control.service import (
     ControlPlaneService,
     build_tickables,
@@ -163,6 +166,36 @@ def test_cli_status_reads_health(tmp_path: Path, capsys: pytest.CaptureFixture[s
 
     health.write_text("{not json", encoding="utf-8")
     assert main(["status", "--health-file", str(health)]) == 1
+
+
+def test_health_endpoint_transitions() -> None:
+    state = HealthState()
+    server = HealthServer("127.0.0.1:0", state)
+    server.start()
+    host, port = server.address
+    try:
+        with pytest.raises(urllib.error.HTTPError) as starting:
+            urllib.request.urlopen(f"http://{host}:{port}/healthz")
+        assert starting.value.code == 503
+
+        state.update({"heartbeat": 1})
+        with urllib.request.urlopen(f"http://{host}:{port}/readyz") as response:
+            assert response.status == 200
+            assert json.load(response)["status"] == "ok"
+
+        with pytest.raises(urllib.error.HTTPError) as missing:
+            urllib.request.urlopen(f"http://{host}:{port}/missing")
+        assert missing.value.code == 404
+    finally:
+        server.stop()
+
+
+def test_cli_status_json(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    health = tmp_path / "health.json"
+    health.write_text(json.dumps({"status": "ok", "heartbeat": 3}), encoding="utf-8")
+    assert main(["status", "--health-file", str(health), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload == {"heartbeat": 3, "status": "ok"}
 
 
 def test_cli_serve_smoke(tmp_path: Path) -> None:
