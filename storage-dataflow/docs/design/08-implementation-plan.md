@@ -1986,8 +1986,9 @@ production rollout telemetry, but core implementation may proceed in parallel.
 
 ### PROMPT W6.16 — Isolated-installable Python/CFFI wheel
 
-**Status:** implemented locally and hosted for the C (LT + nanorq) variant;
-the opt-in Rust-ON wheel remains open. Hosted run 44774290565 at 0d6e60a
+**Status:** implemented locally for both C (LT + nanorq) and Rust-ON variants;
+the hosted C wheel is green and the matrix now also builds the ON wheel, which
+has not executed yet. Hosted run 44774290565 at 0d6e60a
 built the cp312 Linux wheel, ran the isolated venv and bundled-CFFI golden
 consumer, and uploaded the `sdf-wheel` artifact. Landed: one CFFI
 loader (`sdf._cffi`, re-exported by `sdf_cffi`) resolving `SDF_CFFI_DIR`, the
@@ -2007,9 +2008,10 @@ can add an RPATH/RUNPATH; the build strips it before packaging (patchelf or
 chrpath) and re-checks the result. The
 offline runner creates that venv with `--system-site-packages` and installs
 with `--no-deps`, so this is payload/runtime evidence, not dependency-
-resolution evidence. The ON wheel was not executed because the wheel job
-currently builds only OFF. The hosted wheel job is green at 0d6e60a; no
-Rust-ON wheel evidence is claimed.
+resolution evidence. The local ON wheel is green: the cp314 platform wheel
+bundles the Rust LT staticlib and passes the isolated venv, ARC sidecar,
+LT/nanorq roundtrip, and 1,376-comparison golden checks. The hosted wheel job now has an OFF/ON matrix; only OFF has executed, so no
+hosted ON artifact is claimed yet.
 
 **Objective:** ship the Python control plane and its compiled binding as one
 installable artifact, eliminating the current checkout/`PYTHONPATH`/
