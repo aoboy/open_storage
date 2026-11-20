@@ -2136,9 +2136,9 @@ that the storage platform owns data-plane sidecar injection.
 offset-estimator slice mirrors Algorithm 1/2 and reproduces the C golden fixed
 point, the release queue mirrors the stable `(T_n, seq)` ordering, and the QG
 guard/deadline drain covers predecessor re-queue, park timeout, and successor
-wake, plus heap-depth, added-delay percentile, and interval-error statistics;
-`make rust-arc` passes fmt/clippy/tests. The C pacer remains the default;
-callbacks, slab storage, sidecar behavior, the public-ABI staticlib
+wake, heap-depth/added-delay/interval-error statistics, and slab storage with
+an apply callback and slot reuse; `make rust-arc` passes fmt/clippy/tests. The
+C pacer remains the default; sidecar behavior, the public-ABI staticlib
 integration, and consumer parity are still pending.
 
 **Objective:** port the corrected ARC pacer to Rust while preserving ordering,

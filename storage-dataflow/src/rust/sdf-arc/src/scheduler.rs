@@ -125,6 +125,30 @@ impl Scheduler {
             a_n,
             seq: self.next_seq,
             len: u32::try_from(len).map_err(|_| "entry too large")?,
+            slot: 0,
+            parked: false,
+        })?;
+        self.next_seq += 1;
+        Ok(schedule)
+    }
+
+    pub(crate) fn submit_with_slot(
+        &mut self,
+        s_n: u64,
+        a_n: u64,
+        len: usize,
+        slot: u32,
+    ) -> Result<Schedule, &'static str> {
+        let schedule = self.estimator.on_arrival(s_n, a_n, len);
+        self.queue.push(Release {
+            t_n: schedule.t_n,
+            t_deadline: schedule.t_n.saturating_add(self.params.g_ns),
+            block_n: schedule.block_n,
+            s_n,
+            a_n,
+            seq: self.next_seq,
+            len: u32::try_from(len).map_err(|_| "entry too large")?,
+            slot,
             parked: false,
         })?;
         self.next_seq += 1;
@@ -199,6 +223,7 @@ mod tests {
             a_n: 0,
             seq: block_n,
             len: 64,
+            slot: block_n as u32,
             parked,
         }
     }

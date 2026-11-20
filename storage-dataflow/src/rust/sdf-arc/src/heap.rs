@@ -16,6 +16,7 @@ pub struct Release {
     pub a_n: u64,
     pub seq: u64,
     pub len: u32,
+    pub slot: u32,
     pub parked: bool,
 }
 
@@ -114,6 +115,7 @@ mod tests {
             a_n: 0,
             seq,
             len: 64,
+            slot: block_n as u32,
             parked: false,
         }
     }

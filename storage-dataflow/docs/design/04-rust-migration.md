@@ -3,8 +3,9 @@
 **Status:** W6.8 fountain LT comparison window open. The Rust implementation
 is functional behind `SDF_USE_RUST_FOUNTAIN=ON`; the C arm remains the default
 and nanorq remains C. `src/rust/sdf-arc` now has the offset-estimator,
-stable release-queue ordering, QG guard/deadline drain, and release statistics
-slices with parity tests; callbacks, slab storage, and the sidecar are still pending.
+stable release-queue ordering, QG guard/deadline drain, release statistics, and
+slab/callback storage slices with parity tests; sidecar and FFI integration are
+still pending.
 **Related:** [Overview §9, §12](00-overview.md#9-language-strategy-c-python-rust),
 [ADR-0003](../adr/0003-rust-migration-order.md).
 
