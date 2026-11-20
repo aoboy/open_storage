@@ -23,7 +23,8 @@ design and plan.
 ./scripts/run_bench.sh    # benchmark harness entry point
 ./scripts/lint.sh         # clang-format, clang-tidy, ruff, mypy (if installed)
 ./scripts/build_doc.sh    # render docs/design/*.md to out/*.pdf (optional)
-make ci                   # lint, C tests/sanitizers, install/deb, Rust C/Rust A/B gates
+./scripts/build_wheel.sh  # installable Python/CFFI wheel (see packaging/wheel)
+make ci                   # lint, C tests/sanitizers, install/deb/wheel, Rust C/Rust A/B gates
 ```
 
 Requirements: CMake >= 3.24, a C17 compiler, and Python >= 3.10. The FFI,
@@ -59,7 +60,7 @@ when cargo/components are absent. Configure one functional Rust build with
 | Whack-a-Mole control plane | Python loop over the live segment (no-opinion + down_mask deference) |
 | Common primitives, strict TOML config, metric primitives | Implemented — plan Wave 0 (W0.2–W0.5) |
 | Fuzzers | **As-built (Wave 5)**: fountain streams, embodiment vectors, ARC release streams — live bug find on first run (the QG park stranding) |
-| Packaging | **As-built (Wave 5/W6.4/W6.6/W6.8)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested with both C and Rust LT (rpm/Helm remain placeholders) |
+| Packaging | **As-built (Wave 5/W6.4/W6.6/W6.8/W6.16)**: install + pkg-config + find_package + installed-CFFI legs in ci; version 1.0.0 from version.h; the installed surface includes PIC `libnanorq.a`; `libsdf-dev_1.0.0_amd64.deb` built, dpkg-installed and consumer-tested with both C and Rust LT; an isolated Python/CFFI wheel (`sdf-1.0.0-cp314-cp314-linux_x86_64.whl`, OFF variant) is built and exercised in a fresh venv, with the ON variant and hosted legs still open (rpm/Helm remain placeholders) |
 | Rust seam + LT | **As-built (W6.5/W6.8)**: full v2 ABI declared (15 functions / 5 typedefs / 2 structs / 1 enum), cbindgen 0.27 + parsed declaration diff; functional opt-in Rust LT with C dispatch/nanorq retained, exact archive symbols and identical 556 goldens |
 | Live metrics scrape | **As-built (W6.1)**: SDF_METRICS_ENDPOINT serves the proxy + ARC sidecar live (the wam K.1b pattern) |
 | Live control chain | **As-built (W6.1)**: C-proxy → SHM telemetry → Python loop → published profile → acquired — proven as a live process pair |

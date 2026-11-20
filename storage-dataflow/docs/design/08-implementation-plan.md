@@ -1861,7 +1861,22 @@ production rollout telemetry, but core implementation may proceed in parallel.
 
 ### PROMPT W6.16 — Isolated-installable Python/CFFI wheel
 
-**Status:** proposed.
+**Status:** implemented locally for the C (LT + nanorq) variant; the opt-in
+Rust-ON wheel and authoritative hosted installs remain open. Landed: one CFFI
+loader (`sdf._cffi`, re-exported by `sdf_cffi`) resolving `SDF_CFFI_DIR`, the
+in-tree `build/cffi`, the wheel-bundled extension, then a top-level
+`_sdf_cffi`; a staged-prefix wheel build that folds the static archives and
+nanorq into one platform wheel; content, RPATH/RUNPATH/NEEDED, isolated-venv,
+console-entry-point, ARC-sidecar, LT/nanorq-roundtrip, and explicit-development-
+override checks; `make wheel`/`make wheel-test` with the test wired into the
+local `ci` target; and build/variant/limitation documentation. On this runner
+the OFF wheel is `sdf-1.0.0-cp314-cp314-linux_x86_64.whl`; the isolated venv
+runs outside the checkout with `PYTHONPATH` and `SDF_CFFI_DIR` unset. The
+offline runner creates that venv with `--system-site-packages` and installs
+with `--no-deps`, so this is payload/runtime evidence, not dependency-
+resolution evidence. The ON wheel was not executed because `cargo` is
+unavailable, and no hosted wheel evidence exists; W6.11 is required for the
+authoritative hosted legs.
 
 **Objective:** ship the Python control plane and its compiled binding as one
 installable artifact, eliminating the current checkout/`PYTHONPATH`/
