@@ -84,6 +84,11 @@ assert status[0] == lib.SDF_ORIGIN_SELECT_OK
 assert ffi.cast("void *", ops[0].open) != ffi.NULL
 print("installed CFFI: OK (arc sidecar + fluid budget + fountain ABI + origin selector)")
 PY
+    # W6.11: consume the checked-in golden vectors through the installed
+    # extension. WM, ARC, and both real codecs are applicable; the toy
+    # codec is test-local, so its comparisons are reported separately.
+    SDF_CFFI_DIR="$CFFI_OUT" PYTHONPATH="$ROOT/python:$ROOT/bindings/cffi" \
+        python3 bindings/cffi/check_goldens.py --golden-dir "$ROOT/golden_vectors"
 else
     echo "test_install: cffi unavailable; installed CFFI leg skipped" >&2
 fi
