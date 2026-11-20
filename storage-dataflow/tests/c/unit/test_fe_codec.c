@@ -153,6 +153,30 @@ static void test_lossy_recovery(void) {
     free(dmem);
 }
 
+static void test_repair_window_bounds(void) {
+    /* The public window contains K sources plus K repairs. At the maximum
+     * decoder K, the first repair must not alias adjacent decoder state. */
+    fd_cfg_t cfg = {.k = 512, .sym_len = 1};
+    size_t dsz = fd_sizeof(&cfg);
+    void *dmem = malloc(dsz);
+    CHECK(dmem != NULL);
+    CHECK(fd_init_codec(dmem, &cfg, SDF_FOUNTAIN_NANORQ) == 0);
+
+    uint8_t symbol = 0x5a;
+    CHECK(fd_push(dmem, 512, &symbol, sizeof(symbol)) == 0);
+    CHECK(fd_rank(dmem) == 1);
+    CHECK(!fd_ready(dmem));
+    uint8_t out[512];
+    memset(out, 0xa5, sizeof(out));
+    CHECK(fd_decode(dmem, out, sizeof(out)) == -EINVAL);
+    for (size_t i = 0; i < sizeof(out); i++) {
+        CHECK(out[i] == 0xa5);
+    }
+
+    fd_destroy(dmem);
+    free(dmem);
+}
+
 static void test_insufficient_is_the_arq_condition(void) {
     /* 40% of sources dropped, no repairs: NOT ready — the coordinator
      * must fall back to ARQ rather than ship an incomplete block */
@@ -246,11 +270,13 @@ int main(void) {
     test_validation();
     test_roundtrip();
     test_lossy_recovery();
+    test_repair_window_bounds();
     test_insufficient_is_the_arq_condition();
     test_lt();
 
     test_roundtrip();
     test_lossy_recovery();
+    test_repair_window_bounds();
     test_insufficient_is_the_arq_condition();
     printf("test_fe_codec: ok (nanorq: roundtrip, 20%% loss, ARQ condition; "
            "LT: roundtrip, repairs, peel recovery)\n");

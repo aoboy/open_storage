@@ -40,9 +40,9 @@ typedef struct {
     uint8_t *scratch; /* k * sym_len, decoder-owned */
     uint32_t k;
     size_t sym_len;
-    uint32_t pushed;   /* distinct symbols (sources + repairs) */
-    uint8_t have[512]; /* esi bitmap, capped: rank telemetry */
-    int repaired;      /* repair_block already succeeded */
+    uint32_t pushed;    /* distinct symbols (sources + repairs) */
+    uint8_t have[1024]; /* K <= 512 sources plus K repairs */
+    int repaired;       /* repair_block already succeeded */
 } nrq_dec_t;
 
 size_t nrq_enc_sizeof(void) {
