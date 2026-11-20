@@ -28,7 +28,7 @@ The available evidence is incomplete:
 
 - The W6.8 landing recorded C/Rust parity, identical public declarations,
   both-variant installed consumers, and matching test suites at that revision.
-- The current tree has since grown to 28 C tests, 109 Python tests, and 1,410
+- The current tree has since grown to 28 C tests, 112 Python tests, and 1,410
   zero-pending golden comparisons. Hosted rust-seam run 44774290565 at
   `0d6e60a` executed both variants against that current tree successfully.
 - The authoritative hosted matrix is green at that revision. Nightly history

@@ -147,6 +147,8 @@ def test_cli_status_reads_health(tmp_path: Path, capsys: pytest.CaptureFixture[s
                 "heartbeat": 7,
                 "config_dir": "/etc/sdf",
                 "controller_names": ["wm"],
+                "arc_mode": "arc_qg",
+                "fluid_classes": [{"name": "hot-metadata"}],
             }
         ),
         encoding="utf-8",
@@ -154,6 +156,7 @@ def test_cli_status_reads_health(tmp_path: Path, capsys: pytest.CaptureFixture[s
     assert main(["status", "--health-file", str(health)]) == 0
     out = capsys.readouterr().out
     assert "status=ok" in out and "heartbeat=7" in out and "controllers=wm" in out
+    assert "arc=arc_qg" in out and "classes=hot-metadata" in out
 
     assert main(["status", "--health-file", str(tmp_path / "missing.json")]) == 0
     assert "no control-plane health file" in capsys.readouterr().out

@@ -26,11 +26,18 @@ def _status(health_file: str) -> int:
             print(f"sdf {__version__}: cannot read {path}: {exc}", file=sys.stderr)
             return 1
         controllers = ",".join(str(name) for name in payload.get("controller_names", []))
+        classes = ",".join(
+            str(item.get("name", "?"))
+            for item in payload.get("fluid_classes", [])
+            if isinstance(item, dict)
+        )
         print(
             f"sdf {__version__}: status={payload.get('status', 'unknown')} "
             f"heartbeat={payload.get('heartbeat', '?')} "
             f"config={payload.get('config_dir', '?')} "
-            f"controllers={controllers or 'none'}"
+            f"controllers={controllers or 'none'} "
+            f"arc={payload.get('arc_mode', '?')} "
+            f"classes={classes or 'none'}"
         )
         return 0
     print(f"sdf {__version__}: no control-plane health file at {health_file or '(disabled)'}.")

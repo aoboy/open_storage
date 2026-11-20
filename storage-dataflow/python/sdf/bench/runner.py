@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from sdf.common.config import load_yaml
+from sdf.control.service import ServiceConfig, load_service_config
 from sdf.control.wm_control import PathTelemetry, SoftSheddingController
 
 
@@ -54,13 +54,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--paths must be positive")
 
     config_dir = Path(args.config)
-    wm_config_path = config_dir / "wm.yaml"
-    config: dict[str, Any] = {}
-    if wm_config_path.is_file():
+    service_config: ServiceConfig | None = None
+    if config_dir.is_dir():
         try:
-            config = load_yaml(wm_config_path)
-        except ModuleNotFoundError:
-            print("pyyaml not installed; recording benchmark without config")
+            service_config = load_service_config(config_dir)
+        except (OSError, ValueError) as exc:
+            print(f"config unavailable ({exc}); recording benchmark without config")
+    config: dict[str, Any] = service_config.wm if service_config is not None else {}
 
     controller = SoftSheddingController(args.paths)
     telemetry = build_telemetry(args.paths)
@@ -75,6 +75,9 @@ def main(argv: list[str] | None = None) -> int:
         "kind": "control-plane-microbench",
         "config_dir": str(config_dir),
         "config_loaded": bool(config),
+        "control_hz": config.get("control_hz"),
+        "arc_mode": None,
+        "fluid_classes": [],
         "platform": platform.platform(),
         "paths": args.paths,
         "iterations": args.iterations,
@@ -85,6 +88,10 @@ def main(argv: list[str] | None = None) -> int:
         },
         "final_units": controller.units,
     }
+
+    if service_config is not None:
+        report["arc_mode"] = service_config.arc["mode"]
+        report["fluid_classes"] = [item["name"] for item in service_config.fluid_classes]
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
