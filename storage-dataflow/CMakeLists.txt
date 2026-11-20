@@ -182,6 +182,38 @@ target_link_libraries(fluid-repair PRIVATE sdf_fluid)
 add_executable(bench_wm bench/bench_wm.c)
 target_link_libraries(bench_wm PRIVATE sdf_wm sdf_common)
 
+# W6.12: record the revision in ARC benchmark lines. A dirty first-party
+# tree is called out rather than looking like a clean tagged build.
+set(SDF_BENCH_REVISION "unknown")
+find_package(Git QUIET)
+if(Git_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short=12 HEAD
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE _sdf_git_rev_rc
+        OUTPUT_VARIABLE _sdf_git_rev
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_sdf_git_rev_rc EQUAL 0 AND _sdf_git_rev)
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} status --porcelain --untracked-files=no
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            RESULT_VARIABLE _sdf_git_status_rc
+            OUTPUT_VARIABLE _sdf_git_status
+            ERROR_QUIET)
+        if(_sdf_git_status_rc EQUAL 0 AND _sdf_git_status)
+            string(APPEND _sdf_git_rev "-dirty")
+        endif()
+        set(SDF_BENCH_REVISION "${_sdf_git_rev}")
+    endif()
+endif()
+
+add_executable(bench_arc bench/bench_arc.c)
+target_link_libraries(bench_arc PRIVATE sdf_arc sdf_common)
+target_compile_definitions(bench_arc PRIVATE
+    SDF_BENCH_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    SDF_BENCH_REVISION="${SDF_BENCH_REVISION}")
+
 # W6.15 measured HTTP transport leg (recorded, not ctest-gated).
 add_executable(bench_origin bench/bench_origin.c)
 target_link_libraries(bench_origin PRIVATE sdf_origin_http sdf_common)

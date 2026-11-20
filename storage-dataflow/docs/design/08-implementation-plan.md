@@ -1215,7 +1215,7 @@ at 2× headroom:
 | Bench | Threshold (activate) | Source gate |
 |---|---|---|
 | `bench_wm` select | ≤ 15 cyc/decision (W2.6) | WAM J.3 spray gate |
-| `bench_arc` | ≤ 200 ns/block (W4.2) | WAM J.3 ARC gate |
+| `bench_arc` | ≤ 200 ns/block target; 400 enforced on a named reference runner (W6.12) | WAM J.3 ARC gate |
 | `bench_origin` | fetch issue+completion p99 (W1.4, recorded only) | new |
 | `bench_e2e_fill` | fill p99/variance per arm (W2.6, recorded) | design 01 gates |
 | `bench_e2e_repair` | p99 vs overhead per arm (W3.6, recorded) | design 02 Pareto |
@@ -1662,7 +1662,25 @@ comparison counts or claiming unexecuted coverage.
 
 ### PROMPT W6.12 — ARC benchmark activation and paired C/Rust LT measurements
 
-**Status:** proposed.
+**Status:** partially implemented locally. Landed: `bench_arc` records the
+IMMEDIATE and QG paths for named batch/queue sizes (64/256/1024) with
+submit/poll/release ns/block, block counts, entry size, revision, runner,
+build, and collection time; `make bench` records all three batch sizes and
+then runs `scripts/bench_arc_gate.py`. The gate requires canonical immediate
+and QG records, fails on missing, malformed, stale, incomplete, or
+wrong-runner samples, reports the 200 ns/block target as met or missed
+separately, and enforces the 400 ns/block limit only when
+`SDF_BENCH_REFERENCE_RUNNER` names the runner (or `--reference-runner` is
+passed). Negative tests cover those paths, and the existing synthetic
+nightly-history selftest exercises the >5% rule and insufficient-history skip.
+Local single-runner records put canonical batch-64 QG at roughly 115–170
+ns/block and immediate at roughly 115–170 ns/block; batch 1024 reached roughly
+220–290 ns/block in the same runs, so the 200 ns target is not universal across
+queue depths. These are local observations, not a baseline or a cross-machine
+claim. Still open: reference-runner activation on a stable named runner
+(W6.11), paired same-runner C/Rust LT encode/generate/push/peel/decode/repair
+measurements (`cargo` is unavailable here), and the later C/Rust ARC comparison
+hooks. No hosted or cross-machine performance evidence is claimed.
 
 **Objective:** implement the missing performance evidence before using ARC's
 200 ns/block target or Rust LT results as a gate, baseline, or cutover argument.

@@ -6,7 +6,7 @@
  * bench_spray shape: warmup, best of ROUNDS, sink-guarded loop,
  * BENCH line with ns/cycles per decision and decisions per second.
  * RECORDED ONLY — the <= 15 cyc/decision gate activates with W2.6
- * once seeded methods land (plan §10); bench_arc lands with W4.2.
+ * once seeded methods land (plan §10); bench_arc lands with W6.12.
  */
 
 #include "bench_common.h"

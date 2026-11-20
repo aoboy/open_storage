@@ -55,6 +55,7 @@ jobs:
           python3 scripts/check_rust_seam.py --selftest
           python3 scripts/fetch_bench_history.py --selftest
           python3 scripts/bench_regression.py --selftest
+          python3 scripts/bench_arc_gate.py --selftest
 
   build-and-test:
     runs-on: ubuntu-latest

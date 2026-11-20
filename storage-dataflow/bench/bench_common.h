@@ -10,7 +10,7 @@
  *
  * Benches are RECORDED, never ctest-gated (plan §10); thresholds
  * activate with their owning waves (wm select gate: W2.6; arc gate:
- * W4.2).
+ * W6.12).
  */
 
 #include "sdf/common/timer.h"
