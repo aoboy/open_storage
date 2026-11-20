@@ -501,7 +501,7 @@ ADRs [0001–0009](../adr/).
                                 consumers execute BOTH LT and nanorq in
                                 both variants. Full make ci is green:
                                 C default/ASan+UBSan/TSan 28/28 each,
-                                Python 118/118, plus the dual-variant
+                                Python 121/121, plus the dual-variant
                                 gates above. The comparison window stays
                                 open: no C removal, default cutover or
                                 performance claim. The hosted rust-seam
@@ -621,7 +621,7 @@ ADRs [0001–0009](../adr/).
                                 Evidence: C parity validates 1,410
                                 comparisons with zero pending; 28/28
                                 CTest in default, ASan+UBSan, and TSan;
-                                Python 118/118; 200,000 expanded fountain
+                                Python 121/121; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg, and the isolated wheel now
@@ -630,7 +630,7 @@ ADRs [0001–0009](../adr/).
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
                                 28/28 C in default/ASan+UBSan/TSan,
-                                118/118 Python, install, Deb, and wheel
+                                121/121 Python, install, Deb, and wheel
                                 legs. Hosted run 44774290565 is green,
                                 including rust-seam and the isolated
                                 wheel artifact. Nightly history,
@@ -1798,9 +1798,10 @@ queue depths. These are local observations, not a baseline or a cross-machine
 claim. Paired same-runner C/Rust LT measurements now exist locally
 (`out/bench/fountain_paired.txt`); CI has a dedicated `fountain-bench` job,
 and the nightly bench workflow records and uploads a `fountain-paired`
-artifact, fetches the prior seven days, and validates each historical file as
-a complete C/Rust pair. Still open: a stable named reference runner, seven
-retained nightly samples, and the later C/Rust ARC comparison hooks. No hosted or cross-machine
+artifact, fetches the prior seven days, validates each historical file as a
+complete C/Rust pair, and writes a per-configuration multi-night median
+report. Still open: a stable named reference runner, seven retained nightly
+samples, and the later C/Rust ARC comparison hooks. No hosted or cross-machine
 performance evidence is claimed yet.
 
 **Objective:** implement the missing performance evidence before using ARC's

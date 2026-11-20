@@ -81,6 +81,19 @@ jobs:
             done
           fi
 
+      - name: Summarize paired fountain history
+        run: |
+          python3 scripts/bench_fountain_history.py \
+            --history fountain-history --out out/bench/fountain_history.json
+
+      - name: Upload the paired fountain history report
+        uses: actions/upload-artifact@v6
+        with:
+          name: fountain-paired-history
+          path: storage-dataflow/out/bench/fountain_history.json
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Fetch the 7-day history
         env:
           GITHUB_TOKEN: ${{ github.token }}
