@@ -2134,9 +2134,10 @@ that the storage platform owns data-plane sidecar injection.
 
 **Status:** partially implemented locally — the dependency-free `sdf-arc`
 offset-estimator slice mirrors Algorithm 1/2 and reproduces the C golden fixed
-point, and the release queue now mirrors the stable `(T_n, seq)` ordering;
-`make rust-arc` passes fmt/clippy/tests. The C pacer remains the default;
-guard/deadline drain, callbacks, sidecar behavior, the public-ABI staticlib
+point, the release queue mirrors the stable `(T_n, seq)` ordering, and the QG
+guard/deadline drain covers predecessor re-queue, park timeout, and successor
+wake; `make rust-arc` passes fmt/clippy/tests. The C pacer remains the default;
+callbacks, slab storage, statistics, sidecar behavior, the public-ABI staticlib
 integration, and consumer parity are still pending.
 
 **Objective:** port the corrected ARC pacer to Rust while preserving ordering,

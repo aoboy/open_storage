@@ -77,6 +77,28 @@ impl ReleaseQueue {
     pub fn clear(&mut self) {
         self.heap.clear();
     }
+
+    pub fn min_predecessor_t_n(&self, block_n: u64) -> Option<u64> {
+        self.heap
+            .iter()
+            .filter(|release| release.block_n + 1 == block_n)
+            .map(|release| release.t_n)
+            .min()
+    }
+
+    pub fn wake_successor(&mut self, block_n: u64, now_ns: u64) -> bool {
+        let mut items = std::mem::take(&mut self.heap).into_vec();
+        let mut woken = false;
+        for release in &mut items {
+            if release.block_n == block_n && release.parked && release.t_n > now_ns {
+                release.t_n = now_ns;
+                release.parked = false;
+                woken = true;
+            }
+        }
+        self.heap = BinaryHeap::from(items);
+        woken
+    }
 }
 
 #[cfg(test)]
