@@ -12,6 +12,8 @@ project(storage_dataflow
     VERSION "${SDF_VER_MAJOR}.${SDF_VER_MINOR}.${SDF_VER_PATCH}"
     LANGUAGES C)
 
+find_package(Threads REQUIRED)
+
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -37,6 +39,28 @@ add_library(sdf_common STATIC
     src/c/common/metrics_endpoint.c
 )
 target_include_directories(sdf_common PUBLIC include)
+target_link_libraries(sdf_common PUBLIC Threads::Threads)
+
+# --- Origin drivers (plan W1, ADR-0008) -----------------------------------
+add_library(sdf_origin STATIC src/c/origin/origin_common.c)
+target_include_directories(sdf_origin PUBLIC include)
+
+add_library(sdf_origin_loopback STATIC src/c/origin/loopback/loopback_origin.c)
+target_link_libraries(sdf_origin_loopback PUBLIC sdf_common sdf_origin)
+target_include_directories(sdf_origin_loopback PUBLIC include)
+
+add_library(sdf_origin_http STATIC src/c/origin/http/http_origin.c)
+target_link_libraries(sdf_origin_http PUBLIC sdf_common sdf_origin)
+target_include_directories(sdf_origin_http PUBLIC include)
+
+# W6.15: explicit class selection and strict-TOML origin materialization.
+add_library(sdf_origin_registry STATIC
+    src/c/origin/origin_registry.c
+    src/c/origin/origin_config.c)
+target_link_libraries(sdf_origin_registry PUBLIC sdf_common sdf_origin
+                                                sdf_origin_loopback
+                                                sdf_origin_http)
+target_include_directories(sdf_origin_registry PUBLIC include)
 
 # --- Whack-a-Mole dispatch ---------------------------------------------------
 add_library(sdf_wm STATIC
@@ -46,7 +70,7 @@ add_library(sdf_wm STATIC
     src/c/whack_a_mole/wm_shm.c
     src/c/whack_a_mole/wm_proxy.c
 )
-target_link_libraries(sdf_wm PUBLIC sdf_common)
+target_link_libraries(sdf_wm PUBLIC sdf_common sdf_origin_registry)
 target_include_directories(sdf_wm PUBLIC include)
 
 # --- Fountain codec (plan W3/W6.8; ADR-0003/0004 arms) ---------------------
@@ -132,8 +156,7 @@ add_library(sdf_fluid STATIC
     src/c/fluid/fluid_repair_main.c
 )
 target_link_libraries(sdf_fluid PUBLIC sdf_common sdf_fountain sdf_wm
-                                        sdf_origin_loopback)
-target_link_libraries(sdf_fluid PUBLIC sdf_fountain sdf_common)
+                                        sdf_origin_registry)
 target_include_directories(sdf_fluid PUBLIC include)
 
 # --- ARC pacer (plan W4, ADR-0006) -----------------------------------------
@@ -154,18 +177,6 @@ target_link_libraries(wm-proxy PRIVATE sdf_wm sdf_origin_loopback sdf_common)
 # --- Apps (plan W3.6: the repair e2e driver) -------------------------------
 add_executable(fluid-repair src/c/fluid/fluid_repair_shell.c)
 target_link_libraries(fluid-repair PRIVATE sdf_fluid)
-
-# --- Origin drivers (plan W1, ADR-0008) -----------------------------------
-add_library(sdf_origin STATIC src/c/origin/origin_common.c)
-target_include_directories(sdf_origin PUBLIC include)
-
-add_library(sdf_origin_loopback STATIC src/c/origin/loopback/loopback_origin.c)
-target_link_libraries(sdf_origin_loopback PUBLIC sdf_common sdf_origin)
-target_include_directories(sdf_origin_loopback PUBLIC include)
-
-add_library(sdf_origin_http STATIC src/c/origin/http/http_origin.c)
-target_link_libraries(sdf_origin_http PUBLIC sdf_common sdf_origin)
-target_include_directories(sdf_origin_http PUBLIC include)
 
 # --- Benches (plan W0.5: recorded, never ctest-gated) --------------------
 add_executable(bench_wm bench/bench_wm.c)
@@ -188,7 +199,7 @@ include(CMakePackageConfigHelpers)
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS sdf_common sdf_origin sdf_origin_loopback sdf_origin_http
-        sdf_wm sdf_fountain sdf_fluid sdf_arc
+        sdf_origin_registry sdf_wm sdf_fountain sdf_fluid sdf_arc
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 # The vendored RaptorQ archive is sdf_fountain's private link dep; the
@@ -200,8 +211,8 @@ install(FILES ${CMAKE_SOURCE_DIR}/third_party/nanorq/libnanorq.a
 # pkg-config: one .pc per link granularity (core = the whole stack today;
 # consumers pick what they call — the deps chain is flat, no --static
 # surprises because everything vendored builds from source in-tree)
-foreach(pc sdf_common sdf_wm sdf_fountain sdf_fluid sdf_arc
-         sdf_origin_loopback sdf_origin_http)
+foreach(pc sdf_common sdf_origin sdf_wm sdf_fountain sdf_fluid sdf_arc
+         sdf_origin_loopback sdf_origin_http sdf_origin_registry)
     string(REPLACE sdf_ "" _short "${pc}")
     configure_file(packaging/${pc}.pc.in ${pc}.pc @ONLY)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${pc}.pc

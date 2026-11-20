@@ -6,6 +6,6 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 Name: sdf_wm
 Description: Storage Dataflow Stack — Whack-a-Mole seeded dispatch + severity controller
 Version: @PROJECT_VERSION@
-Requires: sdf_common
-Libs: -L${libdir} -lsdf_wm -lsdf_origin_loopback -lsdf_origin
+Requires: sdf_common sdf_origin_registry
+Libs: -L${libdir} -lsdf_wm
 Cflags: -I${includedir}

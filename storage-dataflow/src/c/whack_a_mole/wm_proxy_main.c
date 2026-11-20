@@ -15,6 +15,7 @@
 #include "sdf/common/metrics_endpoint.h"
 #include "sdf/common/timer.h"
 #include "sdf/origin.h"
+#include "sdf/origin/config.h"
 #include "sdf/wm.h"
 #include "sdf/wm_proxy.h"
 
@@ -43,6 +44,31 @@ static uint32_t parse_u32(const sdf_config_t *cfg, const char *key, uint32_t fal
 static double parse_d(const sdf_config_t *cfg, const char *key, double fallback) {
     const char *s = sdf_config_get(cfg, key, NULL);
     return s ? atof(s) : fallback;
+}
+
+static void remove_paths(char paths[][160], uint32_t count) {
+    for (uint32_t i = 0; i < count; i++) {
+        unlink(paths[i]);
+    }
+}
+
+static void profile_set_equal(wm_profile_t *profile) {
+    if (profile->n == 0 || profile->n > WM_MAX_PATHS) {
+        return;
+    }
+    for (uint32_t i = 0; i < WM_MAX_PATHS; i++) {
+        profile->b[i] = 0;
+    }
+    uint32_t assigned = 0;
+    uint32_t base = profile->m / profile->n;
+    for (uint32_t i = 0; i < profile->n; i++) {
+        profile->b[i] = base;
+        assigned += base;
+    }
+    for (uint32_t i = 0; assigned < profile->m; i = (i + 1) % profile->n) {
+        profile->b[i]++;
+        assigned++;
+    }
 }
 
 /* the live scrape body: the run's own evidence, Prometheus text */
@@ -85,6 +111,8 @@ int main(int argc, char **argv) {
     int pc_kill_override = 0;
     const char *pc_shm_name = NULL;
     uint64_t pc_pace_ns = 0;
+    int harness_mode = 0;
+    int profile_fracs_set = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-C") == 0 && i + 1 < argc) {
@@ -106,12 +134,17 @@ int main(int argc, char **argv) {
             pc_shm_name = argv[++i];
         } else if (strcmp(argv[i], "--pace-ns") == 0 && i + 1 < argc) {
             pc_pace_ns = strtoull(argv[++i], NULL, 10); /* dispatch-side */
+        } else if (strcmp(argv[i], "--harness") == 0) {
+            harness_mode = 1;
         } else {
             fprintf(stderr,
-                    "usage: %s [-C wm.toml] [--profile steady|slow|dies|"
-                    "flapping] [--units N] [--unit-bytes B] [--jobs J] "
-                    "[--rollout PCT] [--kill] [--shm NAME] [--pace-ns N]\n"
-                    "  SDF_METRICS_ENDPOINT=host:port serves the live scrape\n",
+                    "usage: %s [-C wm.toml] [--harness] "
+                    "[--profile steady|slow|dies|flapping] [--units N] "
+                    "[--unit-bytes B] [--jobs J] [--rollout PCT] [--kill] "
+                    "[--shm NAME] [--pace-ns N]\n"
+                    "  SDF_METRICS_ENDPOINT=host:port serves the live scrape\n"
+                    "  Without -C, generated loopback origins are used; with "
+                    "-C, [[origin]] entries are used unless --harness is set\n",
                     argv[0]);
             return 2;
         }
@@ -178,6 +211,7 @@ int main(int argc, char **argv) {
                 }
             }
             if (nf > 0 && nf <= WM_MAX_PATHS) {
+                profile_fracs_set = 1;
                 double sum = 0;
                 for (uint32_t i = 0; i < nf; i++) {
                     sum += vals[i];
@@ -210,53 +244,94 @@ int main(int argc, char **argv) {
     pc.shm_name = pc_shm_name;
     pc.dispatch_pace_ns = pc_pace_ns;
 
-    /* origins: loopback files we create now (harness mode) */
+    /* A configured run preserves the exact origin class and destination.
+     * Harness mode alone synthesizes the deterministic loopback files. */
     char paths[SDF_ORIGIN_MAX][160];
-    pc.n_origins = pc.profile.n;
-    for (uint32_t i = 0; i < pc.n_origins; i++) {
-        snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-wm-proxy-%d-%u.bin", (int)getpid(), i);
-        FILE *f = fopen(paths[i], "wb");
-        if (f == NULL) {
-            fprintf(stderr, "FAIL: cannot create %s\n", paths[i]);
+    uint32_t generated_count = 0;
+    int generated_origins = config_path == NULL || harness_mode;
+    if (!generated_origins) {
+        if (sdf_origin_config_load(&cfg, pc.origins, SDF_ORIGIN_MAX, &pc.n_origins) != 0) {
+            fprintf(stderr, "wm-proxy: invalid or absent dense [[origin]] configuration\n");
+            sdf_config_free(&cfg);
             return 1;
         }
-        static uint8_t blk[4096];
-        for (size_t k = 0; k < sizeof(blk); k++) {
-            blk[k] = (uint8_t)(k * 31u + i);
+        if (profile_fracs_set && pc.profile.n != pc.n_origins) {
+            fprintf(stderr, "wm-proxy: wm.init_fracs has %u paths but %u origins are configured\n",
+                    pc.profile.n, pc.n_origins);
+            sdf_config_free(&cfg);
+            return 1;
         }
-        for (uint64_t off = 0; off < SDF_WM_PROXY_OBJ_BYTES; off += sizeof(blk)) {
-            if (fwrite(blk, 1, sizeof(blk), f) != sizeof(blk)) {
-                fclose(f);
+        if (!profile_fracs_set) {
+            pc.profile.n = pc.n_origins;
+            profile_set_equal(&pc.profile);
+        }
+    } else {
+        pc.n_origins = pc.profile.n;
+        if (pc.n_origins == 0 || pc.n_origins > SDF_ORIGIN_MAX) {
+            fprintf(stderr, "wm-proxy: invalid harness origin count %u\n", pc.n_origins);
+            sdf_config_free(&cfg);
+            return 1;
+        }
+        for (uint32_t i = 0; i < pc.n_origins; i++) {
+            snprintf(paths[i], sizeof(paths[i]), "/tmp/sdf-wm-proxy-%d-%u.bin", (int)getpid(), i);
+            FILE *f = fopen(paths[i], "wb");
+            if (f == NULL) {
+                fprintf(stderr, "FAIL: cannot create %s\n", paths[i]);
+                remove_paths(paths, generated_count);
+                sdf_config_free(&cfg);
                 return 1;
             }
-        }
-        if (fclose(f) != 0) {
-            return 1;
-        }
+            static uint8_t blk[4096];
+            for (size_t k = 0; k < sizeof(blk); k++) {
+                blk[k] = (uint8_t)(k * 31u + i);
+            }
+            int write_failed = 0;
+            for (uint64_t off = 0; off < SDF_WM_PROXY_OBJ_BYTES; off += sizeof(blk)) {
+                if (fwrite(blk, 1, sizeof(blk), f) != sizeof(blk)) {
+                    write_failed = 1;
+                    break;
+                }
+            }
+            if (fclose(f) != 0) {
+                write_failed = 1;
+            }
+            if (write_failed) {
+                unlink(paths[i]);
+                remove_paths(paths, generated_count);
+                sdf_config_free(&cfg);
+                return 1;
+            }
+            generated_count++;
 
-        memset(&pc.origins[i], 0, sizeof(pc.origins[i]));
-        pc.origins[i].id = i;
-        pc.origins[i].cls = SDF_ORIGIN_LOOPBACK;
-        {
+            memset(&pc.origins[i], 0, sizeof(pc.origins[i]));
+            pc.origins[i].id = i;
+            pc.origins[i].cls = SDF_ORIGIN_LOOPBACK;
             size_t plen = strlen(paths[i]) + 1;
             if (plen > sizeof(pc.origins[i].dst)) {
                 fprintf(stderr, "FAIL: path too long\n");
+                remove_paths(paths, generated_count);
+                sdf_config_free(&cfg);
                 return 1;
             }
             memcpy(pc.origins[i].dst, paths[i], plen);
-        }
-        pc.origins[i].max_inflight = 64;
-        if (config_path != NULL) {
-            char key[64];
-            uint64_t v = 0;
-            snprintf(key, sizeof(key), "origin[%u].throttle_ns", i);
-            if (sdf_config_get_u64(&cfg, key, &v) == 0) {
-                pc.origins[i].throttle_ns = v;
+            pc.origins[i].max_inflight = 64;
+            if (config_path != NULL) {
+                char key[64];
+                uint64_t v = 0;
+                snprintf(key, sizeof(key), "origin[%u].throttle_ns", i);
+                if (sdf_config_get_u64(&cfg, key, &v) == 0) {
+                    pc.origins[i].throttle_ns = v;
+                }
             }
         }
     }
 
-    CHECK0(timeline_from_name(&pc, profile_name, pc.units));
+    if (timeline_from_name(&pc, profile_name, pc.units) != 0) {
+        fprintf(stderr, "wm-proxy: unknown profile %s\n", profile_name);
+        remove_paths(paths, generated_count);
+        sdf_config_free(&cfg);
+        return 1;
+    }
 
     /* live scrape (K.1b): render straight from the stats struct */
     sdf_wm_proxy_stats_t st;
@@ -266,13 +341,21 @@ int main(int argc, char **argv) {
     if (mep != NULL && mep[0] != '\0') {
         ep = sdf_metrics_endpoint_start(mep, proxy_render, &st);
         if (ep == NULL) {
+            remove_paths(paths, generated_count);
+            sdf_config_free(&cfg);
             return 1;
         }
     }
 
-    CHECK0(sdf_wm_proxy_run(&pc, &st));
+    int run_rc = sdf_wm_proxy_run(&pc, &st);
     if (ep != NULL) {
         sdf_metrics_endpoint_stop(ep);
+    }
+    remove_paths(paths, generated_count);
+    sdf_config_free(&cfg);
+    if (run_rc != 0) {
+        fprintf(stderr, "wm-proxy: run failed: %s (%d)\n", strerror(-run_rc), run_rc);
+        return 1;
     }
 
     printf("PROXY profile=%s units=%llu unit_bytes=%u jobs=%u wall_ms=%llu "
@@ -320,11 +403,6 @@ int main(int argc, char **argv) {
                    st.updates_applied);
         }
     }
-    for (uint32_t i = 0; i < pc.n_origins; i++) {
-        unlink(paths[i]);
-    }
-    sdf_config_free(&cfg);
-
     if (!gate) {
         fprintf(stderr, "wm-proxy: GATES FAILED\n");
         return 1;

@@ -21,10 +21,10 @@
 
 #include "sdf/wm_proxy.h"
 
+#include "sdf/common/log.h"
 #include "sdf/common/metrics.h"
 #include "sdf/common/timer.h"
 #include "sdf/origin.h"
-#include "sdf/origin/loopback.h"
 #include "sdf/wm_shm.h"
 
 #include <errno.h>
@@ -192,17 +192,37 @@ static void proxy_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, u
     }
 }
 
-static void timeline_apply(const sdf_wm_proxy_cfg_t *cfg, sdf_origin_t *o,
-                           uint64_t dispatched_before, uint64_t dispatched_now) {
+static int timeline_validate(const sdf_wm_proxy_cfg_t *cfg) {
+    for (uint32_t s = 0; s < cfg->n_steps && s < SDF_WM_PROXY_MAX_STEPS; s++) {
+        const sdf_wm_proxy_step_t *st = &cfg->steps[s];
+        if (st->origin >= cfg->n_origins) {
+            return -EINVAL;
+        }
+        if (st->throttle_ns != 0 && cfg->origins[st->origin].cls != SDF_ORIGIN_LOOPBACK) {
+            return -ENOTSUP;
+        }
+    }
+    return 0;
+}
+
+static int timeline_apply(const sdf_wm_proxy_cfg_t *cfg, sdf_origin_t *o,
+                          uint64_t dispatched_before, uint64_t dispatched_now) {
     for (uint32_t s = 0; s < cfg->n_steps && s < SDF_WM_PROXY_MAX_STEPS; s++) {
         const sdf_wm_proxy_step_t *st = &cfg->steps[s];
         if (st->at_unit > dispatched_before && st->at_unit <= dispatched_now) {
             if (st->throttle_ns != 0) {
-                (void)sdf_loopback_set_knob(o, st->origin, SDF_LB_THROTTLE_NS, st->throttle_ns);
+                int rc = sdf_origin_set_harness_throttle_ns(o, st->origin, st->throttle_ns);
+                if (rc != 0) {
+                    return rc;
+                }
             }
-            (void)o->ops->set_enable(o, st->origin, st->enable);
+            int rc = o->ops->set_enable(o, st->origin, st->enable);
+            if (rc != 0) {
+                return rc;
+            }
         }
     }
+    return 0;
 }
 
 int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
@@ -226,9 +246,24 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     out->n_origins = n_origins;
     out->kill_switch = cfg->kill_switch ? 1u : 0u;
 
-    sdf_origin_t o = {.ops = sdf_loopback_ops(), .impl = NULL};
-    if (o.ops->open(&o, cfg->origins, n_origins) != 0) {
-        return -EINVAL;
+    const sdf_origin_ops_t *ops = NULL;
+    sdf_origin_select_status_t select_status = SDF_ORIGIN_SELECT_INVALID;
+    int select_rc = sdf_origin_select(cfg->origins, n_origins, &ops, &select_status);
+    if (select_rc != 0) {
+        SDF_LOGE("WM proxy origin selection failed: %s (first class=%s)",
+                 sdf_origin_select_status_name(select_status),
+                 sdf_origin_cls_name(cfg->origins[0].cls));
+        return select_rc;
+    }
+    int timeline_rc = timeline_validate(cfg);
+    if (timeline_rc != 0) {
+        return timeline_rc;
+    }
+
+    sdf_origin_t o = {.ops = ops, .impl = NULL};
+    int open_rc = o.ops->open(&o, cfg->origins, n_origins);
+    if (open_rc != 0) {
+        return open_rc;
     }
 
     proxy_cb_state_t cbst;
@@ -273,6 +308,9 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     kcfg.t_min_ns = cfg->control_hz > 0 ? 1000000000ull / cfg->control_hz : kcfg.t_min_ns;
     wm_ctrl_t ctl;
     if (wm_ctrl_init(&ctl, &work, &kcfg, n_origins) != 0) {
+        if (shm_on) {
+            sdf_wm_shm_close(&shm);
+        }
         o.ops->close(&o);
         return -EINVAL;
     }
@@ -412,10 +450,19 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
         }
         out->dispatched[origin]++;
         out->dispatch_by_arm[arm][origin]++;
-        timeline_apply(cfg, &o, before, dispatched);
+        int step_rc = timeline_apply(cfg, &o, before, dispatched);
+        if (step_rc != 0) {
+            if (shm_on) {
+                sdf_wm_shm_close(&shm);
+            }
+            o.ops->close(&o);
+            return step_rc;
+        }
     }
 
-    /* drain: all accepted units complete (close flushes stragglers) */
+    /* Drain before publishing final statistics. A slow transport must not
+     * produce a successful run with completions still outstanding. */
+    int quiet = 0;
     for (int iter = 0; iter < 60000; iter++) {
         uint64_t inflight = 0;
         for (uint32_t i = 0; i < n_origins; i++) {
@@ -425,10 +472,18 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
             }
         }
         if (inflight == 0) {
+            quiet = 1;
             break;
         }
         sdf_sleep_ns(200000);
     }
+
+    if (shm_on) {
+        sdf_wm_shm_close(&shm); /* close does not unlink: the harness
+                                 * owns the segment lifecycle */
+    }
+    o.ops->close(&o); /* also establishes a completion/callback boundary */
+
     out->wall_ns = sdf_now_ns() - t0;
     for (uint32_t i = 0; i < n_origins; i++) {
         out->ok[i] = atomic_load_explicit(&cbst.ok[i], memory_order_relaxed);
@@ -439,13 +494,7 @@ int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out) {
     for (uint32_t i = 0; i < n_origins; i++) {
         out->end_profile_b[i] = work.b[i];
     }
-
-    if (shm_on) {
-        sdf_wm_shm_close(&shm); /* close does not unlink: the harness
-                                 * owns the segment lifecycle */
-    }
-    o.ops->close(&o);
-    return 0;
+    return quiet ? 0 : -ETIMEDOUT;
 }
 
 int sdf_wm_proxy_render_metrics(FILE *out, const sdf_wm_proxy_stats_t *stats) {

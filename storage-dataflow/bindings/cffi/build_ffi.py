@@ -45,13 +45,15 @@ HEADERS = [
 ]
 
 # Static link order: consumers before providers. sdf_fluid uses WM,
-# fountain and the loopback origin; fountain uses nanorq; everything
-# uses sdf_common.
+# fountain and the origin registry; the registry uses the loopback/HTTP
+# drivers; fountain uses nanorq; everything uses sdf_common.
 LIBRARIES = [
     "sdf_arc",
     "sdf_fluid",
     "sdf_fountain",
     "sdf_wm",
+    "sdf_origin_registry",
+    "sdf_origin_http",
     "sdf_origin_loopback",
     "sdf_origin",
     "sdf_common",

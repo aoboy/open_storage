@@ -1785,7 +1785,16 @@ emitted or explicitly external signal.
 
 ### PROMPT W6.15 — Production HTTP origins, HTTPS, and measured transport A/B
 
-**Status:** proposed; does not include W6.7 S3/NVMe-peer drivers.
+**Status:** partially implemented locally; this slice is explicitly not the
+full production-transport gate. Landed: explicit origin-class selection for WM
+and FLUID (loopback and HTTP drivers, clear `-EINVAL`/`-ENOTSUP` failures for
+mixed/unknown/S3/peer sets), strict `[[origin]]` materialization in both
+coordinators, retained harness modes, controlled in-process HTTP tests for WM
+fill/drain and multi-block FLUID repair, and bounded rejection of an overlong
+HTTP body. Still open: HTTPS with CA/hostname verification, allocation-free
+post-warmup transport, TLS certificate-failure tests, saturation/backpressure
+measurement, and `bench_origin` A/B evidence. No hosted, TLS, performance, or
+soak evidence has been produced. Does not include W6.7 S3/NVMe-peer drivers.
 
 **Objective:** move WM and FLUID beyond forced-loopback harness origins and
 turn the reference HTTP driver into a measured, bounded production candidate

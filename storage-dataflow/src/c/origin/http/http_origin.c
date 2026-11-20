@@ -309,8 +309,16 @@ static int do_fetch(http_origin_t *og, const http_job_t *j, uint8_t **out, uint3
                 drop_sock(og);
                 return -EIO;
             }
+            if (body_pre > j->req.len) {
+                /* More bytes than Content-Length arrived in the first read:
+                 * the connection is desynchronized and the body must not
+                 * overflow the bounded request-sized allocation. */
+                drop_sock(og);
+                return -EIO;
+            }
             uint8_t *body = malloc(j->req.len);
             if (body == NULL) {
+                drop_sock(og);
                 return -ENOMEM;
             }
             memcpy(body, sep + 4, body_pre);
@@ -385,7 +393,7 @@ static int http_open(sdf_origin_t *o, const sdf_origin_cfg_t *cfgs, uint32_t n) 
 
     uint64_t inflight = 0;
     for (uint32_t i = 0; i < n; i++) {
-        if (cfgs[i].id != i || cfgs[i].dst[0] == '\0') {
+        if (cfgs[i].id != i || cfgs[i].dst[0] == '\0' || cfgs[i].cls != SDF_ORIGIN_HTTP) {
             goto fail;
         }
         http_origin_t *og = &d->origins[i];
@@ -472,13 +480,15 @@ static int http_fetch(sdf_origin_t *o, const sdf_fetch_req_t *req, sdf_fetch_don
     j.cb = cb;
     j.ud = ud;
     j.submit_ns = sdf_now_ns();
+    /* Reserve completion visibility before the worker can pop the job. */
+    atomic_fetch_add_explicit(&og->in_flight, 1, memory_order_relaxed);
     if (!spsc_try_push(og->queue, &j)) {
+        atomic_fetch_sub_explicit(&og->in_flight, 1, memory_order_relaxed);
         return -EAGAIN;
     }
 
     atomic_fetch_add_explicit(&og->reqs_out, 1, memory_order_relaxed);
     atomic_fetch_add_explicit(&og->bytes_tx, req->len, memory_order_relaxed);
-    atomic_fetch_add_explicit(&og->in_flight, 1, memory_order_relaxed);
     return 0;
 }
 

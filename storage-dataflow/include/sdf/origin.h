@@ -42,6 +42,15 @@ typedef enum {
     SDF_ORIGIN_PEER = 3      /* deferred */
 } sdf_origin_cls_t;
 
+/** Result of selecting one origin driver for a configured origin set. */
+typedef enum {
+    SDF_ORIGIN_SELECT_OK = 0,
+    SDF_ORIGIN_SELECT_INVALID = 1,
+    SDF_ORIGIN_SELECT_MIXED = 2,
+    SDF_ORIGIN_SELECT_UNSUPPORTED = 3,
+    SDF_ORIGIN_SELECT_UNKNOWN = 4
+} sdf_origin_select_status_t;
+
 #define SDF_ORIGIN_MAX 64              /* matches WM_MAX_PATHS */
 #define SDF_ORIGIN_DST_MAX 256         /* file path / URL / endpoint */
 #define SDF_ORIGIN_UNIT_MAX (1u << 20) /* largest single fetch (1 MiB) */
@@ -150,6 +159,33 @@ struct sdf_origin {
 
 /** Class name for dumps/diagnostics ("loopback", "http", ...). */
 const char *sdf_origin_cls_name(uint32_t cls);
+
+/** Parse a TOML origin class name. Returns 0 or -EINVAL. */
+int sdf_origin_cls_parse(const char *name, uint32_t *out_cls);
+
+/**
+ * Select the driver for one configured origin set.
+ *
+ * All origins in a driver instance must have the same class. The selector
+ * never converts a class to loopback: mixed, unknown, S3 and peer sets fail
+ * with a specific status. Returns 0 on success, -EINVAL for an invalid or
+ * mixed set, or -ENOTSUP for a class whose driver is not implemented.
+ * out_status may be NULL; when present it always receives a specific result.
+ */
+int sdf_origin_select(const sdf_origin_cfg_t *cfgs, uint32_t n, const sdf_origin_ops_t **out_ops,
+                      sdf_origin_select_status_t *out_status);
+
+/** Stable diagnostic text for an origin selection status. */
+const char *sdf_origin_select_status_name(sdf_origin_select_status_t status);
+
+/**
+ * Apply a harness throttle through the origin seam.
+ *
+ * This is intentionally loopback-only. It returns -ENOTSUP for another
+ * driver, so a real HTTP configuration never silently loses a requested
+ * degradation step.
+ */
+int sdf_origin_set_harness_throttle_ns(sdf_origin_t *o, uint32_t origin_id, uint64_t throttle_ns);
 
 #ifdef __cplusplus
 }

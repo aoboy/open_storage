@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=${exec_prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: sdf_origin
+Description: Storage Dataflow Stack — origin seam utilities and driver ABI
+Version: @PROJECT_VERSION@
+Requires: sdf_common
+Libs: -L${libdir} -lsdf_origin
+Cflags: -I${includedir}

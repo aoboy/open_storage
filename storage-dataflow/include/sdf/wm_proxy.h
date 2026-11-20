@@ -49,7 +49,7 @@ typedef struct {
     uint32_t rollout_pct;
     int kill_switch;
 
-    /* origins ([origin] blocks; cls must be loopback for the harness) */
+    /* origins ([origin] blocks; one explicit loopback or HTTP class) */
     sdf_origin_cfg_t origins[SDF_ORIGIN_MAX];
     uint32_t n_origins;
 
@@ -112,8 +112,8 @@ typedef struct {
 
 /*
  * Run one fill workload synchronously. Returns 0 on success (out
- * filled), -EINVAL on bad configuration, -errno from the origin
- * driver on open failure.
+ * filled), -EINVAL on bad configuration, -ENOTSUP for an unavailable
+ * origin class, or -errno from the origin driver on open failure.
  */
 int sdf_wm_proxy_run(const sdf_wm_proxy_cfg_t *cfg, sdf_wm_proxy_stats_t *out);
 

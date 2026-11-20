@@ -42,6 +42,8 @@
 #define OBJ_BYTES (64u * 1024u)
 #define SRV_POLL_MS 100
 
+static _Atomic int g_overlong_body;
+
 /* ---- in-process HTTP/1.1 server ---------------------------------------- */
 
 typedef struct {
@@ -66,6 +68,18 @@ static const char *ci_find(const char *hay, const char *needle) {
         }
     }
     return NULL;
+}
+
+static int send_all_fd(int fd, const uint8_t *buf, size_t len) {
+    size_t off = 0;
+    while (off < len) {
+        ssize_t n = send(fd, buf + off, len - off, 0);
+        if (n <= 0) {
+            return -1;
+        }
+        off += (size_t)n;
+    }
+    return 0;
 }
 
 /* One connection: sequential keep-alive requests until the client goes. */
@@ -107,22 +121,32 @@ static void *conn_serve(void *argp) {
         char head[512];
         if (strcmp(path, "/obj") == 0 && rng != NULL && a <= b && b < OBJ_BYTES) {
             unsigned long long len = b - a + 1;
+            unsigned long long body_len = len;
+            if (atomic_load_explicit(&g_overlong_body, memory_order_relaxed)) {
+                /* Malformed-response leg: more body bytes than the declared
+                 * Content-Length, delivered with the header in one write. */
+                body_len += 4096;
+            }
             snprintf(head, sizeof(head),
                      "HTTP/1.1 206 Partial Content\r\n"
                      "Content-Range: bytes %llu-%llu/%u\r\n"
                      "Content-Length: %llu\r\n"
                      "Connection: keep-alive\r\n\r\n",
                      a, b, (unsigned)OBJ_BYTES, len);
-            if (send(c, head, strlen(head), 0) < 0) {
-                goto conn_done;
+            /* Send header and body as one contiguous write so the overlong
+             * leg deterministically exercises the excess-body check. */
+            size_t head_len = strlen(head);
+            size_t resp_len = head_len + (size_t)body_len;
+            uint8_t *resp = malloc(resp_len);
+            CHECK(resp != NULL);
+            memcpy(resp, head, head_len);
+            for (size_t i = 0; i < (size_t)body_len; i++) {
+                resp[head_len + i] = s->obj[(size_t)(a + i) % OBJ_BYTES];
             }
-            size_t off = 0;
-            while (off < len) {
-                ssize_t n = send(c, s->obj + a + off, len - off, 0);
-                if (n <= 0) {
-                    goto conn_done;
-                }
-                off += (size_t)n;
+            int send_rc = send_all_fd(c, resp, resp_len);
+            free(resp);
+            if (send_rc != 0) {
+                goto conn_done;
             }
         } else {
             snprintf(head, sizeof(head),
@@ -228,7 +252,7 @@ static void srv_stop(test_srv_t *s) {
 static test_srv_t g_srv;
 
 typedef struct {
-    _Atomic uint64_t ok, not_found, range, timeout, refused, cancelled;
+    _Atomic uint64_t ok, not_found, range, timeout, refused, cancelled, bad_response;
     _Atomic uint64_t bytes_ok;
 } tally_t;
 static tally_t g_t;
@@ -265,6 +289,10 @@ static void cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_
         break;
     case -ECANCELED:
         atomic_fetch_add(&g_t.cancelled, 1);
+        break;
+    case -EIO:
+        atomic_fetch_add(&g_t.bad_response, 1);
+        CHECK(out == NULL && len == 0);
         break;
     default:
         fprintf(stderr, "FAIL: unexpected cb status %d\n", status);
@@ -478,6 +506,28 @@ static void test_timeout_and_refused(void) {
     od.ops->close(&od);
 }
 
+static void test_malformed_overlong_body(void) {
+    char url[192];
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
+
+    sdf_origin_cfg_t c;
+    url_cfg(&c, 0, url, 1000);
+    sdf_origin_t o = {.ops = sdf_http_ops(), .impl = NULL};
+    atomic_store_explicit(&g_overlong_body, 1, memory_order_relaxed);
+    CHECK(o.ops->open(&o, &c, 1) == 0);
+    reset_tally();
+
+    sdf_fetch_req_t req = {.origin_id = 0, .job_id = 1, .obj_offset = 0, .len = 16};
+    CHECK(o.ops->fetch(&o, &req, cb, NULL) == 0);
+    wait_quiet(&o, 1);
+    CHECK(atomic_load(&g_t.bad_response) == 1); /* bounded, never an overflow */
+    sdf_origin_stats_t st;
+    CHECK(o.ops->stats(&o, 0, &st) == 0);
+    CHECK(st.reqs_failed == 1 && st.reqs_done == 0 && st.bytes_rx == 0);
+    o.ops->close(&o);
+    atomic_store_explicit(&g_overlong_body, 0, memory_order_relaxed);
+}
+
 static void test_drain_and_close_flush(void) {
     char url[192];
     snprintf(url, sizeof(url), "http://127.0.0.1:%d/obj", g_srv.port);
@@ -514,9 +564,10 @@ int main(void) {
     test_fetch_and_stats();
     test_inflight_covers_callback();
     test_timeout_and_refused();
+    test_malformed_overlong_body();
     test_drain_and_close_flush();
     srv_stop(&g_srv);
     printf("test_origin_http: ok (ranged data, stats, 404, timeout, "
-           "refused, drain, close flush)\n");
+           "refused, overlong body, drain, close flush)\n");
     return 0;
 }

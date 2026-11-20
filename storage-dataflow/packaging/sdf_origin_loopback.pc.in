@@ -6,6 +6,6 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 Name: sdf_origin_loopback
 Description: Storage Dataflow Stack — origin driver (sdf_origin_loopback)
 Version: @PROJECT_VERSION@
-Requires: sdf_common
+Requires: sdf_common sdf_origin
 Libs: -L${libdir} -lsdf_origin_loopback
 Cflags: -I${includedir}

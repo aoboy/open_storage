@@ -12,18 +12,18 @@
  * The sender's symbol stream is precomputed into the origin files
  * (symbols are deterministic from the ESI — the harness models the
  * sender), the coordinator sprays fetches via wm_select, per-unit
- * completion events carry (block, ESI) through a W0.2 SPSC ring back
- * to the coordinator, landed symbols are re-read from the stream and
- * fed to their block's decoder, the per-block FLUID budget admits per
+ * completion callbacks deliver symbols directly into their block's
+ * decoder through a bounded MPSC-safe handoff, the per-block FLUID
+ * budget admits per
  * round and the gate certifies — and when the gate fires before
  * decode sufficiency the mandatory per-block ARQ fallback re-fetches
  * the systematic ESIs with retry (never ship an incomplete block;
  * design 02's safety). The control arm is pure ARQ: every systematic
  * ESI retried until it lands.
  *
- * All origin files hold the same stream (sdf_fluid_repair_encode_stream
- * writes it; the harness copies it to each origin), so a landed unit
- * re-reads from any of them by absolute offset.
+ * All origins hold the same stream (sdf_fluid_repair_encode_stream
+ * writes it for the harness), so each successful completion carries the
+ * symbol bytes directly into the matching block decoder.
  *
  * The byte-exact gate: after decode, every block is compared against
  * the deterministic sender block for its index. `ok` is only 1 when
@@ -33,12 +33,12 @@
 
 #include "sdf/fluid_repair.h"
 
-#include "sdf/common/ring.h"
+#include "sdf/common/log.h"
 #include "sdf/common/timer.h"
 #include "sdf/fountain.h"
-#include "sdf/origin/loopback.h"
 
 #include <errno.h>
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,31 +46,26 @@
 
 /* Absolute stream index rides in obj_offset / len: idx = block * count +
  * esi, so the callback recovers both without extra request fields. */
-typedef struct {
-    uint32_t block;
-    uint32_t esi;
-    uint32_t landed; /* 1 when the symbol arrived */
-} repair_event_t;
+typedef struct repair_block_s repair_block_t;
 
+/*
+ * W6.15: HTTP owns one worker per origin, so completions are MPSC. The
+ * coordinator no longer reads symbols back from a local file: each callback
+ * copies its symbol into the matching decoder while holding one bounded
+ * mutex. The per-index landed map makes retries idempotent and the mutex
+ * serializes decoder mutation across origin workers.
+ */
 typedef struct {
-    spsc_ring_t *ring;
-    uint8_t *mem;
-    uint32_t count; /* symbols per block */
+    pthread_mutex_t lock;
+    repair_block_t *blocks;
+    uint8_t *landed;
+    uint32_t count;   /* symbols per block */
+    uint32_t nblocks; /* blocks in this repair object */
+    uint32_t sym_len; /* exact bytes in one symbol */
 } repair_ctx_t;
 
 static void repair_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
-                      int status) {
-    (void)out;
-    (void)len;
-    repair_ctx_t *ctx = ud;
-    uint32_t idx = req->len ? (uint32_t)(req->obj_offset / req->len) : 0;
-    repair_event_t ev = {
-        .block = ctx->count ? idx / ctx->count : 0,
-        .esi = ctx->count ? idx % ctx->count : 0,
-        .landed = status == 0 ? 1u : 0u,
-    };
-    (void)spsc_try_push(ctx->ring, &ev);
-}
+                      int status);
 
 static uint32_t object_blocks(const sdf_fluid_repair_cfg_t *cfg) {
     return cfg->n_blocks ? cfg->n_blocks : 1u;
@@ -214,27 +209,9 @@ static int submit_symbol(sdf_origin_t *o, wm_compiled_t *sel, uint64_t *counter,
     return 0;
 }
 
-/* Feed one landed (block, ESI) to that block's decoder from the stream. */
-static int feed_symbol(void *dec, FILE *stream, uint32_t block, uint32_t esi,
-                       const sdf_fluid_repair_cfg_t *cfg, uint64_t per_block_bytes,
-                       uint64_t *rx_bytes) {
-    uint8_t sym[8192];
-    if (cfg->sym_len > sizeof(sym)) {
-        return -EINVAL;
-    }
-    uint64_t off = (uint64_t)block * per_block_bytes + (uint64_t)esi * cfg->sym_len;
-    if (fseek(stream, (long)off, SEEK_SET) != 0 ||
-        fread(sym, 1, cfg->sym_len, stream) != cfg->sym_len) {
-        return -EIO;
-    }
-    *rx_bytes += cfg->sym_len;
-    (void)fd_push(dec, esi, sym, cfg->sym_len); /* duplicates counted */
-    return 0;
-}
-
 /* ---- per-block coordinator state ---------------------------------------- */
 
-typedef struct {
+struct repair_block_s {
     /* 8-byte fields first: the budget/gate tails are 8-aligned, so the
      * small fields packed at the end leave the struct padding-free
      * (clang-tidy performance check at the W6.4 gate). */
@@ -250,7 +227,44 @@ typedef struct {
     int arq_fallback;
     int ok;
     uint32_t decode_rank;
-} repair_block_t;
+};
+
+/* Deliver one successful completion into its block decoder. */
+static void repair_cb(void *ud, const sdf_fetch_req_t *req, const uint8_t *out, uint32_t len,
+                      int status) {
+    repair_ctx_t *ctx = ud;
+    if (status != 0 || out == NULL || req == NULL || req->len != ctx->sym_len || ctx->count == 0) {
+        return;
+    }
+
+    uint64_t index = req->obj_offset / req->len;
+    uint64_t total = (uint64_t)ctx->nblocks * ctx->count;
+    if (index >= total) {
+        return;
+    }
+
+    pthread_mutex_lock(&ctx->lock);
+    if (!ctx->landed[index]) {
+        uint32_t block = (uint32_t)(index / ctx->count);
+        uint32_t esi = (uint32_t)(index % ctx->count);
+        repair_block_t *bl = &ctx->blocks[block];
+        /* Zero means added and one means redundant/already sufficient;
+         * both are successful delivery. Only negative returns are errors. */
+        if (fd_push(bl->dec, esi, out, len) >= 0) {
+            ctx->landed[index] = 1;
+            bl->received++;
+            bl->bytes_rx += len;
+        }
+    }
+    pthread_mutex_unlock(&ctx->lock);
+}
+
+static int repair_symbol_landed(repair_ctx_t *ctx, uint64_t index) {
+    pthread_mutex_lock(&ctx->lock);
+    int landed = ctx->landed[index] != 0;
+    pthread_mutex_unlock(&ctx->lock);
+    return landed;
+}
 
 static int block_active(const repair_block_t *b, uint32_t count) {
     return !fd_ready(b->dec) && !fg_done(&b->gate) && b->next_esi < count;
@@ -335,41 +349,62 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
         fg_init(&blocks[b].gate, eps, blocks[b].budget.n);
     }
 
-    /* origins with the injected loss */
-    sdf_origin_t o = {.ops = sdf_loopback_ops(), .impl = NULL};
+    const sdf_origin_ops_t *ops = NULL;
+    sdf_origin_select_status_t select_status = SDF_ORIGIN_SELECT_INVALID;
+    int select_rc = sdf_origin_select(cfg->origins, cfg->n_origins, &ops, &select_status);
+    if (select_rc != 0) {
+        SDF_LOGE("fluid repair origin selection failed: %s (first class=%s)",
+                 sdf_origin_select_status_name(select_status),
+                 sdf_origin_cls_name(cfg->origins[0].cls));
+        return select_rc;
+    }
+
+    /* Preserve the configured class and destination. The harness loss knob
+     * applies only to loopback; a real HTTP origin gets its loss from the
+     * network. */
     sdf_origin_cfg_t ocopies[SDF_REPAIR_MAX_ORIGINS];
     for (uint32_t i = 0; i < cfg->n_origins; i++) {
         ocopies[i] = cfg->origins[i];
-        ocopies[i].cls = SDF_ORIGIN_LOOPBACK;
-        ocopies[i].loss_pct = cfg->loss_pct;
-        ocopies[i].max_inflight = 64;
+        if (ocopies[i].cls == SDF_ORIGIN_LOOPBACK) {
+            ocopies[i].loss_pct = cfg->loss_pct;
+        }
+        if (ocopies[i].max_inflight == 0) {
+            ocopies[i].max_inflight = 64;
+        }
     }
 
-    /* completion ring (cb -> coordinator); sized to hold one admit
-     * round so a wave can never silently drop completion events */
     uint32_t wave_cfg = cfg->wave ? cfg->wave : sdf_fluid_budget_n(cfg->k, eps);
     if (wave_cfg == 0) {
         wave_cfg = 1;
     }
-    uint32_t ring_cap = 256;
-    while (ring_cap < wave_cfg && ring_cap < 65536u) {
-        ring_cap <<= 1;
-    }
-    uint32_t round_budget = wave_cfg < ring_cap ? wave_cfg : ring_cap;
+    uint32_t round_budget = wave_cfg;
 
     repair_ctx_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.blocks = blocks;
     ctx.count = count;
-    size_t qsz = spsc_sizeof(ring_cap, (uint32_t)sizeof(repair_event_t));
-    ctx.mem = qsz ? aligned_alloc(64, (qsz + 63u) & ~63u) : NULL;
-    ctx.ring = (spsc_ring_t *)ctx.mem;
+    ctx.nblocks = nblocks;
+    ctx.sym_len = cfg->sym_len;
+    size_t landed_count = (size_t)nblocks * count;
+    ctx.landed = calloc(landed_count, sizeof(*ctx.landed));
+    if (ctx.landed == NULL) {
+        return -ENOMEM;
+    }
+    int mutex_rc = pthread_mutex_init(&ctx.lock, NULL);
+    if (mutex_rc != 0) {
+        free(ctx.landed);
+        return -mutex_rc;
+    }
 
-    FILE *stream = NULL;
+    sdf_origin_t o = {.ops = ops, .impl = NULL};
     wm_profile_t prof;
     wm_compiled_t sel;
     int origins_open = 0;
     int rc = -EINVAL;
 
-    if (o.ops->open(&o, ocopies, cfg->n_origins) != 0) {
+    int open_rc = o.ops->open(&o, ocopies, cfg->n_origins);
+    if (open_rc != 0) {
+        rc = open_rc;
         goto done;
     }
     origins_open = 1;
@@ -383,18 +418,6 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
             rc = -EINVAL;
             goto done;
         }
-    }
-
-    if (ctx.mem == NULL ||
-        spsc_init(ctx.ring, ctx.mem, ring_cap, (uint32_t)sizeof(repair_event_t)) != 0) {
-        rc = -EINVAL;
-        goto done;
-    }
-
-    /* stream readback (all origin files hold the same stream) */
-    stream = fopen(ocopies[0].dst, "rb");
-    if (stream == NULL) {
-        goto done;
     }
 
     /* equal-weight spray profile */
@@ -418,43 +441,31 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
 
     if (cfg->arm == SDF_REPAIR_CONTROL) {
         /* ---- control arm: plain ARQ with retry, block by block -------- */
-        uint8_t *sym = malloc(cfg->sym_len);
-        if (sym == NULL) {
-            goto done;
-        }
         for (uint32_t b = 0; b < nblocks; b++) {
             repair_block_t *bl = &blocks[b];
             for (uint32_t e = 0; e < cfg->k; e++) {
-                int landed = 0;
+                uint64_t index = (uint64_t)b * count + e;
+                int landed = repair_symbol_landed(&ctx, index);
                 for (int attempt = 0; attempt < 64 && !landed; attempt++) {
                     uint64_t off = (uint64_t)b * per_block_bytes + (uint64_t)e * cfg->sym_len;
                     if (submit_symbol(&o, &sel, &counter, off, cfg->sym_len, &ctx, &bl->sent,
                                       &bl->bytes_tx) != 0) {
                         continue;
                     }
-                    if (wait_quiet(&o, cfg->n_origins) == 0) {
-                        repair_event_t ev;
-                        while (spsc_try_pop(ctx.ring, &ev)) {
-                            if (ev.landed && ev.block == b && ev.esi == e) {
-                                landed = 1;
-                            }
-                        }
+                    int wait_rc = wait_quiet(&o, cfg->n_origins);
+                    if (wait_rc != 0) {
+                        /* Decoder reads and final decode require a complete
+                         * callback boundary; close drains before cleanup. */
+                        rc = wait_rc;
+                        goto done;
                     }
+                    landed = repair_symbol_landed(&ctx, index);
                 }
                 if (!landed) { /* pathological loss beyond the retry cap */
                     break;
                 }
-                uint64_t off = (uint64_t)b * per_block_bytes + (uint64_t)e * cfg->sym_len;
-                if (fseek(stream, (long)off, SEEK_SET) != 0 ||
-                    fread(sym, 1, cfg->sym_len, stream) != cfg->sym_len ||
-                    fd_push(bl->dec, e, sym, cfg->sym_len) != 0) {
-                    break;
-                }
-                bl->received++;
-                bl->bytes_rx += cfg->sym_len;
             }
         }
-        free(sym);
     } else {
         /* ---- FLUID arms: the design-02 loop, per block ---------------- */
         for (;;) {
@@ -510,21 +521,12 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
                 sdf_histogram_observe(&out->round_size, admitted);
             }
 
-            if (wait_quiet(&o, cfg->n_origins) != 0) {
-                break;
+            int wait_rc = wait_quiet(&o, cfg->n_origins);
+            if (wait_rc != 0) {
+                rc = wait_rc;
+                goto done;
             }
 
-            repair_event_t ev;
-            while (spsc_try_pop(ctx.ring, &ev)) {
-                if (!ev.landed || ev.block >= nblocks) {
-                    continue;
-                }
-                repair_block_t *bl = &blocks[ev.block];
-                if (feed_symbol(bl->dec, stream, ev.block, ev.esi, cfg, per_block_bytes,
-                                &bl->bytes_rx) == 0) {
-                    bl->received++;
-                }
-            }
             /* Per-block gate/budget accounting: only blocks that have
              * admitted something participate (a not-yet-scheduled
              * block must not certify on a vacuous 0/0 observation). */
@@ -551,25 +553,22 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
             }
             bl->arq_fallback = 1;
             for (uint32_t e = 0; e < cfg->k; e++) {
-                int landed = 0;
+                uint64_t index = (uint64_t)b * count + e;
+                int landed = repair_symbol_landed(&ctx, index);
                 for (int attempt = 0; attempt < 64 && !landed; attempt++) {
                     uint64_t off = (uint64_t)b * per_block_bytes + (uint64_t)e * cfg->sym_len;
                     if (submit_symbol(&o, &sel, &counter, off, cfg->sym_len, &ctx, &bl->sent,
                                       &bl->bytes_tx) != 0) {
                         continue;
                     }
-                    if (wait_quiet(&o, cfg->n_origins) == 0) {
-                        repair_event_t ev;
-                        while (spsc_try_pop(ctx.ring, &ev)) {
-                            if (ev.landed && ev.block == b && ev.esi == e) {
-                                landed = 1;
-                            }
-                        }
+                    int wait_rc = wait_quiet(&o, cfg->n_origins);
+                    if (wait_rc != 0) {
+                        /* Decoder reads and final decode require a complete
+                         * callback boundary; close drains before cleanup. */
+                        rc = wait_rc;
+                        goto done;
                     }
-                }
-                if (landed &&
-                    feed_symbol(bl->dec, stream, b, e, cfg, per_block_bytes, &bl->bytes_rx) == 0) {
-                    bl->received++;
+                    landed = repair_symbol_landed(&ctx, index);
                 }
             }
         }
@@ -609,18 +608,16 @@ int sdf_fluid_repair_run(const sdf_fluid_repair_cfg_t *cfg, sdf_fluid_repair_sta
     rc = 0;
 
 done:
-    if (stream != NULL) {
-        fclose(stream);
+    if (origins_open) {
+        o.ops->close(&o); /* flush callbacks before releasing their state */
     }
-    free(ctx.mem);
+    pthread_mutex_destroy(&ctx.lock);
+    free(ctx.landed);
     for (uint32_t b = 0; b < nblocks; b++) {
         if (blocks[b].dec != NULL) {
             fd_destroy(blocks[b].dec);
             free(blocks[b].dec);
         }
-    }
-    if (origins_open) {
-        o.ops->close(&o);
     }
     out->wall_ns = sdf_now_ns() - t0;
     sdf_histogram_observe(&out->repair_duration_ns, out->wall_ns);

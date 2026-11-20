@@ -11,8 +11,9 @@
  * decode-rank deficit. The sender's symbol stream is precomputed into
  * the origin data files (symbols are deterministic from the ESI —
  * modeling the sender); the coordinator sprays fetches via wm_select
- * with the C controller's stats-driven profile, loopback loss_pct
- * models the WAN, the FLUID budget admits per wave, the gate
+ * with the C controller's stats-driven profile. Loopback loss_pct
+ * models the WAN while HTTP uses the real network, the FLUID budget
+ * admits per wave, the gate
  * certifies, and — when the gate fires before decode sufficiency —
  * the mandatory per-block ARQ fallback re-fetches the missing
  * systematic ESIs (never ship an incomplete block; design 02's
@@ -58,7 +59,7 @@ typedef struct {
     double eps;       /* slack (ignored by the control arm) */
     double loss_pct;  /* loopback injected transport loss, 0..100 */
 
-    /* origins: loopback files created by the harness caller */
+    /* origins: one explicit loopback or HTTP class per repair set */
     sdf_origin_cfg_t origins[SDF_REPAIR_MAX_ORIGINS];
     uint32_t n_origins;
     uint32_t wave; /* symbols per admit round (default 16) */
@@ -105,8 +106,9 @@ typedef struct {
 } sdf_fluid_repair_stats_t;
 
 /*
- * Run one repair job synchronously. The caller pre-creates the origin
- * data files (at least sdf_fluid_repair_stream_bytes — see below).
+ * Run one repair job synchronously. Loopback callers pre-create the
+ * origin data files (at least sdf_fluid_repair_stream_bytes — see
+ * below); HTTP callers serve the same byte range from the configured URL.
  * Returns 0 and fills out. `out.ok` is the byte-exact gate: every
  * block was decoded AND compared against the expected sender block.
  */

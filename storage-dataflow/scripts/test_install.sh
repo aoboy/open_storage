@@ -72,7 +72,17 @@ assert lib.arc_sidecar_shadow_stats(shadow) == 0
 lib.arc_sidecar_stop()
 assert lib.sdf_fluid_budget_n(64, 0.1) == 72
 assert ffi.sizeof("fe_cfg_t") > 0
-print("installed CFFI: OK (arc sidecar + fluid budget + fountain ABI)")
+
+origins = ffi.new("sdf_origin_cfg_t[]", 1)
+origins[0].id = 0
+origins[0].cls = lib.SDF_ORIGIN_HTTP
+origins[0].dst = b"http://installed.example/obj"
+ops = ffi.new("const sdf_origin_ops_t **")
+status = ffi.new("sdf_origin_select_status_t *")
+assert lib.sdf_origin_select(origins, 1, ops, status) == 0
+assert status[0] == lib.SDF_ORIGIN_SELECT_OK
+assert ffi.cast("void *", ops[0].open) != ffi.NULL
+print("installed CFFI: OK (arc sidecar + fluid budget + fountain ABI + origin selector)")
 PY
 else
     echo "test_install: cffi unavailable; installed CFFI leg skipped" >&2

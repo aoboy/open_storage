@@ -8,11 +8,15 @@
  */
 
 #include "sdf/arc.h"
+#include "sdf/common/config.h"
+#include "sdf/origin/config.h"
+#include "sdf/origin/http.h"
 #include "sdf/version.h"
 #include "sdf/wm.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int main(void) {
     if (!SDF_VERSION_AT_LEAST(1, 0, 0)) {
@@ -40,6 +44,30 @@ int main(void) {
     }
     if (counts[0] != 512 || counts[1] != 512) {
         fprintf(stderr, "install-hello: wm select counts wrong\n");
+        return 1;
+    }
+
+    /* Origin seam: materialize a strict [[origin]] entry and select its
+     * driver without doing network I/O. This proves the registry and both
+     * driver archives are actually extracted from the installed surface. */
+    sdf_config_entry_t entries[2];
+    memset(entries, 0, sizeof(entries));
+    snprintf(entries[0].key, sizeof(entries[0].key), "origin[0].cls");
+    snprintf(entries[0].value, sizeof(entries[0].value), "http");
+    snprintf(entries[1].key, sizeof(entries[1].key), "origin[0].dst");
+    snprintf(entries[1].value, sizeof(entries[1].value), "http://installed.example/obj");
+    sdf_config_t config = {.entries = entries, .count = 2, .capacity = 2};
+    sdf_origin_cfg_t origin;
+    uint32_t n_origins = 0;
+    if (sdf_origin_config_load(&config, &origin, 1, &n_origins) != 0 || n_origins != 1) {
+        fprintf(stderr, "install-hello: origin config load failed\n");
+        return 1;
+    }
+    const sdf_origin_ops_t *origin_ops = NULL;
+    sdf_origin_select_status_t select_status = SDF_ORIGIN_SELECT_INVALID;
+    if (sdf_origin_select(&origin, 1, &origin_ops, &select_status) != 0 ||
+        select_status != SDF_ORIGIN_SELECT_OK || origin_ops != sdf_http_ops()) {
+        fprintf(stderr, "install-hello: origin selection failed\n");
         return 1;
     }
 
@@ -73,6 +101,7 @@ int main(void) {
     }
     free(pacer);
 
-    printf("install-hello: OK (sdf %s: wm dispatch + arc release)\n", SDF_VERSION_STRING);
+    printf("install-hello: OK (sdf %s: origin select + wm dispatch + arc release)\n",
+           SDF_VERSION_STRING);
     return 0;
 }

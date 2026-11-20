@@ -47,6 +47,11 @@ add_executable(test_origin_http unit/test_origin_http.c)
 target_link_libraries(test_origin_http PRIVATE sdf_origin_http sdf_common)
 add_test(NAME origin_http COMMAND test_origin_http)
 
+# Plan W6.15 — origin class selection + strict [[origin]] materialization.
+add_executable(test_origin_registry unit/test_origin_registry.c)
+target_link_libraries(test_origin_registry PRIVATE sdf_origin_registry sdf_common)
+add_test(NAME origin_registry COMMAND test_origin_registry)
+
 # Plan W2.3 — WM SHM publication (ADR-0002 protocol).
 add_executable(test_wm_shm unit/test_wm_shm.c)
 target_link_libraries(test_wm_shm PRIVATE sdf_wm sdf_common Threads::Threads)
@@ -96,6 +101,11 @@ add_test(NAME fluid_gate COMMAND test_fluid_gate)
 add_executable(test_fluid_repair integration/test_fluid_repair.c)
 target_link_libraries(test_fluid_repair PRIVATE sdf_fluid)
 add_test(NAME fluid_repair COMMAND test_fluid_repair)
+
+# Plan W6.15 — controlled HTTP origins through both coordinators.
+add_executable(test_origin_coordinators integration/test_origin_coordinators.c)
+target_link_libraries(test_origin_coordinators PRIVATE sdf_fluid sdf_common)
+add_test(NAME origin_coordinators COMMAND test_origin_coordinators)
 
 # Plan W4.2 — ARC core: paper 12.3 goldens + the QG guard (the
 # missing-predecessor timeout is pinned at the internal layer — the
