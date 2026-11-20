@@ -32,6 +32,10 @@ mkdir -p build
 echo "recorded to $RESULTS:" >&2
 tail -n 14 "$RESULTS" >&2
 
+# Machine-readable aggregate for downstream tooling.
+PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m sdf.bench.report --input "$RESULTS" --out out/bench/bench_report.json
+
 # W2.6 bench gate (plan 10): the seeded spray decision cost must stay
 # under 2x the 15-cyc target on this runner. The gate parses the freshest
 # recorded seeded-method lines and fails loudly past the bound.

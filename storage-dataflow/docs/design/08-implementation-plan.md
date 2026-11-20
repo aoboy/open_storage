@@ -501,7 +501,7 @@ ADRs [0001–0009](../adr/).
                                 consumers execute BOTH LT and nanorq in
                                 both variants. Full make ci is green:
                                 C default/ASan+UBSan/TSan 28/28 each,
-                                Python 112/112, plus the dual-variant
+                                Python 116/116, plus the dual-variant
                                 gates above. The comparison window stays
                                 open: no C removal, default cutover or
                                 performance claim. The hosted rust-seam
@@ -621,7 +621,7 @@ ADRs [0001–0009](../adr/).
                                 Evidence: C parity validates 1,410
                                 comparisons with zero pending; 28/28
                                 CTest in default, ASan+UBSan, and TSan;
-                                Python 112/112; 200,000 expanded fountain
+                                Python 116/116; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg, and the isolated wheel now
@@ -630,7 +630,7 @@ ADRs [0001–0009](../adr/).
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
                                 28/28 C in default/ASan+UBSan/TSan,
-                                112/112 Python, install, Deb, and wheel
+                                116/116 Python, install, Deb, and wheel
                                 legs. Hosted run 44774290565 is green,
                                 including rust-seam and the isolated
                                 wheel artifact. Nightly history,
@@ -1788,7 +1788,9 @@ nightly-history selftest exercises the >5% rule and insufficient-history skip.
 `bench_fountain` records init/generate/push/decode, p99, and throughput;
 `make bench-paired` builds the same binary with C and Rust LT, runs identical
 configurations, validates the pairs, and writes
-`out/bench/fountain_paired.txt`.
+`out/bench/fountain_paired.txt`. `make bench` also writes
+`out/bench/bench_report.json`, a machine-readable aggregate of every recorded
+WM, ARC, origin, fountain, and REPAIR line.
 Local single-runner records put canonical batch-64 QG at roughly 115–170
 ns/block and immediate at roughly 115–170 ns/block; batch 1024 reached roughly
 220–290 ns/block in the same runs, so the 200 ns target is not universal across
