@@ -207,6 +207,10 @@ static void test_midrun_degradation_redistributes(void) {
     sdf_wm_proxy_stats_t st;
     base_cfg(&pc, 4096);
     pc.rollout_pct = 100;
+    /* Stretch the run with the harness pacing knob. The controller is
+     * rate-limited to one update per 125 ms at control_hz=8; a full-speed
+     * run finishes first and cannot exercise a post-disable whack. */
+    pc.dispatch_pace_ns = 100000;
     /* origin 2 dies at half-run: the controller must whack it and the
      * healthy paths must absorb — within one control interval */
     pc.steps[0].at_unit = 2048;
