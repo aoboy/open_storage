@@ -501,7 +501,7 @@ ADRs [0001–0009](../adr/).
                                 consumers execute BOTH LT and nanorq in
                                 both variants. Full make ci is green:
                                 C default/ASan+UBSan/TSan 27/27 each,
-                                Python 94/94, plus the dual-variant
+                                Python 101/101, plus the dual-variant
                                 gates above. The comparison window stays
                                 open: no C removal, default cutover or
                                 performance claim. The hosted rust-seam
@@ -619,7 +619,7 @@ ADRs [0001–0009](../adr/).
                                 Evidence: C parity validates 1,410
                                 comparisons with zero pending; 27/27
                                 CTest in default, ASan+UBSan, and TSan;
-                                Python 94/94; 200,000 expanded fountain
+                                Python 101/101; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg, and the isolated wheel now
@@ -628,7 +628,7 @@ ADRs [0001–0009](../adr/).
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
                                 27/27 C in default/ASan+UBSan/TSan,
-                                94/94 Python, install, Deb, and wheel
+                                101/101 Python, install, Deb, and wheel
                                 legs. Hosted run 44774290565 is green,
                                 including rust-seam and the isolated
                                 wheel artifact. Nightly history,
