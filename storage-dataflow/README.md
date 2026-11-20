@@ -77,7 +77,7 @@ when cargo/components are absent. Configure one functional Rust build with
 | Fountain codecs (P2) | **As-built (Wave 3/W6.8/W6.11)**: nanorq (RaptorQ) + LT arms behind one ABI; LT is selectable as C (default) or Rust with no caller change; the C parity gate covers 1,410 comparisons; hosted rust-seam ran both variants against that set at `0d6e60a` |
 | FLUID repair (P2) | **As-built (Wave 3/W6.3)**: budget + gate on the section-4.3 identity, coordinator with mandatory per-block ARQ fallback, three-arm loss ladder green; N-block objects (≤64) with per-block codec/budget/gate, deficit-ranked admission, per-block round accounting, and a **byte-exact** decode gate |
 | ARC pacing sidecar (P3) | **As-built (Wave 4/W6.4/W6.9/W6.10)**: ARC-QG core on the paper's analytic fixed point, shadow/live/killed sidecar with ABI mode setters (one-pump flips, killed drains the backlog), accepted-entry retention under pacer backpressure, true non-applying shadow scoring with epoch-scoped schedule/immediate evidence and per-entry records, non-vacuity promotion gate, armed kill switch, runbook executed as a test |
-| Rust modules | Fountain LT functional and opt-in (W6.8 comparison window); ARC migration remains deferred |
+| Rust modules | Fountain LT functional and opt-in (W6.8 comparison window); ARC offset-estimator slice landed with parity tests, while the C pacer remains default and the full Rust ARC migration is pending (W6.18) |
 
 ## Documentation
 

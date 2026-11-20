@@ -18,4 +18,5 @@ dist/
 
 # Rust seam build artifacts (cbindgen header is regenerated; target/ is cargo output)
 src/rust/sdf-fountain/target/
+src/rust/sdf-arc/target/
 src/rust/sdf-fountain/sdf_fountain_generated.h

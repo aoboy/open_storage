@@ -355,6 +355,9 @@ jobs:
       - name: Rust quality + functional C/Rust A/B (W6.8)
         run: ./scripts/test_rust_fountain.sh --require
 
+      - name: Rust ARC offset-estimator parity (W6.18 slice)
+        run: make rust-arc
+
   fuzz:
     runs-on: ubuntu-latest
     timeout-minutes: 20

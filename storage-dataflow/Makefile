@@ -1,4 +1,4 @@
-.PHONY: all build test bench bench-paired e2e helm format lint doc clean asan tsan ci install deb wheel wheel-test rust-seam rust-fountain
+.PHONY: all build test bench bench-paired e2e helm format lint doc clean asan tsan ci install deb wheel wheel-test rust-seam rust-fountain rust-arc
 
 # Gates run serially (plan W0.5): a gate that races another gate is not
 # a gate.
@@ -52,8 +52,8 @@ tsan:
 # Local CI gate (plan W0.5, mirroring the wack_a_mole `make ci` shape):
 # format/tidy where installed (lint.sh skips cleanly), build + full
 # suite, then both sanitizer legs.
-ci: lint test asan tsan install deb wheel-test e2e helm rust-seam rust-fountain
-	@echo "ci gate green: lint(+skips) test asan tsan install deb wheel-test e2e helm rust-seam rust-fountain(+skips)"
+ci: lint test asan tsan install deb wheel-test e2e helm rust-seam rust-fountain rust-arc
+	@echo "ci gate green: lint(+skips) test asan tsan install deb wheel-test e2e helm rust-seam rust-fountain rust-arc(+skips)"
 
 # Plan W5.3 — the Rust seam leg (advisory without cargo; see the script).
 rust-seam:
@@ -63,6 +63,9 @@ rust-seam:
 # installed CFFI/pkg-config/find_package and the Debian package surface.
 rust-fountain:
 	./scripts/test_rust_fountain.sh
+
+rust-arc:
+	./scripts/test_rust_arc.sh
 
 # Plan W5.2 — the install leg (DESTDIR-staged pkg-config + find_package).
 install:

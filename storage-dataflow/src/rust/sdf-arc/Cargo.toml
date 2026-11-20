@@ -1,0 +1,8 @@
+[package]
+name = "sdf-arc"
+version = "1.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["rlib"]

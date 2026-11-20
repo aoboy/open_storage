@@ -2,7 +2,8 @@
 
 **Status:** W6.8 fountain LT comparison window open. The Rust implementation
 is functional behind `SDF_USE_RUST_FOUNTAIN=ON`; the C arm remains the default
-and nanorq remains C. `src/rust/sdf-arc` is still a placeholder.
+and nanorq remains C. `src/rust/sdf-arc` now has the offset-estimator slice
+with C-golden fixed-point tests; the pacer/heap/sidecar are still pending.
 **Related:** [Overview §9, §12](00-overview.md#9-language-strategy-c-python-rust),
 [ADR-0003](../adr/0003-rust-migration-order.md).
 
