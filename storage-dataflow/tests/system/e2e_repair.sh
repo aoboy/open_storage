@@ -107,4 +107,10 @@ if [[ "$gate" -ne 0 ]]; then
     echo "e2e_repair: FAILED" >&2
     exit 1
 fi
+
+# W3.6: render the recorded Pareto points without matplotlib.
+mkdir -p out/bench
+PYTHONPATH="$ROOT/python${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m sdf.bench.plots "$RESULTS" --out out/bench --stem repair_pareto
+
 echo "e2e_repair: OK (3 arms x loss ladder + eps sweep + 4-block checkpoint, byte-exact, recorded)"

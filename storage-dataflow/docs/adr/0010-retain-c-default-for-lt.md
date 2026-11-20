@@ -28,7 +28,7 @@ The available evidence is incomplete:
 
 - The W6.8 landing recorded C/Rust parity, identical public declarations,
   both-variant installed consumers, and matching test suites at that revision.
-- The current tree has since grown to 27 C tests, 81 Python tests, and 1,410
+- The current tree has since grown to 27 C tests, 87 Python tests, and 1,410
   zero-pending golden comparisons. Those newer LT geometries and fail-closed
   codec checks have not been executed against the Rust arm because `cargo` is
   unavailable in this environment.

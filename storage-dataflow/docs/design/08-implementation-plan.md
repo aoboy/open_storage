@@ -149,6 +149,12 @@ ADRs [0001–0009](../adr/).
                                 gates, Pareto recorded; overhead grows
                                 past the slack, control retry cost
                                 visible at 50% loss (33806b3). The
+                                repair e2e now renders
+                                `out/bench/repair_pareto.csv` and `.svg`
+                                from the recorded `REPAIR` lines through
+                                `sdf.bench.plots`, with no matplotlib
+                                dependency (recorded wall time vs
+                                overhead, not a synthesized p99). The
                                 Python `fluid_coord` now mirrors the
                                 sender budget and cumulative-loss gate
                                 (C-parity tested), assigns control or
@@ -613,7 +619,7 @@ ADRs [0001–0009](../adr/).
                                 Evidence: C parity validates 1,410
                                 comparisons with zero pending; 27/27
                                 CTest in default, ASan+UBSan, and TSan;
-                                Python 81/81; 200,000 expanded fountain
+                                Python 87/87; 200,000 expanded fountain
                                 streams; `scripts/test_install.sh`
                                 green including the installed-CFFI
                                 golden leg, and the isolated wheel now
@@ -622,7 +628,7 @@ ADRs [0001–0009](../adr/).
                                 clang-format/tidy clean.
                                 `make ci` is green: lint + ruff + mypy,
                                 27/27 C in default/ASan+UBSan/TSan,
-                                81/81 Python, install, Deb, and wheel
+                                87/87 Python, install, Deb, and wheel
                                 legs. rust-seam and rust-fountain skip
                                 because cargo is absent. Hosted run IDs,
                                 nightly history, TLS/certificate legs,
