@@ -10,6 +10,8 @@
 
 #include "sdf/wm.h"
 
+#include "fuzz_common.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,7 +38,8 @@ static uint64_t sum_b(const wm_profile_t *p) {
 }
 
 int main(void) {
-    for (long it = 0; it < SDF_FUZZ_ITERS; it++) {
+    long budget = fuzz_budget(SDF_FUZZ_ITERS);
+    for (long it = 0; it < budget; it++) {
         uint32_t n = 2u + (uint32_t)(rng() % 4u); /* 2..5 paths */
         uint32_t m = 64u;                         /* fixed pow2 */
         wm_profile_t p;
@@ -94,6 +97,6 @@ int main(void) {
             return 1;
         }
     }
-    printf("fuzz_wm_profile: ok (%ld vectors)\n", (long)SDF_FUZZ_ITERS);
+    printf("fuzz_wm_profile: ok (%ld vectors)\n", budget);
     return 0;
 }

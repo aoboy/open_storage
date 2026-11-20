@@ -13,6 +13,8 @@
 #include "sdf/arc.h"
 #include "sdf/common/timer.h"
 
+#include "fuzz_common.h"
+
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -48,7 +50,8 @@ static int rec(void *ctx, const void *entry, size_t len, uint64_t ts) {
 }
 
 int main(void) {
-    for (long it = 0; it < SDF_FUZZ_ITERS; it++) {
+    long budget = fuzz_budget(SDF_FUZZ_ITERS);
+    for (long it = 0; it < budget; it++) {
         rng_state = (uint64_t)it * 0x9E3779B97F4A7C15ull + 1u;
         arc_cfg_t cfg;
         memset(&cfg, 0, sizeof(cfg));
@@ -135,6 +138,6 @@ int main(void) {
         }
         free(p);
     }
-    printf("fuzz_arc_stream: ok (%ld streams)\n", (long)SDF_FUZZ_ITERS);
+    printf("fuzz_arc_stream: ok (%ld streams)\n", budget);
     return 0;
 }
