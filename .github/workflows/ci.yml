@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+# The repository root is the monorepo root; the project lives below it.
+defaults:
+  run:
+    working-directory: storage-dataflow
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -207,7 +212,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wm-bench-gate
-          path: build/bench_results.txt
+          path: storage-dataflow/build/bench_results.txt
           if-no-files-found: error
 
   install:
@@ -261,7 +266,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdf-wheel
-          path: build/wheel/*.whl
+          path: storage-dataflow/build/wheel/*.whl
           if-no-files-found: error
           retention-days: 14
 

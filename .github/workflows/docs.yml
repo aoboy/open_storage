@@ -3,12 +3,18 @@ name: docs
 on:
   push:
     paths:
-      - "docs/**"
-      - "scripts/build_doc.sh"
+      - "storage-dataflow/docs/**"
+      - "storage-dataflow/scripts/build_doc.sh"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# The repository root is the monorepo root; the project lives below it.
+defaults:
+  run:
+    working-directory: storage-dataflow
 
 jobs:
   render:
@@ -28,5 +34,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: storage-dataflow-design
-          path: out/*.pdf
+          path: storage-dataflow/out/*.pdf
           if-no-files-found: error

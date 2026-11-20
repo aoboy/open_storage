@@ -718,7 +718,6 @@ storage-dataflow/
 ├── .clang-tidy
 ├── .editorconfig
 ├── .gitignore
-├── .github/workflows/{ci,bench,docs}.yml
 ├── docs/
 │   ├── design/{00-overview,01-whack-a-mole,02-fluid-repair,03-arc-pacing,
 │   │          04-rust-migration,05-observability,06-nanorq-evaluation}.md
@@ -767,6 +766,11 @@ storage-dataflow/
 ├── scripts/{build,run_tests,run_bench,lint,build_doc}.sh
 └── golden_vectors/{wm_select,fountain_esi,arc_schedule}.json
 ```
+
+GitHub only scans `<repository>/.github/workflows`, so the CI workflows live at
+the monorepo root rather than inside this tree. Each workflow sets
+`defaults.run.working-directory: storage-dataflow` and uses root-relative
+artifact paths; the project layout is otherwise unchanged.
 
 ---
 
